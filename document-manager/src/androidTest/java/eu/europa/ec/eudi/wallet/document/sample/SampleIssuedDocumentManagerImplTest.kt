@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 European Commission
+ * Copyright (c) 2023-2024 European Commission
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,9 +34,9 @@ import com.android.identity.securearea.SecureArea.KeyLockedException
 import com.android.identity.securearea.SecureAreaRepository
 import com.android.identity.util.Constants
 import com.upokecenter.cbor.CBORObject
-import eu.europa.ec.eudi.wallet.document.Document
 import eu.europa.ec.eudi.wallet.document.DocumentManager
 import eu.europa.ec.eudi.wallet.document.DocumentManagerImpl
+import eu.europa.ec.eudi.wallet.document.IssuedDocument
 import eu.europa.ec.eudi.wallet.document.test.R
 import org.junit.*
 import org.junit.Assert.*
@@ -44,7 +44,7 @@ import org.junit.runner.RunWith
 import java.util.*
 
 @RunWith(AndroidJUnit4::class)
-class SampleDocumentManagerImplTest {
+class SampleIssuedDocumentManagerImplTest {
 
     val context
         get() = InstrumentationRegistry.getInstrumentation().targetContext
@@ -88,8 +88,10 @@ class SampleDocumentManagerImplTest {
         documentManager.loadSampleData(sampleData)
         val documents = documentManager.getDocuments()
         assertEquals(2, documents.size)
-        assertEquals("eu.europa.ec.eudiw.pid.1", documents[0].docType)
+        assertEquals("eu.europa.ec.eudi.pid.1", documents[0].docType)
         assertEquals("org.iso.18013.5.1.mDL", documents[1].docType)
+        assertEquals(context.getString(eu.europa.ec.eudi.wallet.document.R.string.eu_pid_doctype_name), documents[0].name)
+        assertEquals(context.getString(eu.europa.ec.eudi.wallet.document.R.string.mdl_doctype_name), documents[1].name)
     }
 
     @Test
@@ -99,6 +101,7 @@ class SampleDocumentManagerImplTest {
         val documents = documentManager.getDocuments()
         assertEquals(2, documents.size)
         for (document in documents) {
+            document as IssuedDocument
             val dataElements = document.nameSpaces.flatMap { (nameSpace, elementIdentifiers) ->
                 elementIdentifiers.map { elementIdentifier ->
                     DataElement(nameSpace, elementIdentifier, false)
@@ -153,11 +156,11 @@ class SampleDocumentManagerImplTest {
     )
 
 
-    private fun getStaticAuthDataFromDocument(document: Document): DocumentIssuerData {
+    private fun getStaticAuthDataFromDocument(issuedDocument: IssuedDocument): DocumentIssuerData {
         val secureAreaRepository = SecureAreaRepository()
         secureAreaRepository.addImplementation(secureArea)
         val credentialStore = CredentialStore(storageEngine, secureAreaRepository)
-        val credential = credentialStore.lookupCredential(document.id)
+        val credential = credentialStore.lookupCredential(issuedDocument.id)
         assertNotNull(credential)
         val authKey = credential!!.authenticationKeys[0]
         assertNotNull(authKey)

@@ -13,31 +13,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-@file:JvmName("Constants")
-
 package eu.europa.ec.eudi.wallet.document.internal
 
+import android.app.KeyguardManager
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import eu.europa.ec.eudi.wallet.document.R
 
-// EU PID
 @get:JvmSynthetic
-internal const val EU_PID_DOCTYPE = "eu.europa.ec.eudiw.pid.1"
+internal val Context.isDeviceSecure: Boolean
+    get() = getSystemService(KeyguardManager::class.java).isDeviceSecure
 
 @get:JvmSynthetic
-internal const val EU_PID_NAMESPACE = "eu.europa.ec.eudiw.pid.1"
+internal val Context.supportsStrongBox: Boolean
+    get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
+            packageManager.hasSystemFeature(PackageManager.FEATURE_STRONGBOX_KEYSTORE)
 
-// mDL
-@get:JvmSynthetic
-internal const val MDL_DOCTYPE = "org.iso.18013.5.1.mDL"
-
-@get:JvmSynthetic
-internal const val MDL_NAMESPACE = "org.iso.18013.5.1"
+private const val EU_PID_DOCTYPE = "eu.europa.ec.eudi.pid.1"
+private const val MDL_DOCTYPE = "org.iso.18013.5.1.mDL"
 
 @JvmSynthetic
-internal fun Context.docTypeName(docType: String): String? =
+internal fun Context.getDocumentNameFromResourcesOrDocType(docType: String): String =
     when (docType) {
         EU_PID_DOCTYPE -> resources.getString(R.string.eu_pid_doctype_name)
         MDL_DOCTYPE -> resources.getString(R.string.mdl_doctype_name)
-        else -> null
+        else -> docType
     }
