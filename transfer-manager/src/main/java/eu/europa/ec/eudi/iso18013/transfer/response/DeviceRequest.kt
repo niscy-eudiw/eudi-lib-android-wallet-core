@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2024 European Commission
+ * Copyright (c) 2024 European Commission
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,6 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package eu.europa.ec.eudi.iso18013.transfer.internal.readerauth.crl
 
-internal class CertificateCRLValidationException(message: String?) : Exception(message)
+package eu.europa.ec.eudi.iso18013.transfer.response
+
+/**
+ * Represents a Device Request
+ * @property deviceRequestBytes the device request bytes
+ * @property sessionTranscriptBytes the session transcript bytes
+ */
+class DeviceRequest(
+    val deviceRequestBytes: DeviceRequestBytes,
+    val sessionTranscriptBytes: SessionTranscriptBytes
+) : Request
