@@ -14,14 +14,9 @@
  * limitations under the License.
  */
 
-package eu.europa.ec.eudi.iso18013.transfer.response
+package eu.europa.ec.eudi.iso18013.transfer.engagement
 
 /**
- * Represents a Device Request
- * @property deviceRequestBytes the device request bytes
- * @property sessionTranscriptBytes the session transcript bytes
+ * Retrieval Method
  */
-class DeviceRequest(
-    val deviceRequestBytes: DeviceRequestBytes,
-    val sessionTranscriptBytes: SessionTranscriptBytes
-) : Request
+interface RetrievalMethod

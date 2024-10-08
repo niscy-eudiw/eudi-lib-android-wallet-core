@@ -14,10 +14,21 @@
  * limitations under the License.
  */
 
-package eu.europa.ec.eudi.iso18013.transfer.response
+package eu.europa.ec.eudi.iso18013.transfer.readerauth
 
-/**
- * Represents a Device Response
- * @property deviceResponseBytes the device response bytes
- */
-class DeviceResponse(val deviceResponseBytes: DeviceResponseBytes) : Response
+import eu.europa.ec.eudi.iso18013.transfer.internal.readerauth.ReaderTrustStoreImpl
+import io.mockk.mockk
+import kotlin.test.Test
+import kotlin.test.assertIs
+
+class ReaderTrustStoreDefaultTest {
+
+    @Test
+    fun `ReaderTrustStore getDefault should return the default ReaderTrustStoreImpl instance`() {
+        // Given
+        val readerTrustStore = ReaderTrustStore.getDefault(mockk())
+
+        // Then
+        assertIs<ReaderTrustStoreImpl>(readerTrustStore)
+    }
+}

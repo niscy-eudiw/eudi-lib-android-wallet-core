@@ -13,31 +13,45 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package eu.europa.ec.eudi.iso18013.transfer
-
-import androidx.biometric.BiometricPrompt
-import eu.europa.ec.eudi.iso18013.transfer.response.Response
+package eu.europa.ec.eudi.iso18013.transfer.response
 
 /**
  * Represents the result of a response
  */
-sealed interface ResponseResult<out R : Response> {
-    /**
-     * User authentication is required to proceed with the response generation
-     * @property cryptoObject the crypto object
-     */
-    data class UserAuthRequired<R : Response>(val cryptoObject: BiometricPrompt.CryptoObject?) :
-        ResponseResult<R>
+sealed interface ResponseResult {
 
     /**
      * The response generation was successful
      * @property response the response
      */
-    data class Success<R : Response>(val response: R) : ResponseResult<R>
+    data class Success(val response: Response) : ResponseResult
 
     /**
      * The response generation failed
      * @property throwable the throwable
      */
-    data class Failure<R : Response>(val throwable: Throwable) : ResponseResult<R>
+    data class Failure(val throwable: Throwable) : ResponseResult
+
+    /**
+     * Returns the response or throws the throwable
+     * @throws Throwable the throwable
+     * @return the response
+     */
+    fun getOrThrow(): Response {
+        return when (this) {
+            is Success -> response
+            is Failure -> throw throwable
+        }
+    }
+
+    /**
+     * Returns the response or null
+     * @return the response or null
+     */
+    fun getOrNull(): Response? {
+        return when (this) {
+            is Success -> response
+            is Failure -> null
+        }
+    }
 }

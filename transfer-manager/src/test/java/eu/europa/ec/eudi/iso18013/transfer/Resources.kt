@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-package eu.europa.ec.eudi.iso18013.transfer.response
+package eu.europa.ec.eudi.wallet.document
 
-typealias DeviceResponseBytes = ByteArray
-typealias SessionTranscriptBytes = ByteArray
-typealias DeviceRequestBytes = ByteArray
+import java.io.File
+
+internal fun getResourceAsText(resource: String): String =
+    File(ClassLoader.getSystemResource(resource).path).readText()

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2024 European Commission
+ * Copyright (c) 2024 European Commission
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,16 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-@file:JvmMultifileClass
 
-package eu.europa.ec.eudi.iso18013.transfer
+package eu.europa.ec.eudi.iso18013.transfer.response.device
 
-/**
- * Retrieval Method
- */
-interface RetrievalMethod
+import eu.europa.ec.eudi.iso18013.transfer.DeviceResponseBytes
+import eu.europa.ec.eudi.iso18013.transfer.response.Response
 
 /**
- * Device Retrieval Method
+ * Represents a Device Response according to ISO 18013-5 standard.
+ * @property deviceResponseBytes the device response bytes
  */
-interface DeviceRetrievalMethod : RetrievalMethod
+data class DeviceResponse(val deviceResponseBytes: DeviceResponseBytes) : Response
