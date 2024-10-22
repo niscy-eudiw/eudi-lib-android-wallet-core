@@ -18,37 +18,23 @@ package eu.europa.ec.eudi.wallet.document
 
 import io.mockk.every
 import io.mockk.mockk
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertSame
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class TestGetDocumentsExtension {
 
     @Test
     fun `test getDocuments extension returns the correct documents`() {
-        val issued = mockk<IssuedDocument> {
-            every { state } returns Document.State.ISSUED
-        }
-        val deferred = mockk<DeferredDocument> {
-            every { state } returns Document.State.DEFERRED
-        }
-        val unsigned = mockk<UnsignedDocument> {
-            every { state } returns Document.State.UNSIGNED
-        }
+        val issued = mockk<IssuedDocument>()
+        val deferred = mockk<DeferredDocument>()
+        val unsigned = mockk<UnsignedDocument>()
         val documentManager = mockk<DocumentManager>()
 
         every {
-            documentManager.getDocuments(null)
+            documentManager.getDocuments()
         } returns listOf(issued, deferred, unsigned)
-        every {
-            documentManager.getDocuments(Document.State.ISSUED)
-        } returns listOf(issued)
-        every {
-            documentManager.getDocuments(Document.State.DEFERRED)
-        } returns listOf(deferred)
-        every {
-            documentManager.getDocuments(Document.State.UNSIGNED)
-        } returns listOf(unsigned)
 
 
         val issuedResult = documentManager.getDocuments<IssuedDocument>()
@@ -60,7 +46,8 @@ class TestGetDocumentsExtension {
         assertSame(deferred, deferredResult[0])
 
         val unsignedResult = documentManager.getDocuments<UnsignedDocument>()
-        assertEquals(1, unsignedResult.size)
-        assertSame(unsigned, unsignedResult[0])
+        assertEquals(2, unsignedResult.size)
+        assertTrue(unsignedResult.contains(unsigned))
+        assertTrue(unsignedResult.contains(deferred))
     }
 }

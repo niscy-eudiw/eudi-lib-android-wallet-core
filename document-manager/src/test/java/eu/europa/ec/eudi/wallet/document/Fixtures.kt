@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2024 European Commission
+ * Copyright (c) 2024 European Commission
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,25 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-@file:JvmName("Utils")
 
 package eu.europa.ec.eudi.wallet.document
 
-import org.json.JSONObject
+import com.android.identity.securearea.software.SoftwareSecureArea
+import com.android.identity.storage.EphemeralStorageEngine
 
-/**
- * Extension function to convert [IssuedDocument]'s nameSpacedData to [JSONObject]
- *
- * @return [JSONObject]
- */
-@get:JvmName("nameSpacedDataAsJSONObject")
-val IssuedDocument.nameSpacedDataJSONObject: JSONObject
-    get() = JSONObject(nameSpacedDataDecoded)
+val storageEngine = EphemeralStorageEngine()
+val secureArea = SoftwareSecureArea(storageEngine)
 
-/**
- * Extension function for [DocumentManager] to get documents using
- * reified type parameter
- */
-inline fun <reified D : Document> DocumentManager.getDocuments(): List<D> {
-    return getDocuments().filterIsInstance<D>()
-}

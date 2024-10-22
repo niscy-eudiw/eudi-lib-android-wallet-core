@@ -16,60 +16,48 @@
 
 package eu.europa.ec.eudi.wallet.document
 
-import com.android.identity.document.Document
 import com.android.identity.document.NameSpacedData
 import com.upokecenter.cbor.CBORObject
-import io.mockk.every
 import io.mockk.mockk
+import kotlinx.datetime.Clock
+import kotlinx.datetime.toJavaInstant
 import org.junit.Assert
-import org.junit.Test
+import kotlin.test.Test
 
 
 class TestIssuedDocumentExtensions {
     @Test
     fun testDocumentCborToJson() {
-        val mockNameSpacedData = mockk<NameSpacedData>(relaxed = true) {
-            every { nameSpaceNames } returns listOf("namespace1", "namespace2", "namespace3")
-            every { getDataElementNames("namespace1") } returns listOf("element1", "element2")
-            every { getDataElement("namespace1", "element1") } returns CBORObject.FromObject(1)
-                .EncodeToBytes()
-            every { getDataElement("namespace1", "element2") } returns CBORObject.FromObjectAndTag(
-                byteArrayOf(0x01, 0x02, 0x03),
-                24
-            ).EncodeToBytes()
+        val nameSpacedData = NameSpacedData.Builder()
+            .putEntryNumber("namespace1", "element1", 1)
+            .putEntryString("namespace1", "element2", "AQID")
+            .putEntryString("namespace2", "element3", "value3")
+            .putEntry("namespace2", "element4", CBORObject.NewMap().apply {
+                Add("subelement1", CBORObject.FromObjectAndTag("2023-11-09T00:01:02Z", 0))
+                Add("subelement2", 5.4f)
+            }.EncodeToBytes())
+            .putEntry("namespace3", "element1", CBORObject.NewArray().apply {
+                Add(1)
+                Add("string")
+                Add("AQID")
+            }.EncodeToBytes())
+            .build()
 
-            every { getDataElementNames("namespace2") } returns listOf("element3", "element4")
-            every {
-                getDataElement(
-                    "namespace2",
-                    "element3"
-                )
-            } returns CBORObject.FromObject("value3")
-                .EncodeToBytes()
-            every { getDataElement("namespace2", "element4") } returns CBORObject.FromObject(
-                mapOf(
-                    "subelement1" to CBORObject.FromObjectAndTag("2023-11-09T00:01:02Z", 0),
-                    "subelement2" to CBORObject.FromObject(5.4f)
-                )
-            ).EncodeToBytes()
-
-            every { getDataElementNames("namespace3") } returns listOf("element1")
-            every { getDataElement("namespace3", "element1") } returns CBORObject.FromObject(
-                arrayOf(
-                    1,
-                    "string",
-                    byteArrayOf(0x01, 0x02, 0x03)
-                )
-            ).EncodeToBytes()
-        }
-        val mockBaseDocument = mockk<Document>(relaxed = true) {
-            every { applicationData.getNameSpacedData("nameSpacedData") } returns mockNameSpacedData
-        }
-
-        val issuedDocument = IssuedDocument(mockBaseDocument)
+        val issuedDocument = IssuedDocument(
+            id = "id",
+            name = "name",
+            format = mockk(),
+            isCertified = true,
+            keyAlias = "keyAlias",
+            secureArea = mockk(),
+            createdAt = Clock.System.now().toJavaInstant(),
+            issuedAt = Clock.System.now().toJavaInstant(),
+            nameSpacedData = nameSpacedData,
+            issuerProvidedData = byteArrayOf(),
+        )
 
         val json = issuedDocument.nameSpacedDataJSONObject
-        println(json.toString(2))
+
         Assert.assertEquals(3, json.keys().asSequence().toList().size)
         Assert.assertEquals(2, json.getJSONObject("namespace1").keys().asSequence().toList().size)
         Assert.assertEquals(2, json.getJSONObject("namespace2").keys().asSequence().toList().size)
@@ -95,6 +83,4 @@ class TestIssuedDocumentExtensions {
         Assert.assertEquals("AQID", json.getJSONObject("namespace3").getJSONArray("element1")[2])
 
     }
-
-
 }

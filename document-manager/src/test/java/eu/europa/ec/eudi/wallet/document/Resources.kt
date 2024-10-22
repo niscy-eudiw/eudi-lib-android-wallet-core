@@ -16,12 +16,7 @@
 
 package eu.europa.ec.eudi.wallet.document
 
-import com.android.identity.securearea.KeyUnlockData
-import com.android.identity.securearea.SecureArea
+import java.io.File
 
-fun interface KeyUnlockDataFactory {
-    fun createKeyUnlockData(
-        secureArea: SecureArea,
-        keyAlias: String?
-    ): KeyUnlockData?
-}
+internal fun getResourceAsText(resource: String): String =
+    File(ClassLoader.getSystemResource(resource).path).readText()

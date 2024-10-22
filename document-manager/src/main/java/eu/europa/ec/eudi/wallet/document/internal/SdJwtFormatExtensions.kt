@@ -14,10 +14,17 @@
  * limitations under the License.
  */
 
-package eu.europa.ec.eudi.wallet.document
+package eu.europa.ec.eudi.wallet.document.internal
 
-import com.android.identity.securearea.CreateKeySettings
+import eu.europa.ec.eudi.wallet.document.format.SdJwtFormat
 
-fun interface CreateKeySettingsFactory {
-    fun createKeySettings(): CreateKeySettings
+
+@JvmSynthetic
+internal fun SdJwtFormat.createCredential() {
+    throw UnsupportedOperationException("Not supported")
+}
+
+@JvmSynthetic
+internal fun SdJwtFormat.storeIssuedDocument() {
+    throw UnsupportedOperationException("Not supported")
 }
