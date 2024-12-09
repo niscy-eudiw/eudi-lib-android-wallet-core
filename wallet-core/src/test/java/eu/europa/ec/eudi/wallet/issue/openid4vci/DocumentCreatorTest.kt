@@ -42,6 +42,7 @@ class DocumentCreatorTest {
         val offeredDocument = mockk<Offer.OfferedDocument> {
             every { name } returns nameMock
             every { docType } returns docTypeMock
+            every { metadata } returns null
         }
         val format = MsoMdocFormat(docType = docTypeMock)
         val unsignedDocument = mockk<UnsignedDocument>(relaxed = true)

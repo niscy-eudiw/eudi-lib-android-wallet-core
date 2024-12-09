@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2024 European Commission
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package eu.europa.ec.eudi.wallet.issue.openid4vci
 
 import eu.europa.ec.eudi.openid4vci.Claim
@@ -6,17 +22,17 @@ import eu.europa.ec.eudi.openid4vci.MsoMdocCredential
 import eu.europa.ec.eudi.openid4vci.MsoMdocPolicy
 import eu.europa.ec.eudi.openid4vci.ProofTypesSupported
 import eu.europa.ec.eudi.openid4vci.SdJwtVcCredential
-import eu.europa.ec.eudi.wallet.document.metadata.DocumentMetaData
-import eu.europa.ec.eudi.wallet.issue.openid4vci.transformations.extractDocumentMetaData
+import eu.europa.ec.eudi.wallet.document.metadata.DocumentMetadata
+import eu.europa.ec.eudi.wallet.issue.openid4vci.transformations.extractDocumentMetadata
 import org.junit.Test
 import java.net.URI
 import java.util.Locale
 import kotlin.test.assertEquals
 
-class TestDocumentMetaDataTransformations {
+class TestDocumentMetadataTransformations {
 
     @Test
-    fun `extractDocumentMetaData for MsoMdocCredential`() {
+    fun `extractDocumentMetadata for MsoMdocCredential`() {
         // Given
         val inputCredential = MsoMdocCredential(
             scope = "exampleScope",
@@ -57,12 +73,12 @@ class TestDocumentMetaDataTransformations {
             order = listOf("claim1")
         )
 
-        val expectedMetaData = DocumentMetaData(
+        val expectedMetaData = DocumentMetadata(
             display = listOf(
-                DocumentMetaData.Display(
+                DocumentMetadata.Display(
                     name = "Example Display",
                     locale = Locale.forLanguageTag("en"),
-                    logo = DocumentMetaData.Display.Logo(
+                    logo = DocumentMetadata.Display.Logo(
                         uri = URI("https://example.com/logo.png"),
                         alternativeText = "Example Logo"
                     ),
@@ -72,15 +88,15 @@ class TestDocumentMetaDataTransformations {
                 )
             ),
             claims = listOf(
-                DocumentMetaData.Claim(
-                    name = DocumentMetaData.Claim.Name.MsoMdoc(
+                DocumentMetadata.Claim(
+                    name = DocumentMetadata.Claim.Name.MsoMdoc(
                         name = "claim1",
                         nameSpace = "namespace1"
                     ),
                     mandatory = true,
                     valueType = "string",
                     display = listOf(
-                        DocumentMetaData.Claim.Display(
+                        DocumentMetadata.Claim.Display(
                             name = "Claim 1 Display",
                             locale = Locale.forLanguageTag("en")
                         )
@@ -90,14 +106,14 @@ class TestDocumentMetaDataTransformations {
         )
 
         // When
-        val actualMetaData = inputCredential.extractDocumentMetaData()
+        val actualMetaData = inputCredential.extractDocumentMetadata()
 
         // Then
         assertEquals(expectedMetaData, actualMetaData)
     }
 
     @Test
-    fun `extractDocumentMetaData for SdJwtVcCredential`() {
+    fun `extractDocumentMetadata for SdJwtVcCredential`() {
         // Given
         val inputCredential = SdJwtVcCredential(
             scope = "exampleScope",
@@ -128,9 +144,9 @@ class TestDocumentMetaDataTransformations {
             )
         )
 
-        val expectedMetaData = DocumentMetaData(
+        val expectedMetaData = DocumentMetadata(
             display = listOf(
-                DocumentMetaData.Display(
+                DocumentMetadata.Display(
                     name = "Example SdJwt Display",
                     locale = Locale.forLanguageTag("fr"),
                     logo = null,
@@ -140,14 +156,14 @@ class TestDocumentMetaDataTransformations {
                 )
             ),
             claims = listOf(
-                DocumentMetaData.Claim(
-                    name = DocumentMetaData.Claim.Name.SdJwtVc(
+                DocumentMetadata.Claim(
+                    name = DocumentMetadata.Claim.Name.SdJwtVc(
                         name = "claim2"
                     ),
                     mandatory = false,
                     valueType = "integer",
                     display = listOf(
-                        DocumentMetaData.Claim.Display(
+                        DocumentMetadata.Claim.Display(
                             name = "Claim 2 Display",
                             locale = Locale.forLanguageTag("fr")
                         )
@@ -157,7 +173,7 @@ class TestDocumentMetaDataTransformations {
         )
 
         // When
-        val actualMetaData = inputCredential.extractDocumentMetaData()
+        val actualMetaData = inputCredential.extractDocumentMetadata()
 
         // Then
         assertEquals(expectedMetaData, actualMetaData)
@@ -165,7 +181,7 @@ class TestDocumentMetaDataTransformations {
 
 
     @Test
-    fun `extractDocumentMetaData handles null or empty claims`() {
+    fun `extractDocumentMetadata handles null or empty claims`() {
         // Given
         val credentialWithNoClaims = SdJwtVcCredential(
             scope = "exampleScope",
@@ -177,13 +193,13 @@ class TestDocumentMetaDataTransformations {
             claims = null
         )
 
-        val expectedMetaData = DocumentMetaData(
+        val expectedMetaData = DocumentMetadata(
             display = emptyList(),
             claims = null
         )
 
         // When
-        val actualMetaData = credentialWithNoClaims.extractDocumentMetaData()
+        val actualMetaData = credentialWithNoClaims.extractDocumentMetadata()
 
         // Then
         assertEquals(expectedMetaData, actualMetaData)

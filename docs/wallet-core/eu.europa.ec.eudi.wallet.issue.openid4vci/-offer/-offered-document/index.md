@@ -9,10 +9,11 @@ An item to be issued.
 
 ## Properties
 
-| Name                   | Summary                                                                                                                                                                |
-|------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [docType](doc-type.md) | [androidJvm]<br>abstract val [docType](doc-type.md): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin/-string/index.html)<br>the document type of the item |
-| [name](name.md)        | [androidJvm]<br>abstract val [name](name.md): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin/-string/index.html)<br>the name of the item                 |
+| Name                    | Summary                                                                                                                                                                |
+|-------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [docType](doc-type.md)  | [androidJvm]<br>abstract val [docType](doc-type.md): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin/-string/index.html)<br>the document type of the item |
+| [metadata](metadata.md) | [androidJvm]<br>abstract val [metadata](metadata.md): DocumentMetadata?<br>The document metadata                                                                       |
+| [name](name.md)         | [androidJvm]<br>abstract val [name](name.md): [String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin/-string/index.html)<br>the name of the item                 |
 
 ## Functions
 

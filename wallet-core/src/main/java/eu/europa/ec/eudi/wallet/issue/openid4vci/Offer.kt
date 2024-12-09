@@ -15,9 +15,8 @@
  */
 package eu.europa.ec.eudi.wallet.issue.openid4vci
 
-import eu.europa.ec.eudi.wallet.document.metadata.DocumentMetaData
+import eu.europa.ec.eudi.wallet.document.metadata.DocumentMetadata
 import eu.europa.ec.eudi.wallet.issue.openid4vci.Offer.TxCodeSpec.InputMode.NUMERIC
-import eu.europa.ec.eudi.wallet.issue.openid4vci.Offer.TxCodeSpec.InputMode.TEXT
 
 /**
  * An offer of credentials to be issued.
@@ -58,7 +57,7 @@ interface Offer {
         /**
          * The document metadata
          */
-        val metaData: DocumentMetaData?
+        val metadata: DocumentMetadata?
 
     }
 
