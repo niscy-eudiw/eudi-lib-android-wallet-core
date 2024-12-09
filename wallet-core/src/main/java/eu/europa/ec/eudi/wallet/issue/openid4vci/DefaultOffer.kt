@@ -16,9 +16,17 @@
 
 package eu.europa.ec.eudi.wallet.issue.openid4vci
 
-import eu.europa.ec.eudi.openid4vci.*
+import eu.europa.ec.eudi.openid4vci.CredentialConfiguration
+import eu.europa.ec.eudi.openid4vci.CredentialConfigurationIdentifier
+import eu.europa.ec.eudi.openid4vci.CredentialIssuerMetadata
+import eu.europa.ec.eudi.openid4vci.CredentialOffer
+import eu.europa.ec.eudi.openid4vci.MsoMdocCredential
+import eu.europa.ec.eudi.openid4vci.SdJwtVcCredential
+import eu.europa.ec.eudi.openid4vci.TxCodeInputMode
 import eu.europa.ec.eudi.wallet.document.format.DocumentFormat
 import eu.europa.ec.eudi.wallet.document.format.MsoMdocFormat
+import eu.europa.ec.eudi.wallet.document.metadata.DocumentMetaData
+import eu.europa.ec.eudi.wallet.issue.openid4vci.transformations.extractDocumentMetaData
 
 /**
  * Default implementation of [Offer].
@@ -76,6 +84,8 @@ internal class DefaultOfferedDocument(
             else -> null
         }
 
+    override val metaData: DocumentMetaData?
+        get() = configuration.extractDocumentMetaData()
     /**
      *
      */
