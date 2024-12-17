@@ -1,0 +1,79 @@
+package eu.europa.ec.eudi.wallet.issue.openid4vci.transformations
+
+import eu.europa.ec.eudi.openid4vci.Claim
+import eu.europa.ec.eudi.openid4vci.Display
+import eu.europa.ec.eudi.openid4vci.MsoMdocCredential
+import eu.europa.ec.eudi.openid4vci.SdJwtVcCredential
+import eu.europa.ec.eudi.wallet.document.metadata.DocumentMetaData
+import eu.europa.ec.eudi.wallet.issue.openid4vci.OfferedDocument
+import java.util.Locale
+
+fun OfferedDocument.extractDocumentMetaData(): DocumentMetaData {
+
+    val documentDisplay = this.configuration.display.map { it.toDocumentDisplay() }
+
+    val claims = when (val config = this.configuration) {
+        is MsoMdocCredential -> config.claims.fromMsoDocToDocumentClaim()
+        is SdJwtVcCredential -> config.claims.fromSdJwtVToDocumentClaim()
+        else -> null
+    }
+
+    return DocumentMetaData(
+        credentialIssuerIdentifier = offer.credentialOffer.credentialIssuerIdentifier.value.value.toString(),
+        documentConfigurationIdentifier = configurationIdentifier.value,
+        display = documentDisplay,
+        claims = claims,
+        issuerDisplay = this.offer.issuerMetadata.display.map {
+            DocumentMetaData.Display(
+                name = it.name ?: "",
+                locale = Locale(it.locale ?: "")
+            )
+        }
+    )
+}
+
+private fun Display.toDocumentDisplay(): DocumentMetaData.Display = DocumentMetaData.Display(
+    name = name,
+    locale = locale,
+    logo = logo?.toDocumentLogo(),
+    description = description,
+    backgroundColor = backgroundColor,
+    textColor = textColor
+)
+
+private fun Display.Logo.toDocumentLogo():
+        DocumentMetaData.Display.Logo =
+    DocumentMetaData.Display.Logo(uri, alternativeText)
+
+private fun Map<String, Map<String, Claim>>.fromMsoDocToDocumentClaim(): List<DocumentMetaData.Claim> {
+
+    return this.flatMap { (namespace, claimsMap) ->
+        claimsMap.mapNotNull { (name, claim) ->
+            val claimName = DocumentMetaData.Claim.Name.MsoMdoc(
+                name = name,
+                nameSpace = namespace
+            )
+            claim.fromMsoDocToDocumentClaim(claimName)
+        }
+    }
+}
+
+private fun Map<String, Claim?>?.fromSdJwtVToDocumentClaim(): List<DocumentMetaData.Claim>? {
+    return this?.mapNotNull { (name, claim) ->
+        val claimName = DocumentMetaData.Claim.Name.SdJwtVc(name = name)
+        claim.fromMsoDocToDocumentClaim(claimName)
+    }
+}
+
+private fun Claim?.fromMsoDocToDocumentClaim(name: DocumentMetaData.Claim.Name): DocumentMetaData.Claim =
+    DocumentMetaData.Claim(
+        name = name,
+        mandatory = this?.mandatory,
+        valueType = this?.valueType,
+        display = this?.display?.map { display ->
+            DocumentMetaData.Claim.Display(
+                name = display.name,
+                locale = display.locale
+            )
+        } ?: emptyList()
+    )
