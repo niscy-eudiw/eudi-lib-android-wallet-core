@@ -17,8 +17,7 @@
 package eu.europa.ec.eudi.wallet.issue.openid4vci
 
 import eu.europa.ec.eudi.openid4vci.CredentialOfferRequestResolver
-import eu.europa.ec.eudi.wallet.issue.openid4vci.CredentialConfigurationFilter.Companion.MsoMdocFormatFilter
-import io.ktor.client.*
+import io.ktor.client.HttpClient
 import org.jetbrains.annotations.VisibleForTesting
 
 internal class OfferResolver(
@@ -39,7 +38,7 @@ internal class OfferResolver(
 
     private suspend fun resolveAndCache(offerUri: String): Result<Offer> {
         return resolver.resolve(offerUri).map {
-            DefaultOffer(it, MsoMdocFormatFilter)
+            Offer(it)
         }.also { result ->
             result
                 .onSuccess { cache[offerUri] = it }

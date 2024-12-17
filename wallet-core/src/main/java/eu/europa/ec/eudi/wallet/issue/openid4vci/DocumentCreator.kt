@@ -33,12 +33,12 @@ internal class DocumentCreator(
 ) {
 
     val continuations =
-        mutableMapOf<Offer.OfferedDocument, CancellableContinuation<CreateDocumentSettings>>()
+        mutableMapOf<OfferedDocument, CancellableContinuation<CreateDocumentSettings>>()
 
-    suspend fun createDocuments(offer: Offer): Map<UnsignedDocument, Offer.OfferedDocument> =
+    suspend fun createDocuments(offer: Offer): Map<UnsignedDocument, OfferedDocument> =
         offer.offeredDocuments.associateBy { createDocument(it) }
 
-    suspend fun createDocument(offeredDocument: Offer.OfferedDocument): UnsignedDocument {
+    suspend fun createDocument(offeredDocument: OfferedDocument): UnsignedDocument {
         listener.onResult(IssueEvent.DocumentRequiresCreateSettings(
             offeredDocument = offeredDocument,
             resume = { createSettings ->

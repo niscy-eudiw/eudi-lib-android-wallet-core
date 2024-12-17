@@ -28,6 +28,7 @@ import eu.europa.ec.eudi.wallet.document.format.MsoMdocFormat
 import eu.europa.ec.eudi.wallet.internal.d
 import eu.europa.ec.eudi.wallet.internal.e
 import eu.europa.ec.eudi.wallet.issue.openid4vci.OpenId4VciManager.Companion.TAG
+import eu.europa.ec.eudi.wallet.issue.openid4vci.transformations.extractDocumentMetaData
 import eu.europa.ec.eudi.wallet.logging.Logger
 import java.time.Instant
 import java.util.concurrent.Executor
@@ -56,7 +57,7 @@ internal fun EcSignature.toJoseEncoded(jwsAlgorithm: JWSAlgorithm): ByteArray {
  */
 @JvmSynthetic
 internal fun DocumentManager.createDocument(
-    offerOfferedDocument: Offer.OfferedDocument,
+    offerOfferedDocument: OfferedDocument,
     createDocumentSettings: CreateDocumentSettings,
 ): Result<UnsignedDocument> =
     createDocument(
@@ -64,7 +65,7 @@ internal fun DocumentManager.createDocument(
             docType = offerOfferedDocument.docType
         ),
         createSettings = createDocumentSettings,
-        documentMetaData = offerOfferedDocument.metaData
+        documentMetaData = offerOfferedDocument.extractDocumentMetaData()
     ).kotlinResult.map { it.apply { name = offerOfferedDocument.name } }
 
 /**
