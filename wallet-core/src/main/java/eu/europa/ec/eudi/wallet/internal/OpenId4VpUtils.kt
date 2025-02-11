@@ -106,7 +106,7 @@ internal object OpenId4VpUtils {
         responseUri: String,
         nonce: String,
         mdocGeneratedNonce: String,
-    ): com.upokecenter.cbor.CBORObject {
+    ): CBORObject {
         val clientIdToHash = CBORObject.NewArray().apply {
             Add(clientId)
             Add(mdocGeneratedNonce)
@@ -194,7 +194,7 @@ internal object OpenId4VpUtils {
     internal fun ResolvedRequestObject.OpenId4VPAuthorization.getSessionTranscriptBytes(
         mdocGeneratedNonce: String,
     ): SessionTranscriptBytes {
-        val clientId = this.client.id
+        val clientId = this.client.id.clientId
         val responseUri =
             (this.responseMode as ResponseMode.DirectPostJwt?)?.responseURI?.toString()
                 ?: ""
