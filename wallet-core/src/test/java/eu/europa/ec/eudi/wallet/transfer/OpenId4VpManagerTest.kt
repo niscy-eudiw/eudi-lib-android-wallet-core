@@ -1,12 +1,12 @@
 /*
  * Copyright (c) 2025 European Commission
- *
+ *  
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -18,6 +18,7 @@ package eu.europa.ec.eudi.wallet.transfer
 
 import eu.europa.ec.eudi.iso18013.transfer.TransferEvent
 import eu.europa.ec.eudi.openid4vp.Consensus
+import eu.europa.ec.eudi.openid4vp.DispatchOutcome
 import eu.europa.ec.eudi.openid4vp.EncryptionParameters
 import eu.europa.ec.eudi.openid4vp.ResolvedRequestObject
 import eu.europa.ec.eudi.openid4vp.SiopOpenId4Vp
@@ -45,7 +46,6 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Before
-import org.junit.Ignore
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import kotlin.test.Test
@@ -88,7 +88,6 @@ class OpenId4VpManagerTest {
     }
 
     @Test
-    @Ignore("Fails on CI")
     fun `test stop cancels resolveRequestUri coroutine`() = runTest(timeout = 1.minutes) {
 
         every { config.schemes } returns listOf("http")
@@ -103,7 +102,7 @@ class OpenId4VpManagerTest {
         manager.addTransferEventListener(listener)
 
         manager.resolveRequestUri("http://example.com")
-        delay(100)
+        testDispatcher.scheduler.advanceUntilIdle()
         manager.stop()
 
         verify(
@@ -114,7 +113,6 @@ class OpenId4VpManagerTest {
     }
 
     @Test
-    @Ignore("Fails on CI")
     fun `test stop cancels sendResponse coroutine`() = runTest(timeout = 1.minutes) {
 
         val mockConsensus = mockk<Consensus.PositiveConsensus.VPTokenConsensus>()
@@ -143,7 +141,7 @@ class OpenId4VpManagerTest {
         manager.addTransferEventListener(listener)
 
         manager.sendResponse(fakeResponse)
-        delay(100)
+        testDispatcher.scheduler.advanceUntilIdle()
         manager.stop()
 
         verify(
@@ -185,7 +183,160 @@ class OpenId4VpManagerTest {
                 exactly = 1,
                 timeout = 1000L
             ) { listener.onTransferEvent(match { it is TransferEvent.Error && it.error == exception }) }
+        }
 
+    @Test
+    fun `when dispatch outcome is RedirectURI, ResponseSent event should be emitted`() =
+        runTest {
+            // Setup
+            val mockConsensus = mockk<Consensus.PositiveConsensus.VPTokenConsensus>()
+            val mockResolvedRequestObject = mockk<ResolvedRequestObject.OpenId4VPAuthorization>()
+            val encryptionParametersMock = mockk<EncryptionParameters>()
+            val fakeResponse = mockk<OpenId4VpResponse.DeviceResponse> {
+                every { consensus } returns mockConsensus
+                every { resolvedRequestObject } returns mockResolvedRequestObject
+                every { responseBytes } returns byteArrayOf()
+                every { vpContent } returns mockk()
+                every { encryptionParameters } returns encryptionParametersMock
+            }
+            
+            // Mock dispatch to return RedirectURI outcome
+            coEvery {
+                siopOpenId4Vp.dispatch(
+                    request = mockResolvedRequestObject,
+                    consensus = mockConsensus,
+                    encryptionParameters = encryptionParametersMock
+                )
+            } returns DispatchOutcome.RedirectURI(java.net.URI.create("https://example.com/redirect"))
 
+            // Use verify approach instead of collecting events
+            val manager = OpenId4VpManager(config, requestProcessor, logger)
+            manager.addTransferEventListener(listener)
+
+            // Execute
+            manager.sendResponse(fakeResponse)
+            
+            // Verify that ResponseSent event was emitted
+            verify(timeout = 1000) { 
+                listener.onTransferEvent(ofType(TransferEvent.ResponseSent::class)) 
+            }
+        }
+
+    @Test
+    fun `when dispatch outcome is VerifierResponse_Accepted with null redirectURI, ResponseSent event should be emitted`() =
+        runTest {
+            // Setup
+            val mockConsensus = mockk<Consensus.PositiveConsensus.VPTokenConsensus>()
+            val mockResolvedRequestObject = mockk<ResolvedRequestObject.OpenId4VPAuthorization>()
+            val encryptionParametersMock = mockk<EncryptionParameters>()
+            val fakeResponse = mockk<OpenId4VpResponse.DeviceResponse> {
+                every { consensus } returns mockConsensus
+                every { resolvedRequestObject } returns mockResolvedRequestObject
+                every { responseBytes } returns byteArrayOf()
+                every { vpContent } returns mockk()
+                every { encryptionParameters } returns encryptionParametersMock
+            }
+            
+            // Mock dispatch to return VerifierResponse.Accepted with null redirectURI
+            coEvery {
+                siopOpenId4Vp.dispatch(
+                    request = mockResolvedRequestObject,
+                    consensus = mockConsensus,
+                    encryptionParameters = encryptionParametersMock
+                )
+            } returns DispatchOutcome.VerifierResponse.Accepted(null)
+
+            // Use verify approach instead of collecting events
+            val manager = OpenId4VpManager(config, requestProcessor, logger)
+            manager.addTransferEventListener(listener)
+
+            // Execute
+            manager.sendResponse(fakeResponse)
+            
+            // Verify that ResponseSent event was emitted
+            verify(timeout = 1000) { 
+                listener.onTransferEvent(ofType(TransferEvent.ResponseSent::class)) 
+            }
+        }
+
+    @Test
+    fun `when dispatch outcome is VerifierResponse_Accepted with redirectURI, Redirect event should be emitted`() =
+        runTest {
+            // Setup
+            val mockConsensus = mockk<Consensus.PositiveConsensus.VPTokenConsensus>()
+            val mockResolvedRequestObject = mockk<ResolvedRequestObject.OpenId4VPAuthorization>()
+            val encryptionParametersMock = mockk<EncryptionParameters>()
+            val redirectUri = java.net.URI.create("https://example.com/redirect")
+            val fakeResponse = mockk<OpenId4VpResponse.DeviceResponse> {
+                every { consensus } returns mockConsensus
+                every { resolvedRequestObject } returns mockResolvedRequestObject
+                every { responseBytes } returns byteArrayOf()
+                every { vpContent } returns mockk()
+                every { encryptionParameters } returns encryptionParametersMock
+            }
+            
+            // Mock dispatch to return VerifierResponse.Accepted with a redirectURI
+            coEvery {
+                siopOpenId4Vp.dispatch(
+                    request = mockResolvedRequestObject,
+                    consensus = mockConsensus,
+                    encryptionParameters = encryptionParametersMock
+                )
+            } returns DispatchOutcome.VerifierResponse.Accepted(redirectUri)
+
+            // Use verify approach instead of collecting events
+            val manager = OpenId4VpManager(config, requestProcessor, logger)
+            manager.addTransferEventListener(listener)
+
+            // Execute
+            manager.sendResponse(fakeResponse)
+            
+            // Verify that Redirect event was emitted with the correct URI
+            verify(timeout = 1000) { 
+                listener.onTransferEvent(match { 
+                    it is TransferEvent.Redirect && it.redirectUri == redirectUri
+                })
+            }
+        }
+
+    @Test
+    fun `when dispatch outcome is VerifierResponse_Rejected, Error event should be emitted`() =
+        runTest {
+            // Setup
+            val mockConsensus = mockk<Consensus.PositiveConsensus.VPTokenConsensus>()
+            val mockResolvedRequestObject = mockk<ResolvedRequestObject.OpenId4VPAuthorization>()
+            val encryptionParametersMock = mockk<EncryptionParameters>()
+            val fakeResponse = mockk<OpenId4VpResponse.DeviceResponse> {
+                every { consensus } returns mockConsensus
+                every { resolvedRequestObject } returns mockResolvedRequestObject
+                every { responseBytes } returns byteArrayOf()
+                every { vpContent } returns mockk()
+                every { encryptionParameters } returns encryptionParametersMock
+            }
+            
+            // Mock dispatch to return VerifierResponse.Rejected
+            coEvery {
+                siopOpenId4Vp.dispatch(
+                    request = mockResolvedRequestObject,
+                    consensus = mockConsensus,
+                    encryptionParameters = encryptionParametersMock
+                )
+            } returns DispatchOutcome.VerifierResponse.Rejected
+
+            // Use verify approach instead of collecting events
+            val manager = OpenId4VpManager(config, requestProcessor, logger)
+            manager.addTransferEventListener(listener)
+
+            // Execute
+            manager.sendResponse(fakeResponse)
+            
+            // Verify that Error event was emitted with the correct exception type
+            verify(timeout = 1000) { 
+                listener.onTransferEvent(match {
+                    it is TransferEvent.Error && 
+                    it.error is IllegalStateException && 
+                    it.error.message == "Verifier rejected the response"
+                })
+            }
         }
 }

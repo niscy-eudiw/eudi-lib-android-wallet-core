@@ -1,12 +1,12 @@
 /*
- * Copyright (c) 2023-2024 European Commission
- *
+ * Copyright (c) 2023-2025 European Commission
+ *  
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -21,6 +21,7 @@ import android.content.Context
 import androidx.annotation.RawRes
 import eu.europa.ec.eudi.iso18013.transfer.engagement.NfcEngagementService
 import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStore
+import eu.europa.ec.eudi.wallet.EudiWalletConfig.Companion.DEFAULT_DOCUMENT_MANAGER_IDENTIFIER
 import eu.europa.ec.eudi.wallet.document.DocumentExtensions.getDefaultCreateDocumentSettings
 import eu.europa.ec.eudi.wallet.internal.getCertificate
 import eu.europa.ec.eudi.wallet.issue.openid4vci.OpenId4VciManager
@@ -113,7 +114,8 @@ import kotlin.time.Duration.Companion.minutes
 class EudiWalletConfig {
     /**
      * Configuration for OpenID4VCI operations. This can be set using [configureOpenId4Vci] methods.
-     * When null, OpenID4VCI functionality requires configuration to be passed directly to methods that use it.
+     * When null, OpenID4VCI functionality requires configuration to be passed directly to methods that use it,
+     * such as [EudiWallet.createOpenId4VciManager].
      */
     var openId4VciConfig: OpenId4VciManager.Config? = null
         private set
@@ -377,3 +379,4 @@ class EudiWalletConfig {
             EudiWalletConfig().apply(configure)
     }
 }
+

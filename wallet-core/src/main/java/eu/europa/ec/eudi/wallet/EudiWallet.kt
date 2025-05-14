@@ -1,12 +1,12 @@
 /*
  * Copyright (c) 2023-2025 European Commission
- *
+ *  
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ *  
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -116,12 +116,17 @@ interface EudiWallet : SampleDocumentManager, PresentationManager, DocumentStatu
      * 1. As a parameter to this method
      * 2. From the wallet's [EudiWalletConfig.openId4VciConfig]
      *
-     * @param config Optional specific configuration for this manager instance. If null, the configuration 
+     * @param config Optional specific configuration for this manager instance. If null, the configuration
      *               from [EudiWalletConfig.openId4VciConfig] will be used.
+     * @param ktorHttpClientFactory Optional HTTP client factory to use for network requests. If null, the
+     *                            wallet's configured HTTP client factory will be used.
      * @return An instance of [OpenId4VciManager]
      * @throws IllegalStateException If neither a config parameter is provided nor a configuration exists in [EudiWalletConfig]
      */
-    fun createOpenId4VciManager(config: OpenId4VciManager.Config? = null): OpenId4VciManager
+    fun createOpenId4VciManager(
+        config: OpenId4VciManager.Config? = null,
+        ktorHttpClientFactory: (() -> HttpClient)? = null,
+    ): OpenId4VciManager
 
     /**
      * Resolve the status of the document with the given [documentId]
@@ -321,8 +326,11 @@ interface EudiWallet : SampleDocumentManager, PresentationManager, DocumentStatu
          */
         fun build(): EudiWallet {
 
-            ensureStrongBoxIsSupported()
-            ensureUserAuthIsSupported()
+            val loggerToUse = (this@Builder.logger ?: Logger(config)).also {
+                IdentityLogger.setLogPrinter(LogPrinterImpl(it))
+            }
+            ensureStrongBoxIsSupported(loggerToUse)
+            ensureUserAuthIsSupported(loggerToUse)
 
             val documentManagerToUse =
                 documentManager ?: getDefaultDocumentManager(storageEngine, secureAreas)
@@ -334,8 +342,9 @@ interface EudiWallet : SampleDocumentManager, PresentationManager, DocumentStatu
             val presentationManagerToUse = presentationManager ?: getDefaultPresentationManager(
                 documentManager = documentManagerToUse,
                 transferManager = transferManager,
-                readerTrustStore = readerTrustStoreToUse
-            ).wrapWithTrasactionLogger(documentManagerToUse)
+                readerTrustStore = readerTrustStoreToUse,
+                loggerObj = loggerToUse
+            ).wrapWithTrasactionLogger(documentManagerToUse, loggerToUse)
 
             val documentStatusResolverToUse = getDocumentStatusResolver()
 
@@ -345,10 +354,10 @@ interface EudiWallet : SampleDocumentManager, PresentationManager, DocumentStatu
                 documentManager = documentManagerToUse,
                 presentationManager = presentationManagerToUse,
                 transferManager = transferManager,
-                logger = loggerObj,
-                readerTrustStoreConsumer = { presentationManagerToUse.readerTrustStore = it },
+                logger = loggerToUse,
+                documentStatusResolver = documentStatusResolverToUse,
                 transactionLogger = transactionLogger,
-                documentStatusResolver = documentStatusResolverToUse
+                ktorHttpClientFactory = ktorHttpClientFactory
             )
         }
 
@@ -364,6 +373,7 @@ interface EudiWallet : SampleDocumentManager, PresentationManager, DocumentStatu
             documentManager: DocumentManager,
             transferManager: TransferManager,
             readerTrustStore: ReaderTrustStore?,
+            loggerObj: Logger,
         ): PresentationManagerImpl {
             val openId4vpManager = config.openId4VpConfig?.let { openId4VpConfig ->
                 OpenId4VpManager(
@@ -378,13 +388,6 @@ interface EudiWallet : SampleDocumentManager, PresentationManager, DocumentStatu
                 openId4vpManager = openId4vpManager,
                 nfcEngagementServiceClass = config.nfcEngagementServiceClass,
             )
-        }
-
-        @get:JvmSynthetic
-        internal val loggerObj: Logger by lazy {
-            (logger ?: Logger(config)).also {
-                IdentityLogger.setLogPrinter(LogPrinterImpl(it))
-            }
         }
 
         @get:JvmSynthetic
@@ -521,7 +524,7 @@ interface EudiWallet : SampleDocumentManager, PresentationManager, DocumentStatu
          * if the device is not secure and the configuration is set to require user authentication
          */
         @JvmSynthetic
-        internal fun ensureUserAuthIsSupported() {
+        internal fun ensureUserAuthIsSupported(loggerObj: Logger) {
             if (capabilities.secureLockScreenSetup.not() && config.userAuthenticationRequired) {
                 loggerObj.i(
                     TAG,
@@ -537,7 +540,7 @@ interface EudiWallet : SampleDocumentManager, PresentationManager, DocumentStatu
          * if it is not supported and the configuration is set to use StrongBox
          */
         @JvmSynthetic
-        internal fun ensureStrongBoxIsSupported() {
+        internal fun ensureStrongBoxIsSupported(loggerObj: Logger) {
             if (capabilities.strongBoxSupported.not() && config.useStrongBoxForKeys) {
                 loggerObj.i(
                     TAG, """StrongBox is not supported on this device.
@@ -554,7 +557,10 @@ interface EudiWallet : SampleDocumentManager, PresentationManager, DocumentStatu
          * @param documentManager the document manager
          * @return [PresentationManager] wrapped with a transaction logger
          */
-        internal fun PresentationManager.wrapWithTrasactionLogger(documentManager: DocumentManager): PresentationManager {
+        internal fun PresentationManager.wrapWithTrasactionLogger(
+            documentManager: DocumentManager,
+            loggerObj: Logger,
+        ): PresentationManager {
             return transactionLogger?.let { tl ->
                 TransactionsDecorator(
                     delegate = this,
@@ -567,3 +573,4 @@ interface EudiWallet : SampleDocumentManager, PresentationManager, DocumentStatu
 
     }
 }
+

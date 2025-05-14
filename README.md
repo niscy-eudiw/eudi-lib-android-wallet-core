@@ -125,7 +125,7 @@ dependencies {
 To instantiate a `EudiWallet` use the `EudiWallet.Builder` class or the `EudiWallet.invoke` method,
 from the EudiWallet companion object.
 
-The minimum requirements to initialize the library is to provide a `EudiWalletConfit` object that
+The minimum requirements to initialize the library is to provide a `EudiWalletConfig` object that
 will be used to configure the library's built-in components.
 
 The built-in components are:
@@ -136,6 +136,7 @@ The built-in components are:
 - `PresentationManager` implementation for managing both proximity and remote presentation of
   documents
 - `Logger` implementation for logging
+- `DocumentStatusResolver` implementation for checking document revocation status
 
 The following example demonstrates how to initialize the library for using the built-in components:
 
@@ -164,11 +165,13 @@ val config = EudiWalletConfig()
         // set the reader trusted certificates for the reader trust store
         listOf(readerCertificate)
     )
-    // mandatory configuration for OpenId4Vci if you want to issue documents
+    // configure the OpenId4Vci service
     .configureOpenId4Vci {
         withIssuerUrl("https://issuer.com")
         withClientId("client-id")
         withAuthFlowRedirectionURI("eudi-openid4ci://authorize")
+        withParUsage(OpenId4VciManager.Config.ParUsage.Companion.IF_SUPPORTED)
+        withUseDPoPIfSupported(true)
     }
     // configuration for proximity presentation
     // the values below are the default values
@@ -180,8 +183,7 @@ val config = EudiWalletConfig()
         // registered application service for handling NFC device engagement
         nfcEngagementServiceClass = MyNfcEngagementService::class.java
     )
-    // mandatory configuration for OpenId4Vp if you want to enable
-    // remote presentation of documents with OpenId4Vp
+    // configure the OpenId4Vp service
     .configureOpenId4Vp {
         withEncryptionAlgorithms(
             EncryptionAlgorithm.ECDH_ES
@@ -203,18 +205,14 @@ val config = EudiWalletConfig()
             Format.SdJwtVc.ES256
         )
     }
+    // configure document status resolver with 5 minutes clock skew tolerance
+    .configureDocumentStatusResolver(clockSkewInMinutes = 5)
 
+// Create the wallet instance with default components
 val wallet = EudiWallet(context, config)
-```
 
-`EuidWallet.Builder` allows to configure the library with custom implementations of the built-in
-components.
-
-The following example demonstrates how to initialize the library with custom implementations for
-StorageEngine, SecureArea, ReaderTrustStore, and Logger:
-
-```kotlin
-val wallet = EudiWallet(context, config) {
+// Or create the wallet with custom component implementations
+val customWallet = EudiWallet(context, config) {
     // custom StorageEngine to store documents' data
     withStorageEngine(myStorageEngine)
     // a list of SecureArea implementations to be used
@@ -223,6 +221,12 @@ val wallet = EudiWallet(context, config) {
     withReaderTrustStore(myReaderTrustStore)
     // custom logger to be used
     withLogger(myLogger)
+    // custom HTTP client for network operations
+    withKtorHttpClientFactory { HttpClient(OkHttp) { /* custom config */ } }
+    // custom transaction logger for auditing
+    withTransactionLogger(myTransactionLogger)
+    // custom document status resolver
+    withDocumentStatusResolver(myDocumentStatusResolver)
 }
 ```
 
@@ -539,6 +543,16 @@ val customConfig = OpenId4VciManager.Config.Builder()
     .build()
     
 val openId4VciManagerWithCustomConfig = wallet.createOpenId4VciManager(customConfig)
+
+// You can also provide a custom HTTP client factory
+val openId4VciManagerWithCustomHttpClient = wallet.createOpenId4VciManager(
+    config = customConfig,
+    ktorHttpClientFactory = {
+        HttpClient(OkHttp) {
+            // Custom HTTP client configuration
+        }
+    }
+)
 ```
 
 ##### How configuration is resolved
@@ -552,6 +566,7 @@ The `createOpenId4VciManager` method can accept an optional `OpenId4VciManager.C
 This flexibility allows you to:
 - Use a single global configuration for all OpenId4VCI operations by configuring it once in `EudiWalletConfig`
 - Override the global configuration for specific operations by passing a custom configuration
+- Provide a custom HTTP client for specific operations while using the global configuration
 
 #### Resolving Credential offer
 
@@ -673,7 +688,6 @@ val onIssueEvent = OnIssueEvent { event ->
             val keyUnlockData = document.DefaultKeyUnlockData
             // use the keyUnlockData to get the crypto object for authenticating
             // the user using bio-metrics or any other method
-            val cryptoObject = keyUnlockData.getCryptoObjectForSigning(signingAlgorithm)
 
             // to resume the issuance process, after authenticating user,  call
             // resume with the keyUnlockData
