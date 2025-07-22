@@ -16,7 +16,7 @@
 
 package eu.europa.ec.eudi.wallet.issue.openid4vci
 
-import com.nimbusds.jose.JWSAlgorithm
+import android.content.Context
 import com.nimbusds.jose.jwk.Curve
 import eu.europa.ec.eudi.openid4vci.CIAuthorizationServerMetadata
 import eu.europa.ec.eudi.openid4vci.CredentialConfigurationIdentifier
@@ -35,6 +35,7 @@ import eu.europa.ec.eudi.wallet.document.format.MsoMdocFormat
 import eu.europa.ec.eudi.wallet.document.format.SdJwtVcFormat
 import eu.europa.ec.eudi.wallet.issue.openid4vci.CredentialConfigurationFilter.Companion.DocTypeFilter
 import eu.europa.ec.eudi.wallet.issue.openid4vci.CredentialConfigurationFilter.Companion.VctFilter
+import eu.europa.ec.eudi.wallet.issue.openid4vci.dpop.DPopSigner
 import eu.europa.ec.eudi.wallet.logging.Logger
 import io.ktor.client.HttpClient
 import java.net.URI
@@ -43,6 +44,7 @@ import java.net.URI
  * Creates an [Issuer] from the given [Offer].
  */
 internal class IssuerCreator(
+    private val context: Context,
     private val config: OpenId4VciManager.Config,
     private val ktorHttpClientFactory: () -> HttpClient,
     private val logger: Logger?
@@ -142,38 +144,12 @@ internal class IssuerCreator(
     }
 
     /**
-     * Verifies that the specified DPoP algorithm is supported by the authorization server.
-     *
-     * @param dPoPUsage The DPoP usage configuration with the algorithm to check.
-     * @throws IllegalStateException if the specified algorithm is not supported by the issuer.
-     */
-    private suspend fun ensureDPoPAlgorithmSupported(dPoPUsage: OpenId4VciManager.Config.DPoPUsage.IfSupported) {
-        check(
-            getAuthorizationServerMetadata().first()
-                .dPoPJWSAlgs
-                .contains(JWSAlgorithm.parse(dPoPUsage.algorithm.joseAlgorithmIdentifier))
-        ) {
-
-            "DPoP algorithm ${dPoPUsage.algorithm.joseAlgorithmIdentifier} is not supported by the issuer"
-                .also {
-                    logger?.log(
-                        Logger.Record(
-                            level = Logger.Companion.LEVEL_ERROR,
-                            message = it,
-                            sourceClassName = "eu.europa.ec.eudi.wallet.issue.openid4vci.IssuerCreator",
-                            sourceMethod = "ensureDPoPAlgorithmSupported"
-                        )
-                    )
-                }
-        }
-    }
-
-    /**
      * Converts the [OpenId4VciManager.Config] to [OpenId4VCIConfig].
      * @receiver The [OpenId4VciManager.Config].
      * @return The [OpenId4VCIConfig].
      */
     private suspend fun OpenId4VciManager.Config.toOpenId4VCIConfig(): OpenId4VCIConfig {
+        val dpopConfig = dpopConfig
         return OpenId4VCIConfig(
             clientId = clientId,
             authFlowRedirectionURI = URI.create(authFlowRedirectionURI),
@@ -182,14 +158,23 @@ internal class IssuerCreator(
                 ecConfig = EcConfig(ecKeyCurve = Curve.P_256),
                 rsaConfig = RsaConfig(rcaKeySize = 2048)
             ),
-            dPoPSigner = when (dPoPUsage) {
-                OpenId4VciManager.Config.DPoPUsage.Disabled -> null
-
-                is OpenId4VciManager.Config.DPoPUsage.IfSupported -> {
-                    ensureDPoPAlgorithmSupported(dPoPUsage)
-                    DPoPSigner(dPoPUsage.algorithm, logger).getOrNull()
-                }
-            },
+            dPoPSigner = DPopSigner.makeIfSupported(
+                context = context,
+                config = dpopConfig,
+                authorizationServerMetadata = getAuthorizationServerMetadata().first(),
+                logger = logger
+            )
+                .getOrElse {
+                    logger?.log(
+                        Logger.Record(
+                            level = Logger.Companion.LEVEL_DEBUG,
+                            message = "DPoP not supported: ${it.message}",
+                            sourceClassName = "eu.europa.ec.eudi.wallet.issue.openid4vci.IssuerCreator",
+                            sourceMethod = "toOpenId4VCIConfig"
+                        )
+                    )
+                    null
+                },
             parUsage = when (parUsage) {
                 OpenId4VciManager.Config.ParUsage.IF_SUPPORTED -> ParUsage.IfSupported
                 OpenId4VciManager.Config.ParUsage.REQUIRED -> ParUsage.Required

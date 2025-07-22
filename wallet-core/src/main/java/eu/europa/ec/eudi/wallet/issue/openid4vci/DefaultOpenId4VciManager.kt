@@ -45,6 +45,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import java.util.concurrent.Executor
+import androidx.core.net.toUri
 
 /**
  * Default implementation of [OpenId4VciManager].
@@ -73,7 +74,7 @@ internal class DefaultOpenId4VciManager(
         OfferResolver(httpClientFactory)
     }
     private val issuerCreator: IssuerCreator by lazy {
-        IssuerCreator(config, httpClientFactory, logger)
+        IssuerCreator(context, config, httpClientFactory, logger)
     }
     private val issuerAuthorization: IssuerAuthorization by lazy {
         IssuerAuthorization(context, logger)
