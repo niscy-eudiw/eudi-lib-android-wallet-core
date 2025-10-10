@@ -73,7 +73,7 @@ internal class DefaultOpenId4VciManager(
         OfferResolver(httpClientFactory)
     }
     private val issuerCreator: IssuerCreator by lazy {
-        IssuerCreator(config, httpClientFactory, logger)
+        IssuerCreator(context, config, httpClientFactory, logger)
     }
     private val issuerAuthorization: IssuerAuthorization by lazy {
         IssuerAuthorization(context, logger)
