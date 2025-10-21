@@ -17,7 +17,9 @@
 package eu.europa.ec.eudi.wallet.issue.openid4vci
 
 import android.content.Context
+import eu.europa.ec.eudi.openid4vci.DPoP
 import eu.europa.ec.eudi.wallet.document.DocumentManager
+import eu.europa.ec.eudi.wallet.issue.openid4vci.dpop.DPopConfig
 import io.mockk.mockk
 import org.junit.Assert.assertThrows
 import kotlin.test.Test
@@ -31,7 +33,7 @@ class OpenId4VciManagerBuilderTest {
         issuerUrl = "https://issuer.example.com",
         clientId = "testClientId",
         authFlowRedirectionURI = "app://redirect",
-        dPoPUsage = OpenId4VciManager.Config.DPoPUsage.IfSupported(),
+        dpopConfig = DPopConfig.Disabled,
         parUsage = OpenId4VciManager.Config.ParUsage.IF_SUPPORTED,
     )
 
