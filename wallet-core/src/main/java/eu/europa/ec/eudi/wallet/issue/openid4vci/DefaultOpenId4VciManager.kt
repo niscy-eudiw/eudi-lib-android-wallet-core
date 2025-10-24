@@ -76,7 +76,8 @@ internal class DefaultOpenId4VciManager(
         IssuerCreator(config, httpClientFactory, logger)
     }
     private val issuerAuthorization: IssuerAuthorization by lazy {
-        IssuerAuthorization(context, logger)
+        val handler = config.authorizationHandler ?: BrowserAuthorizationHandler(context, logger)
+        IssuerAuthorization(handler, logger)
     }
 
     override suspend fun getIssuerMetadata(): Result<CredentialIssuerMetadata> {
