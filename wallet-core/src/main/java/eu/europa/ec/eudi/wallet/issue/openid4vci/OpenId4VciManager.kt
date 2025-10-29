@@ -27,6 +27,7 @@ import eu.europa.ec.eudi.wallet.document.format.DocumentFormat
 import eu.europa.ec.eudi.wallet.issue.openid4vci.OpenId4VciManager.Config.ParUsage.Companion.IF_SUPPORTED
 import eu.europa.ec.eudi.wallet.issue.openid4vci.OpenId4VciManager.Config.ParUsage.Companion.NEVER
 import eu.europa.ec.eudi.wallet.issue.openid4vci.OpenId4VciManager.Config.ParUsage.Companion.REQUIRED
+import eu.europa.ec.eudi.wallet.issue.openid4vci.clientAuth.ClientAttestationConfig
 import eu.europa.ec.eudi.wallet.logging.Logger
 import io.ktor.client.HttpClient
 import org.multipaz.crypto.Algorithm
@@ -276,17 +277,19 @@ interface OpenId4VciManager {
     /**
      * Configuration for the OpenId4Vci issuer
      * @property issuerUrl the issuer url
-     * @property clientId the client id
+     * @property clientId the client id (required when not using attestation-based authentication)
      * @property authFlowRedirectionURI the redirection URI for the authorization flow
      * @property dPoPUsage flag that if set will enable the use of DPoP JWT
      * @property parUsage if PAR should be used
+     * @property clientAttestation optional attestation-based client authentication configuration
      */
     data class Config @JvmOverloads constructor(
         val issuerUrl: String,
-        val clientId: String,
+        val clientId: String? = null,
         val authFlowRedirectionURI: String,
         val dPoPUsage: DPoPUsage = DPoPUsage.IfSupported(),
         @ParUsage val parUsage: Int = IF_SUPPORTED,
+        val clientAttestation: ClientAttestationConfig? = null,
     ) {
         /**
          * PAR usage for the OpenId4Vci issuer
@@ -356,12 +359,14 @@ interface OpenId4VciManager {
          * @property authFlowRedirectionURI the redirection URI for the authorization flow
          * @property dPoPUsage flag that if set will enable the use of DPoP JWT
          * @property parUsage if PAR should be used
+         * @property clientAttestation optional attestation-based client authentication configuration
          */
         class Builder {
             var issuerUrl: String? = null
             var clientId: String? = null
             var authFlowRedirectionURI: String? = null
             var dPoPUsage: DPoPUsage = DPoPUsage.IfSupported()
+            var clientAttestation: ClientAttestationConfig? = null
 
             @ParUsage
             var parUsage: Int = IF_SUPPORTED
@@ -407,19 +412,35 @@ interface OpenId4VciManager {
             }
 
             /**
+             * Set the client attestation configuration for attestation-based authentication
+             * @param clientAttestation the client attestation configuration
+             * @return this builder
+             */
+            fun withClientAttestation(clientAttestation: ClientAttestationConfig) = apply {
+                this.clientAttestation = clientAttestation
+            }
+
+            /**
              * Build the [Config]
              * @return the [Config]
              */
             fun build(): Config {
-                checkNotNull(issuerUrl) { "issuerUrl is required" }
-                checkNotNull(clientId) { "clientId is required" }
-                checkNotNull(authFlowRedirectionURI) { "authFlowRedirectionURI is required" }
+                val issuerUrl = checkNotNull(issuerUrl) { "issuerUrl is required" }
+                val authFlowRedirectionURI =
+                    checkNotNull(authFlowRedirectionURI) { "authFlowRedirectionURI is required" }
+
+                // Either clientId or clientAttestation must be provided
+                require(clientId != null || clientAttestation != null) {
+                    "Either clientId or clientAttestation must be provided"
+                }
+
                 return Config(
-                    issuerUrl = issuerUrl!!,
-                    clientId = clientId!!,
-                    authFlowRedirectionURI = authFlowRedirectionURI!!,
+                    issuerUrl = issuerUrl,
+                    clientId = clientId,
+                    authFlowRedirectionURI = authFlowRedirectionURI,
                     dPoPUsage = dPoPUsage,
-                    parUsage = parUsage
+                    parUsage = parUsage,
+                    clientAttestation = clientAttestation
                 )
             }
         }
