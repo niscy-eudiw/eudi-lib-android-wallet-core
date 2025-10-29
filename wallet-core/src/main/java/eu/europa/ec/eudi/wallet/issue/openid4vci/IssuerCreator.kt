@@ -30,13 +30,18 @@ import eu.europa.ec.eudi.openid4vci.IssuerMetadataPolicy
 import eu.europa.ec.eudi.openid4vci.OpenId4VCIConfig
 import eu.europa.ec.eudi.openid4vci.ParUsage
 import eu.europa.ec.eudi.openid4vci.RsaConfig
+import eu.europa.ec.eudi.openid4vci.clientAttestationJWSAlgs
+import eu.europa.ec.eudi.openid4vci.clientAttestationPOPJWSAlgs
 import eu.europa.ec.eudi.wallet.document.format.DocumentFormat
 import eu.europa.ec.eudi.wallet.document.format.MsoMdocFormat
 import eu.europa.ec.eudi.wallet.document.format.SdJwtVcFormat
 import eu.europa.ec.eudi.wallet.issue.openid4vci.CredentialConfigurationFilter.Companion.DocTypeFilter
 import eu.europa.ec.eudi.wallet.issue.openid4vci.CredentialConfigurationFilter.Companion.VctFilter
+import eu.europa.ec.eudi.wallet.issue.openid4vci.clientAuth.ClientAttestationConfig
+import eu.europa.ec.eudi.wallet.issue.openid4vci.clientAuth.ClientAttestationManager
 import eu.europa.ec.eudi.wallet.logging.Logger
 import io.ktor.client.HttpClient
+import org.multipaz.crypto.Algorithm
 import java.net.URI
 
 /**
@@ -174,28 +179,84 @@ internal class IssuerCreator(
      * @return The [OpenId4VCIConfig].
      */
     private suspend fun OpenId4VciManager.Config.toOpenId4VCIConfig(): OpenId4VCIConfig {
-        return OpenId4VCIConfig(
-            clientId = clientId,
-            authFlowRedirectionURI = URI.create(authFlowRedirectionURI),
-            encryptionSupportConfig = EncryptionSupportConfig(
-                credentialResponseEncryptionPolicy = CredentialResponseEncryptionPolicy.SUPPORTED,
-                ecConfig = EcConfig(ecKeyCurve = Curve.P_256),
-                rsaConfig = RsaConfig(rcaKeySize = 2048)
-            ),
-            dPoPSigner = when (dPoPUsage) {
-                OpenId4VciManager.Config.DPoPUsage.Disabled -> null
-
-                is OpenId4VciManager.Config.DPoPUsage.IfSupported -> {
-                    ensureDPoPAlgorithmSupported(dPoPUsage)
-                    DPoPSigner(dPoPUsage.algorithm, logger).getOrNull()
-                }
-            },
-            parUsage = when (parUsage) {
-                OpenId4VciManager.Config.ParUsage.IF_SUPPORTED -> ParUsage.IfSupported
-                OpenId4VciManager.Config.ParUsage.REQUIRED -> ParUsage.Required
-                OpenId4VciManager.Config.ParUsage.NEVER -> ParUsage.Never
-                else -> ParUsage.IfSupported
+        val dPoPSigner = when (dPoPUsage) {
+            OpenId4VciManager.Config.DPoPUsage.Disabled -> null
+            is OpenId4VciManager.Config.DPoPUsage.IfSupported -> {
+                ensureDPoPAlgorithmSupported(dPoPUsage)
+                DPoPSigner(dPoPUsage.algorithm, logger).getOrNull()
             }
+        }
+
+        val parUsage = when (parUsage) {
+            OpenId4VciManager.Config.ParUsage.IF_SUPPORTED -> ParUsage.IfSupported
+            OpenId4VciManager.Config.ParUsage.REQUIRED -> ParUsage.Required
+            OpenId4VciManager.Config.ParUsage.NEVER -> ParUsage.Never
+            else -> ParUsage.IfSupported
+        }
+
+        val encryptionConfig = EncryptionSupportConfig(
+            credentialResponseEncryptionPolicy = CredentialResponseEncryptionPolicy.SUPPORTED,
+            ecConfig = EcConfig(ecKeyCurve = Curve.P_256),
+            rsaConfig = RsaConfig(rcaKeySize = 2048)
+        )
+
+        return if (clientAttestation != null) {
+            // Use attestation-based authentication
+            getAuthorizationServerMetadata().first().clientAttestationJWSAlgs
+            val clientAuth = createClientAuthentication(clientAttestation)
+            OpenId4VCIConfig(
+                clientAuthentication = clientAuth,
+                authFlowRedirectionURI = URI.create(authFlowRedirectionURI),
+                encryptionSupportConfig = encryptionConfig,
+                dPoPSigner = dPoPSigner,
+                parUsage = parUsage
+            )
+        } else {
+            // Use client ID authentication
+            OpenId4VCIConfig(
+                clientId = checkNotNull(clientId) { "clientId is required when not using attestation" },
+                authFlowRedirectionURI = URI.create(authFlowRedirectionURI),
+                encryptionSupportConfig = encryptionConfig,
+                dPoPSigner = dPoPSigner,
+                parUsage = parUsage
+            )
+        }
+    }
+
+    /**
+     * Creates client authentication from attestation config
+     */
+    private suspend fun createClientAuthentication(
+        attestationConfig: ClientAttestationConfig
+    ): eu.europa.ec.eudi.openid4vci.ClientAuthentication.AttestationBased {
+
+        val clientAttestationPOPJwsAlgs = getAuthorizationServerMetadata()
+            .firstOrNull()
+            ?.clientAttestationPOPJWSAlgs
+            ?.map { Algorithm.fromJoseAlgorithmIdentifier(it.name) }
+
+        // Create attestation manager with credentialIssuerId for key binding
+        val attestationManager = ClientAttestationManager(
+            config = attestationConfig,
+            credentialIssuerId = config.issuerUrl,
+            clientAttestationPOPJwsAlgs = clientAttestationPOPJwsAlgs,
+            secureArea = attestationConfig.secureArea,
+            logger = logger
+        )
+
+        // Execute the full attestation flow
+        val result = attestationManager.executeAttestationFlow().getOrThrow()
+
+        logger?.log(
+            Logger.Record(
+                level = Logger.Companion.LEVEL_INFO,
+                message = "Client attestation completed successfully for issuer: ${config.issuerUrl}"
+            )
+        )
+
+        return eu.europa.ec.eudi.openid4vci.ClientAuthentication.AttestationBased(
+            attestationJWT = result.attestationJWT,
+            popJwtSpec = result.popSpec
         )
     }
 }
