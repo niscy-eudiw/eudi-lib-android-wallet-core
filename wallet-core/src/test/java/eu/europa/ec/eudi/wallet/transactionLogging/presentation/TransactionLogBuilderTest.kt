@@ -176,6 +176,10 @@ class TransactionLogBuilderTest {
         assertEquals(nonPresentationLog, result)
     }
 
+    // Test commented out: No longer relevant after dropping SIOP support.
+    // ResolvedRequestObject is now a simple data class, not a sealed interface with subtypes.
+    // The SiopAuthentication type no longer exists.
+    /*
     @Test(expected = IllegalArgumentException::class)
     fun `withRequest with OpenId4VpRequest but unsupported RequestObject throws exception`() {
         val initialLog = builder.createEmptyPresentationLog()
@@ -187,6 +191,7 @@ class TransactionLogBuilderTest {
 
         builder.withRequest(initialLog, openId4VpRequest)
     }
+    */
 
     @Test
     fun `withRelyingParty with valid processed request updates log correctly`() {
@@ -364,7 +369,7 @@ class TransactionLogBuilderTest {
         )
         val queryId = QueryId("query1")
 
-        val vpTokenMock = Consensus.PositiveConsensus.VPTokenConsensus(
+        val vpTokenMock = Consensus.PositiveConsensus(
             verifiablePresentations = VerifiablePresentations(
                 mapOf(
                     queryId to listOf(
