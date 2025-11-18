@@ -206,7 +206,7 @@ data class ClientAttestationConfig(
 
                     val matchedAlgorithm = popJwsAlgs
                         .firstNotNullOfOrNull { jwsAlg ->
-                            supportedAlgorithms[jwsAlg.name]
+                            supportedAlgorithms[jwsAlg.joseAlgorithmIdentifier]
                         }
                         ?: throw IllegalStateException(
                             "No supported algorithm found for DPoP. Server algorithms: $popJwsAlgs, " +
