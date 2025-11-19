@@ -16,14 +16,6 @@
 
 package eu.europa.ec.eudi.wallet.transactionLogging
 
-import eu.europa.ec.eudi.wallet.transactionLogging.TransactionLog.DataFormat.Cbor
-import eu.europa.ec.eudi.wallet.transactionLogging.TransactionLog.DataFormat.Json
-import eu.europa.ec.eudi.wallet.transactionLogging.TransactionLog.Status.Completed
-import eu.europa.ec.eudi.wallet.transactionLogging.TransactionLog.Status.Error
-import eu.europa.ec.eudi.wallet.transactionLogging.TransactionLog.Status.Incomplete
-import eu.europa.ec.eudi.wallet.transactionLogging.TransactionLog.Type.Issuance
-import eu.europa.ec.eudi.wallet.transactionLogging.TransactionLog.Type.Presentation
-import eu.europa.ec.eudi.wallet.transactionLogging.TransactionLog.Type.Signing
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 

@@ -18,10 +18,6 @@ package eu.europa.ec.eudi.wallet.logging
 
 import androidx.annotation.IntDef
 import eu.europa.ec.eudi.wallet.EudiWalletConfig
-import eu.europa.ec.eudi.wallet.logging.Logger.Companion.LEVEL_DEBUG
-import eu.europa.ec.eudi.wallet.logging.Logger.Companion.LEVEL_ERROR
-import eu.europa.ec.eudi.wallet.logging.Logger.Companion.LEVEL_INFO
-import eu.europa.ec.eudi.wallet.logging.Logger.Companion.OFF
 import java.time.Instant
 
 /**

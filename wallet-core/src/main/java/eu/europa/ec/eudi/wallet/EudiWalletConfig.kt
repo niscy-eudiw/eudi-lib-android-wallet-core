@@ -21,7 +21,6 @@ import android.content.Context
 import androidx.annotation.RawRes
 import eu.europa.ec.eudi.iso18013.transfer.engagement.NfcEngagementService
 import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStore
-import eu.europa.ec.eudi.wallet.EudiWalletConfig.Companion.DEFAULT_DOCUMENT_MANAGER_IDENTIFIER
 import eu.europa.ec.eudi.wallet.dcapi.DCAPIConfig
 import eu.europa.ec.eudi.wallet.document.DocumentExtensions.getDefaultCreateDocumentSettings
 import eu.europa.ec.eudi.wallet.internal.getCertificate

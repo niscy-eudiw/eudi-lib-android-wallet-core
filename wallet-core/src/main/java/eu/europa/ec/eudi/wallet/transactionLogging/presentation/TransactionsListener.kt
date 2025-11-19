@@ -44,21 +44,29 @@ class TransactionsListener(
 ) : TransferEvent.Listener {
 
     /**
+     * Helper function to map document IDs to metadata JSON strings
+     */
+    private fun mapDocumentIdsToMetadata(
+        documentIds: List<String>,
+        documentManager: DocumentManager
+    ): List<String> = documentIds.mapIndexed { index, id ->
+        val issuerMetadata = documentManager.getDocumentById(id)
+            ?.issuerMetadata
+            ?.toJson()
+        TransactionLog.Metadata(
+            issuerMetadata = issuerMetadata,
+            format = FORMAT_MSO_MDOC,
+            index = index,
+            queryId = null,
+        ).toJson()
+    }
+
+    /**
      * Resolver for document metadata
      */
     internal val metadataResolver: (Response) -> List<String>? = { response ->
         when (response) {
-            is DeviceResponse -> response.documentIds.mapIndexed { index, id ->
-                val issuerMetadata = documentManager.getDocumentById(id)
-                    ?.issuerMetadata
-                    ?.toJson()
-                TransactionLog.Metadata(
-                    issuerMetadata = issuerMetadata,
-                    format = FORMAT_MSO_MDOC,
-                    index = index,
-                    queryId = null,
-                ).toJson()
-            }
+            is DeviceResponse -> mapDocumentIdsToMetadata(response.documentIds, documentManager)
 
             is OpenId4VpResponse -> response.respondedDocuments.flatMap { (queryId, documents) ->
                 documents.mapIndexed { index, document ->
@@ -74,17 +82,7 @@ class TransactionsListener(
                 }
             }
 
-            is DCAPIResponse -> response.documentIds.mapIndexed { index, id ->
-                val issuerMetadata = documentManager.getDocumentById(id)
-                    ?.issuerMetadata
-                    ?.toJson()
-                TransactionLog.Metadata(
-                    issuerMetadata = issuerMetadata,
-                    format = FORMAT_MSO_MDOC,
-                    index = index,
-                    queryId = null,
-                ).toJson()
-            }
+            is DCAPIResponse -> mapDocumentIdsToMetadata(response.documentIds, documentManager)
 
             else -> null
         }
