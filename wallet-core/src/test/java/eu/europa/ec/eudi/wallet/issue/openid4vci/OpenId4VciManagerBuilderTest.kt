@@ -29,7 +29,7 @@ class OpenId4VciManagerBuilderTest {
     private val documentManager = mockk<DocumentManager>(relaxed = true)
     private val config = OpenId4VciManager.Config(
         issuerUrl = "https://issuer.example.com",
-        clientId = "testClientId",
+        clientAuthentication = OpenId4VciManager.Config.ClientAuthType.ClientId("testClientId"),
         authFlowRedirectionURI = "app://redirect",
         dPoPUsage = OpenId4VciManager.Config.DPoPUsage.IfSupported(),
         parUsage = OpenId4VciManager.Config.ParUsage.IF_SUPPORTED,

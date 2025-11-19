@@ -277,19 +277,17 @@ interface OpenId4VciManager {
     /**
      * Configuration for the OpenId4Vci issuer
      * @property issuerUrl the issuer url
-     * @property clientId the client id (required when not using attestation-based authentication)
+     * @property clientAuthentication the ClientId or clientAttestationConfig
      * @property authFlowRedirectionURI the redirection URI for the authorization flow
      * @property dPoPUsage flag that if set will enable the use of DPoP JWT
      * @property parUsage if PAR should be used
-     * @property clientAttestation optional attestation-based client authentication configuration
      */
     data class Config @JvmOverloads constructor(
         val issuerUrl: String,
-        val clientId: String? = null,
+        val clientAuthentication: ClientAuthType,
         val authFlowRedirectionURI: String,
         val dPoPUsage: DPoPUsage = DPoPUsage.IfSupported(),
-        @ParUsage val parUsage: Int = IF_SUPPORTED,
-        val clientAttestation: ClientAttestationConfig? = null,
+        @ParUsage val parUsage: Int = IF_SUPPORTED
     ) {
         /**
          * PAR usage for the OpenId4Vci issuer
@@ -342,6 +340,24 @@ interface OpenId4VciManager {
             }
         }
 
+        /**
+         * Represents the supported authentication mechanisms for the client wallet.
+         */
+        sealed interface ClientAuthType {
+
+            /**
+             * Authentication strategy using a standard Client ID.
+             * @property id The unique identifier string for the client.
+             */
+            data class ClientId(val id : String) : ClientAuthType
+
+            /**
+             * Authentication strategy based on client attestation.
+             * @property attestationConfig The configuration object containing attestation details.
+             */
+            data class AttestationBased(val attestationConfig: ClientAttestationConfig) : ClientAuthType
+        }
+
         companion object {
             /**
              * Create a [Config] instance
@@ -355,18 +371,16 @@ interface OpenId4VciManager {
          * Builder for [Config]
          *
          * @property issuerUrl the issuer url
-         * @property clientId the client id
+         * @property clientAuthentication the ClientId or clientAttestationConfig
          * @property authFlowRedirectionURI the redirection URI for the authorization flow
          * @property dPoPUsage flag that if set will enable the use of DPoP JWT
          * @property parUsage if PAR should be used
-         * @property clientAttestation optional attestation-based client authentication configuration
          */
         class Builder {
             var issuerUrl: String? = null
-            var clientId: String? = null
+            var clientAuthentication: ClientAuthType? = null
             var authFlowRedirectionURI: String? = null
             var dPoPUsage: DPoPUsage = DPoPUsage.IfSupported()
-            var clientAttestation: ClientAttestationConfig? = null
 
             @ParUsage
             var parUsage: Int = IF_SUPPORTED
@@ -383,7 +397,18 @@ interface OpenId4VciManager {
              * @param clientId the client id
              * @return this builder
              */
-            fun withClientId(clientId: String) = apply { this.clientId = clientId }
+            fun withClientId(clientId: String) = apply {
+                this.clientAuthentication = ClientAuthType.ClientId(clientId)
+            }
+
+            /**
+             * Set the client attestation configuration for attestation-based authentication
+             * @param clientAttestation the client attestation configuration
+             * @return this builder
+             */
+            fun withClientAttestation(clientAttestation: ClientAttestationConfig) = apply {
+                this.clientAuthentication = ClientAuthType.AttestationBased(clientAttestation)
+            }
 
             /**
              * Set the redirection URI for the authorization flow
@@ -412,15 +437,6 @@ interface OpenId4VciManager {
             }
 
             /**
-             * Set the client attestation configuration for attestation-based authentication
-             * @param clientAttestation the client attestation configuration
-             * @return this builder
-             */
-            fun withClientAttestation(clientAttestation: ClientAttestationConfig) = apply {
-                this.clientAttestation = clientAttestation
-            }
-
-            /**
              * Build the [Config]
              * @return the [Config]
              */
@@ -429,18 +445,16 @@ interface OpenId4VciManager {
                 val authFlowRedirectionURI =
                     checkNotNull(authFlowRedirectionURI) { "authFlowRedirectionURI is required" }
 
-                // Either clientId or clientAttestation must be provided
-                require(clientId != null || clientAttestation != null) {
+                val clientAuthentication = checkNotNull(clientAuthentication) {
                     "Either clientId or clientAttestation must be provided"
                 }
 
                 return Config(
                     issuerUrl = issuerUrl,
-                    clientId = clientId,
+                    clientAuthentication = clientAuthentication,
                     authFlowRedirectionURI = authFlowRedirectionURI,
                     dPoPUsage = dPoPUsage,
                     parUsage = parUsage,
-                    clientAttestation = clientAttestation
                 )
             }
         }

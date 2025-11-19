@@ -200,26 +200,29 @@ internal class IssuerCreator(
             rsaConfig = RsaConfig(rcaKeySize = 2048)
         )
 
-        return if (clientAttestation != null) {
-            // Use attestation-based authentication
-            getAuthorizationServerMetadata().first().clientAttestationJWSAlgs
-            val clientAuth = createClientAuthentication(clientAttestation)
-            OpenId4VCIConfig(
-                clientAuthentication = clientAuth,
-                authFlowRedirectionURI = URI.create(authFlowRedirectionURI),
-                encryptionSupportConfig = encryptionConfig,
-                dPoPSigner = dPoPSigner,
-                parUsage = parUsage
-            )
-        } else {
-            // Use client ID authentication
-            OpenId4VCIConfig(
-                clientId = checkNotNull(clientId) { "clientId is required when not using attestation" },
-                authFlowRedirectionURI = URI.create(authFlowRedirectionURI),
-                encryptionSupportConfig = encryptionConfig,
-                dPoPSigner = dPoPSigner,
-                parUsage = parUsage
-            )
+        return when (clientAuthentication) {
+            is OpenId4VciManager.Config.ClientAuthType.AttestationBased -> {
+                // Use attestation-based authentication
+                getAuthorizationServerMetadata().first().clientAttestationJWSAlgs
+                val clientAuth = createClientAuthentication(clientAuthentication.attestationConfig)
+                OpenId4VCIConfig(
+                    clientAuthentication = clientAuth,
+                    authFlowRedirectionURI = URI.create(authFlowRedirectionURI),
+                    encryptionSupportConfig = encryptionConfig,
+                    dPoPSigner = dPoPSigner,
+                    parUsage = parUsage
+                )
+            }
+            is OpenId4VciManager.Config.ClientAuthType.ClientId -> {
+                // Use client ID authentication
+                OpenId4VCIConfig(
+                    clientId = clientAuthentication.id,
+                    authFlowRedirectionURI = URI.create(authFlowRedirectionURI),
+                    encryptionSupportConfig = encryptionConfig,
+                    dPoPSigner = dPoPSigner,
+                    parUsage = parUsage
+                )
+            }
         }
     }
 

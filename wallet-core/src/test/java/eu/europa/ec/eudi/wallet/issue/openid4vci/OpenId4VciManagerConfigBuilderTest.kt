@@ -82,7 +82,7 @@ class OpenId4VciManagerConfigBuilderTest {
         val config = builder.build()
 
         assertEquals("https://issuer.example.com", config.issuerUrl)
-        assertEquals("testClientId", config.clientId)
+        assertEquals("testClientId", (config.clientAuthentication as OpenId4VciManager.Config.ClientAuthType.ClientId).id)
         assertEquals("app://redirect", config.authFlowRedirectionURI)
         assertIs<OpenId4VciManager.Config.DPoPUsage.IfSupported>(config.dPoPUsage)
         assertEquals(Algorithm.ESP256, config.dPoPUsage.algorithm)
