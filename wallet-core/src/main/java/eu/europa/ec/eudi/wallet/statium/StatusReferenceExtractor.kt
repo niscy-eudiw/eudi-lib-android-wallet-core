@@ -44,18 +44,9 @@ fun interface StatusReferenceExtractor {
  * @see [MsoMdocStatusReferenceExtractor]
  * @see [SdJwtStatusReferenceExtractor]
  */
-object DefaultStatusReferenceExtractor : StatusReferenceExtractor {
-    /**
-     * Extracts status reference from the provided document
-     *
-     * @param document The document to extract status reference from
-     * @return Result containing the extracted status reference or an error
-     */
-    override suspend fun extractStatusReference(document: IssuedDocument): Result<StatusReference> {
-        return when (document.format) {
-            is MsoMdocFormat -> MsoMdocStatusReferenceExtractor
-            is SdJwtVcFormat -> SdJwtStatusReferenceExtractor
-        }.extractStatusReference(document)
-    }
-
+val DefaultStatusReferenceExtractor = StatusReferenceExtractor { document ->
+    when (document.format) {
+        is MsoMdocFormat -> MsoMdocStatusReferenceExtractor
+        is SdJwtVcFormat -> SdJwtStatusReferenceExtractor
+    }.extractStatusReference(document)
 }

@@ -23,7 +23,6 @@ import eu.europa.ec.eudi.statium.TokenStatusListSpec.IDX
 import eu.europa.ec.eudi.statium.TokenStatusListSpec.STATUS
 import eu.europa.ec.eudi.statium.TokenStatusListSpec.STATUS_LIST
 import eu.europa.ec.eudi.statium.TokenStatusListSpec.URI
-import eu.europa.ec.eudi.wallet.document.IssuedDocument
 import eu.europa.ec.eudi.wallet.document.format.SdJwtVcFormat
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
@@ -32,53 +31,42 @@ import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Extracts the status reference from an SD-JWT VC.
+ * If the document is not in the [SdJwtVcFormat], returns a Failure.
+ * If status list is not found, returns a Failure.
  */
-object SdJwtStatusReferenceExtractor : StatusReferenceExtractor {
-
-    /**
-     * Extracts the status reference from the given [document].
-     * If the document is not in the [SdJwtVcFormat], returns a Failure.
-     * If status list is not found, returns a Failure.
-     *
-     * @param document the issued document
-     * @return the status reference
-     */
-
-    override suspend fun extractStatusReference(document: IssuedDocument): Result<StatusReference> {
-        return runCatching {
-            require(document.format is SdJwtVcFormat) {
-                "Document format is not SdJwtVcFormat"
-            }
-
-            val credential = document.findCredential()
-
-            requireNotNull(credential) {
-                "No credential found for ${document.name}"
-            }
-
-            val sdJwt = String(credential.issuerProvidedData, charset = Charsets.US_ASCII)
-                .let { DefaultSdJwtOps.unverifiedIssuanceFrom(it) }
-                .getOrThrow()
-
-            val claims = sdJwt.jwt.second
-
-            val statusList = claims[STATUS]
-                ?.jsonObject
-                ?.get(STATUS_LIST)
-                ?.jsonObject
-                ?: throw IllegalStateException("No status list found in SD-JWT VC")
-
-            val uri = statusList[URI]?.jsonPrimitive?.content
-                ?: throw IllegalStateException("No URI found in status list")
-
-            val idx = statusList[IDX]?.jsonPrimitive?.intOrNull
-                ?: throw IllegalStateException("No index found in status list")
-
-            StatusReference(
-                uri = uri,
-                index = StatusIndex(idx),
-            )
+val SdJwtStatusReferenceExtractor = StatusReferenceExtractor { document ->
+    runCatching {
+        require(document.format is SdJwtVcFormat) {
+            "Document format is not SdJwtVcFormat"
         }
-    }
 
+        val credential = document.findCredential()
+
+        requireNotNull(credential) {
+            "No credential found for ${document.name}"
+        }
+
+        val sdJwt = String(credential.issuerProvidedData, charset = Charsets.US_ASCII)
+            .let { DefaultSdJwtOps.unverifiedIssuanceFrom(it) }
+            .getOrThrow()
+
+        val claims = sdJwt.jwt.second
+
+        val statusList = claims[STATUS]
+            ?.jsonObject
+            ?.get(STATUS_LIST)
+            ?.jsonObject
+            ?: throw IllegalStateException("No status list found in SD-JWT VC")
+
+        val uri = statusList[URI]?.jsonPrimitive?.content
+            ?: throw IllegalStateException("No URI found in status list")
+
+        val idx = statusList[IDX]?.jsonPrimitive?.intOrNull
+            ?: throw IllegalStateException("No index found in status list")
+
+        StatusReference(
+            uri = uri,
+            index = StatusIndex(idx),
+        )
+    }
 }
