@@ -90,7 +90,7 @@ class MDLMandatoryFieldsTests : BaseTest() {
     @Test
     fun `driving_privileges is valid`() {
 
-        /* TODO check category codes
+        /*
         val validVehicleCategoryCodes = arrayOf(
             "AM", "A1", "A2", "A",
             "B1", "BE", "B",

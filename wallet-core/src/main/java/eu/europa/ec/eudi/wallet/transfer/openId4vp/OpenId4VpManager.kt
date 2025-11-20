@@ -152,9 +152,6 @@ class OpenId4VpManager(
                 when (val resolution = openId4Vp.resolveRequestUri(uri)) {
                     is Resolution.Invalid -> {
 
-                        // TODO dispatch error to verifier/RP
-                        //  if resolution.dispatchDetails is present
-
                         logger?.e(TAG, "Invalid resolution: ${resolution.error}")
                         transferEventListeners.onTransferEvent(
                             TransferEvent.Error(resolution.error.asException())
