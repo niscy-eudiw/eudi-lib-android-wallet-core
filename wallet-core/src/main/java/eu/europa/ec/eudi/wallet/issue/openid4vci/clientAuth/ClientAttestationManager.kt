@@ -99,7 +99,6 @@ internal class ClientAttestationManager(
 
             val createKeySettings = config.createKeySettingsBuilder.build(
                 clientAttestationPOPJWSAlgs = clientAttestationPOPJwsAlgs,
-                challenge = config.challenge
             )
 
             secureArea.createKey(keyAlias, createKeySettings)
@@ -131,7 +130,7 @@ internal class ClientAttestationManager(
 
         // Step 4: Call consumer's provider to get attestation JWT
         val attestationJwt = config.jwtProvider
-            .getAttestationJwt(keyInfo, config.challenge)
+            .getAttestationJwt(keyInfo)
             .getOrThrow()
 
         logger?.log(

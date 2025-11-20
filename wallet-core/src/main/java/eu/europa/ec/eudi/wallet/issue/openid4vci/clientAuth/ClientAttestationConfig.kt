@@ -17,7 +17,6 @@
 package eu.europa.ec.eudi.wallet.issue.openid4vci.clientAuth
 
 import android.content.Context
-import eu.europa.ec.eudi.wallet.issue.openid4vci.clientAuth.ClientAttestationConfig.Companion.default
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.context.initializeApplication
 import org.multipaz.crypto.Algorithm
@@ -33,10 +32,7 @@ import kotlin.time.Duration
 
 
 fun interface CreateKeySettingsBuilder {
-    suspend fun build(
-        clientAttestationPOPJWSAlgs: List<Algorithm>?,
-        challenge: String?
-    ): CreateKeySettings
+    suspend fun build(clientAttestationPOPJWSAlgs: List<Algorithm>?): CreateKeySettings
 }
 
 /**
@@ -105,7 +101,6 @@ fun interface CreateKeySettingsBuilder {
  */
 data class ClientAttestationConfig(
     val jwtProvider: ClientAttestationJwtProvider,
-    val challenge: String?,
     val secureArea: SecureArea,
     val createKeySettingsBuilder: CreateKeySettingsBuilder,
     val unlockKey: suspend (keyAlias: String, secureArea: SecureArea) -> KeyUnlockData? = { _, _ -> null },
@@ -174,8 +169,8 @@ data class ClientAttestationConfig(
         @JvmStatic
         suspend fun default(
             context: Context,
+            challenge: String?,
             jwtProvider: ClientAttestationJwtProvider,
-            challenge: String? = null,
         ): ClientAttestationConfig {
             // Create a dedicated storage for client attestation keys
             val storage = AndroidStorage(
@@ -187,9 +182,8 @@ data class ClientAttestationConfig(
 
             return ClientAttestationConfig(
                 jwtProvider = jwtProvider,
-                challenge = challenge,
                 secureArea = secureArea,
-                createKeySettingsBuilder = { popJwsAlgs, challenge ->
+                createKeySettingsBuilder = { popJwsAlgs ->
                     initializeApplication(context)
                     val capabilities = AndroidKeystoreSecureArea.Capabilities()
                     val challengeBytes = challenge?.toByteArray() ?: ByteArray(16).apply {

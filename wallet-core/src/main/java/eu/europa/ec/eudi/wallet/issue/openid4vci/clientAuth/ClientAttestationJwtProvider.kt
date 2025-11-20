@@ -85,6 +85,6 @@ fun interface ClientAttestationJwtProvider {
      *
      * @see [ClientAttestationConfig.challenge] for challenge configuration
      */
-    suspend fun getAttestationJwt(keyInfo: KeyInfo, challenge: String?): Result<String>
+    suspend fun getAttestationJwt(keyInfo: KeyInfo): Result<String>
 }
 
