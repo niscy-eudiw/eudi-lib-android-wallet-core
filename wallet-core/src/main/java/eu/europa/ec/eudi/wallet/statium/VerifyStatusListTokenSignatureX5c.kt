@@ -20,7 +20,6 @@ import com.nimbusds.jose.crypto.ECDSAVerifier
 import com.nimbusds.jose.crypto.RSASSAVerifier
 import com.nimbusds.jose.util.X509CertUtils
 import com.nimbusds.jwt.SignedJWT
-import eu.europa.ec.eudi.statium.StatusListTokenFormat
 import eu.europa.ec.eudi.statium.VerifyStatusListTokenJwtSignature
 import java.security.interfaces.ECPublicKey
 import java.security.interfaces.RSAPublicKey

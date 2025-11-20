@@ -26,7 +26,6 @@ import eu.europa.ec.eudi.wallet.issue.openid4vci.OpenId4VciManager.Companion.TAG
 import eu.europa.ec.eudi.wallet.logging.Logger
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
-import java.io.Closeable
 import kotlin.coroutines.resume
 
 internal class ProcessResponse(

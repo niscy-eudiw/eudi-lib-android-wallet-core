@@ -151,7 +151,6 @@ internal class DeferredIssuanceContextSerializer : KSerializer<DeferredIssuanceC
      * @param value The [DeferredIssuanceContext] to serialize.
      */
     override fun serialize(encoder: Encoder, value: DeferredIssuanceContext) {
-        // TODO add dPoP info in serialization
         val contextTO = DeferredIssuanceStoredContextTO.from(value, null, null)
         encoder.encodeStructure(descriptor) {
             encodeSerializableElement(
@@ -174,7 +173,6 @@ internal class DeferredIssuanceContextSerializer : KSerializer<DeferredIssuanceC
      * @return The deserialized [DeferredIssuanceContext].
      */
     override fun deserialize(decoder: Decoder): DeferredIssuanceContext {
-        // TODO use dPoP info in deserialization to recreate dPoP signer
         var storedContext: DeferredIssuanceStoredContextTO? = null
 
         decoder.decodeStructure(descriptor) {
