@@ -68,7 +68,7 @@ fun interface ClientAttestationJwtProvider {
      *
      * This method is called by the library during the attestation flow. Implementors should:
      * 1. Extract the public key from [keyInfo] (e.g., `keyInfo.publicKey.toJwk().toString()`)
-     * 2. Send it to their wallet provider backend along with the [challenge] if present
+     * 2. Send it to their wallet provider backend
      * 3. Receive the attestation JWT from the wallet provider
      * 4. Return it wrapped in a [Result]
      *
@@ -77,13 +77,8 @@ fun interface ClientAttestationJwtProvider {
      *
      * @param keyInfo The key information including the public key to send to wallet provider.
      *                Access the public key via `keyInfo.publicKey` and convert to JWK format.
-     * @param challenge The challenge used during key creation. This may be null if no challenge
-     *                  was provided in the [ClientAttestationConfig]. If present, it should be
-     *                  included in the attestation request to the wallet provider.
      * @return [Result] containing the attestation JWT string received from the wallet provider
      *         on success, or an exception on failure.
-     *
-     * @see [ClientAttestationConfig.challenge] for challenge configuration
      */
     suspend fun getAttestationJwt(keyInfo: KeyInfo): Result<String>
 }
