@@ -20,8 +20,8 @@ import eu.europa.ec.eudi.iso18013.transfer.TransferEvent
 import eu.europa.ec.eudi.openid4vp.Consensus
 import eu.europa.ec.eudi.openid4vp.DispatchOutcome
 import eu.europa.ec.eudi.openid4vp.EncryptionParameters
-import eu.europa.ec.eudi.openid4vp.ResolvedRequestObject
 import eu.europa.ec.eudi.openid4vp.OpenId4Vp
+import eu.europa.ec.eudi.openid4vp.ResolvedRequestObject
 import eu.europa.ec.eudi.wallet.internal.makeOpenId4VPConfig
 import eu.europa.ec.eudi.wallet.logging.Logger
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.OpenId4VpConfig
@@ -41,6 +41,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -48,7 +49,6 @@ import org.junit.After
 import org.junit.Before
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
@@ -93,7 +93,7 @@ class OpenId4VpManagerTest {
     }
 
     @Test
-    @Ignore(value = "Fails in CI")
+//    @Ignore(value = "Fails in CI")
     fun `test stop cancels resolveRequestUri coroutine`() = runTest(timeout = 1.minutes) {
         // Set up a latch to wait for the disconnected event
         val eventReceived = java.util.concurrent.CountDownLatch(1)
@@ -126,16 +126,14 @@ class OpenId4VpManagerTest {
         manager.resolveRequestUri("http://example.com")
 
         // Ensure the coroutine has started
-        testDispatcher.scheduler.advanceTimeBy(100)
-        testDispatcher.scheduler.runCurrent()
+        advanceUntilIdle()
 
         // Now stop the manager, which should cancel the coroutine
         println("Stopping manager")
         manager.stop()
 
         // Advance time to ensure cancellation processing completes
-        testDispatcher.scheduler.advanceTimeBy(500)
-        testDispatcher.scheduler.runCurrent()
+        advanceUntilIdle()
 
         // Wait for the event with timeout
         val received = eventReceived.await(3, java.util.concurrent.TimeUnit.SECONDS)
@@ -177,7 +175,7 @@ class OpenId4VpManagerTest {
         manager.addTransferEventListener(listener)
 
         manager.sendResponse(fakeResponse)
-        testDispatcher.scheduler.advanceUntilIdle()
+        advanceUntilIdle()
         manager.stop()
 
         verify(
