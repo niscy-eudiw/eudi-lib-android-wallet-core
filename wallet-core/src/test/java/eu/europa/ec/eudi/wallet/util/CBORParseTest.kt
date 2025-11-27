@@ -26,6 +26,7 @@ import co.nstant.`in`.cbor.model.SimpleValueType
 import co.nstant.`in`.cbor.model.Tag
 import co.nstant.`in`.cbor.model.UnicodeString
 import co.nstant.`in`.cbor.model.UnsignedInteger
+import eu.europa.ec.eudi.wallet.sample.util.CBOR
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

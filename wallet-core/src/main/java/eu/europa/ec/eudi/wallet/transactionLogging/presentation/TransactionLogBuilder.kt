@@ -102,6 +102,7 @@ class TransactionLogBuilder(
             }
 
             is DCAPIRequest -> {
+                // TODO log dc api request
                 log.copy(
                     timestamp = Instant.now().toEpochMilli(),
                 )
