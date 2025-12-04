@@ -65,7 +65,7 @@ class EudiWalletConfigTest {
                 withSchemes(
                     listOf(
                         "eudi-openid4vp",
-                        "mdoc-openid4vp"
+                        "haip-vp"
                     )
                 )
                 withEncryptionAlgorithms(listOf(EncryptionAlgorithm.ECDH_ES))
@@ -94,7 +94,7 @@ class EudiWalletConfigTest {
         )
         assertEquals(ClientIdScheme.X509SanDns, config.openId4VpConfig?.clientIdSchemes?.get(1))
         assertEquals("eudi-openid4vp", config.openId4VpConfig?.schemes?.get(0))
-        assertEquals("mdoc-openid4vp", config.openId4VpConfig?.schemes?.get(1))
+        assertEquals("haip-vp", config.openId4VpConfig?.schemes?.get(1))
         assertEquals(
             EncryptionAlgorithm.ECDH_ES,
             config.openId4VpConfig?.encryptionAlgorithms?.get(0)

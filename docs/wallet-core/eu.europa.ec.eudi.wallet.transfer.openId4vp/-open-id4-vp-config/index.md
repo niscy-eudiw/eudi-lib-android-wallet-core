@@ -29,7 +29,7 @@ val config = OpenId4VpConfig.Builder()
     .withSchemes(
         listOf(
             "eudi-openid4vp",
-            "mdoc-openid4vp"
+            "haip-vp",
         )
     )
    .withEncryptionAlgorithms(EncryptionAlgorithm.SUPPORTED_ENCRYPTION_ALGORITHMS) //optional; if not set, all supported algorithms will be used
@@ -65,4 +65,4 @@ val config = OpenId4VpConfig.Builder()
 | [encryptionAlgorithms](encryption-algorithms.md) | [androidJvm]<br>val [encryptionAlgorithms](encryption-algorithms.md): [List](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[EncryptionAlgorithm](../-encryption-algorithm/index.md)&gt;<br>List of supported encryption algorithms for securing communication channels |
 | [encryptionMethods](encryption-methods.md) | [androidJvm]<br>val [encryptionMethods](encryption-methods.md): [List](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[EncryptionMethod](../-encryption-method/index.md)&gt;<br>List of supported encryption methods for content encryption |
 | [formats](formats.md) | [androidJvm]<br>val [formats](formats.md): [List](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[Format](../-format/index.md)&gt;<br>Supported credential formats (mDL/mDoc, SD-JWT VC, etc.) |
-| [schemes](schemes.md) | [androidJvm]<br>val [schemes](schemes.md): [List](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)&gt;<br>URI schemes supported for OpenID4VP requests (default: &quot;mdoc-openid4vp&quot;) |
+| [schemes](schemes.md) | [androidJvm]<br>val [schemes](schemes.md): [List](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin.collections/-list/index.html)&lt;[String](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-string/index.html)&gt;<br>URI schemes supported for OpenID4VP requests |

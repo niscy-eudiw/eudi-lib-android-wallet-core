@@ -57,7 +57,7 @@ val config = EudiWalletConfig()
         withSchemes(
             "openid4vp",
             "eudi-openid4vp",
-            "mdoc-openid4vp"
+            "haip-vp",
         )
     }
     .configureDCAPI {

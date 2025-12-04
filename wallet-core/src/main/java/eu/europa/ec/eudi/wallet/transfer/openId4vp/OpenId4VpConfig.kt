@@ -48,7 +48,7 @@ import java.net.URI
  *     .withSchemes(
  *         listOf(
  *             "eudi-openid4vp",
- *             "mdoc-openid4vp"
+ *             "haip-vp",
  *         )
  *     )
  *    .withEncryptionAlgorithms(EncryptionAlgorithm.SUPPORTED_ENCRYPTION_ALGORITHMS) //optional; if not set, all supported algorithms will be used
@@ -60,7 +60,7 @@ import java.net.URI
  * @property clientIdSchemes List of supported client identifier schemes that define how verifiers authenticate themselves
  * @property encryptionAlgorithms List of supported encryption algorithms for securing communication channels
  * @property encryptionMethods List of supported encryption methods for content encryption
- * @property schemes URI schemes supported for OpenID4VP requests (default: "mdoc-openid4vp")
+ * @property schemes URI schemes supported for OpenID4VP requests
  * @property formats Supported credential formats (mDL/mDoc, SD-JWT VC, etc.)
  *
  * @see ClientIdScheme
@@ -95,7 +95,6 @@ class OpenId4VpConfig private constructor(private val builder: Builder) {
      * ## Default Values:
      * - **Encryption Algorithms**: All supported algorithms from [EncryptionAlgorithm.SUPPORTED_ENCRYPTION_ALGORITHMS]
      * - **Encryption Methods**: All supported methods from [EncryptionMethod.SUPPORTED_ENCRYPTION_METHODS]
-     * - **Schemes**: ["mdoc-openid4vp"]
      *
      * ## Validation Rules:
      * - Client ID schemes list cannot be empty and must be initialized
@@ -109,7 +108,7 @@ class OpenId4VpConfig private constructor(private val builder: Builder) {
      * @property clientIdSchemes List of supported client identifier schemes (must be initialized)
      * @property encryptionAlgorithms List of supported encryption algorithms (defaults to all supported)
      * @property encryptionMethods List of supported encryption methods (defaults to all supported)
-     * @property schemes List of URI schemes for OpenID4VP (defaults to "mdoc-openid4vp")
+     * @property schemes List of URI schemes for OpenID4VP
      * @property formats List of supported credential formats (must be initialized)
      */
     class Builder {
@@ -172,12 +171,11 @@ class OpenId4VpConfig private constructor(private val builder: Builder) {
         fun withEncryptionMethods(vararg encryptionMethods: EncryptionMethod) =
             withEncryptionMethods(encryptionMethods.toList())
 
-        var schemes: List<String> = listOf("mdoc-openid4vp")
+        var schemes: List<String> = emptyList()
             private set
 
         /**
          * Sets a list of schemes for OpenID4VP.
-         * By default, the scheme "mdoc-openid4vp" is supported.
          *
          * @param schemes the list of schemes
          */

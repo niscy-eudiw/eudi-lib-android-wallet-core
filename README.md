@@ -192,7 +192,7 @@ val config = EudiWalletConfig()
         withSchemes(
             "openid4vp",
             "eudi-openid4vp",
-            "mdoc-openid4vp"
+            "haip-vp"
         )
         withFormats(
             Format.MsoMdoc.ES256,
@@ -1113,7 +1113,7 @@ wallet.addTransferEventListener { event ->
        <action android:name="android.intent.action.VIEW" />
        <category android:name="android.intent.category.DEFAULT" />
        <category android:name="android.intent.category.BROWSABLE" />
-       <data android:scheme="mdoc-openid4vp" android:host="*" />
+       <data android:scheme="haip-vp" android:host="*" />
     </intent-filter> 
     ```
 
