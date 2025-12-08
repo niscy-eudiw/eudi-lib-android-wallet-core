@@ -19,7 +19,7 @@ package eu.europa.ec.eudi.wallet.issue.openid4vci
 
 import eu.europa.ec.eudi.openid4vci.SubmissionOutcome
 import org.multipaz.crypto.Algorithm
-import org.multipaz.securearea.KeyUnlockData
+import org.multipaz.securearea.UnlockReason
 import org.multipaz.securearea.SecureArea
 
 /**
@@ -28,6 +28,6 @@ import org.multipaz.securearea.SecureArea
 internal class UserAuthRequiredException(
     val signingAlgorithm: Algorithm,
     val keysAndSecureAreas: Map<KeyAlias, SecureArea>,
-    val resume: suspend (Map<KeyAlias, KeyUnlockData?>) -> SubmitRequest.ResponseResult<SubmissionOutcome>,
+    val resume: suspend (Map<KeyAlias, UnlockReason>) -> Pair<List<String>, SubmissionOutcome>,
     override val cause: Throwable? = null,
 ) : Throwable()

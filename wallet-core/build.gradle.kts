@@ -122,6 +122,7 @@ dependencies {
     }
 
     implementation(libs.appcompat)
+    implementation(libs.biometric.ktx)
     // OpenID4VCI
     implementation(libs.nimbus.oauth2.oidc.sdk)
     // Siop-Openid4VP library

@@ -24,11 +24,11 @@ import eu.europa.ec.eudi.openid4vci.SignOperation
 import eu.europa.ec.eudi.wallet.document.credential.ProofOfPossessionSigner
 import kotlinx.coroutines.runBlocking
 import org.multipaz.securearea.KeyLockedException
-import org.multipaz.securearea.KeyUnlockData
+import org.multipaz.securearea.UnlockReason
 
 class BatchProofSigner(
     val signers: List<ProofOfPossessionSigner>,
-    private val keyUnlockData: Map<String, KeyUnlockData?>? = null,
+    private val unlockReasons: Map<String, UnlockReason>? = null,
 ) : BatchSigner<JwtBindingKey> {
 
     val algorithm by lazy {
@@ -44,11 +44,11 @@ class BatchProofSigner(
     override suspend fun authenticate(): BatchSignOperation<JwtBindingKey> {
         return BatchSignOperation(signers.map { signer ->
             val jwk = JWK.parse(signer.getKeyInfo().publicKey.toJwk().toString())
-            val keyUnlockData = this.keyUnlockData?.get(signer.keyAlias)
+            val unlockReason = this.unlockReasons?.get(signer.keyAlias)
             SignOperation(
                 function = { input ->
                     try {
-                        signer.signPoP(input, keyUnlockData).toDerEncoded()
+                        signer.signPoP(input, unlockReason ?: UnlockReason.Unspecified).toDerEncoded()
                     } catch (e: KeyLockedException) {
                         keyLockedException = e
                         throw e

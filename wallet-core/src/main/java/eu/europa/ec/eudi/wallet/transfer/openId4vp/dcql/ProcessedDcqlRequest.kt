@@ -36,7 +36,8 @@ import eu.europa.ec.eudi.wallet.internal.verifiablePresentationForSdJwtVc
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.FORMAT_MSO_MDOC
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.FORMAT_SD_JWT_VC
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.OpenId4VpResponse
-import kotlinx.coroutines.runBlocking
+import eu.europa.ec.eudi.wallet.keyunlock.MultipazAuthPrompt
+import kotlinx.coroutines.withContext
 import org.multipaz.crypto.Algorithm
 
 /**
@@ -79,11 +80,12 @@ class ProcessedDcqlRequest(
      * @param signatureAlgorithm Algorithm to use for signing the presentations
      * @return [ResponseResult] with prepared response or error information
      */
-    override fun generateResponse(
+    override suspend fun generateResponse(
         disclosedDocuments: DisclosedDocuments,
         signatureAlgorithm: Algorithm?,
     ): ResponseResult {
-        val result = try {
+        return withContext(MultipazAuthPrompt.dispatcher) {
+            val result = try {
             // Set to track all the documents that will be included in the response
             val respondedDocumentsMap =
                 mutableMapOf<QueryId, List<OpenId4VpResponse.RespondedDocument>>()
@@ -101,14 +103,12 @@ class ProcessedDcqlRequest(
                             format = format,
                         )
                         respondedDocuments.add(respondedDocument)
-                        val verifiablePresentation = runBlocking {
-                            vpFromRequestedDocuments(
-                                format = format,
-                                requestedDocuments = requestedDocuments,
-                                disclosedDocument = disclosedDocument,
-                                signatureAlgorithm = signatureAlgorithm ?: Algorithm.ESP256
-                            )
-                        }
+                        val verifiablePresentation = vpFromRequestedDocuments(
+                            format = format,
+                            requestedDocuments = requestedDocuments,
+                            disclosedDocument = disclosedDocument,
+                            signatureAlgorithm = signatureAlgorithm ?: Algorithm.ESP256
+                        )
                         verifiablePresentationsForQueryId.add(verifiablePresentation)
                     }
                 respondedDocumentsMap.put(queryId, respondedDocuments)
@@ -129,9 +129,10 @@ class ProcessedDcqlRequest(
         } catch (e: Exception) {
             // Propagate any errors that occur during response generation
             ResponseResult.Failure(e)
-        }
+            }
 
-        return result
+            result
+        }
     }
 
     /**

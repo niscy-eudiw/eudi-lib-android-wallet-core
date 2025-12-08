@@ -55,7 +55,7 @@ class BatchProofSignerTest {
         val key = Crypto.createEcPrivateKey(EcCurve.P256)
         val signers: List<ProofOfPossessionSigner> = listOf(
             mockk {
-                coEvery { signPoP(any(), null) } throws KeyLockedException()
+                coEvery { signPoP(any(), any()) } throws KeyLockedException()
                 coEvery { getKeyInfo() } returns mockk {
                     every { algorithm } returns Algorithm.ESP256
                     every { publicKey } returns key.publicKey

@@ -77,8 +77,9 @@ import eu.europa.ec.eudi.wallet.transfer.openId4vp.OpenId4VpReaderTrust
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.SdJwtVcItem
 import kotlinx.coroutines.runBlocking
 import org.multipaz.credential.SecureAreaBoundCredential
+import kotlin.coroutines.coroutineContext
 import org.multipaz.crypto.Algorithm
-import org.multipaz.securearea.KeyUnlockData
+import org.multipaz.securearea.UnlockReason
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Base64
@@ -323,7 +324,7 @@ internal val EncryptionMethod.nimbus: com.nimbusds.jose.EncryptionMethod
  */
 internal suspend fun SdJwt<JwtAndClaims>.serializeWithKeyBinding(
     credential: SecureAreaBoundCredential,
-    keyUnlockData: KeyUnlockData?,
+    keyUnlockData: UnlockReason?,
     clientId: VerifierId,
     nonce: String,
     signatureAlgorithm: Algorithm,
@@ -331,16 +332,20 @@ internal suspend fun SdJwt<JwtAndClaims>.serializeWithKeyBinding(
 ): String {
     val algorithm = JWSAlgorithm.parse((signatureAlgorithm).joseAlgorithmIdentifier)
     val publicKey = credential.secureArea.getKeyInfo(credential.alias).publicKey
+    // Capture the current coroutine context so we can pass it to runBlocking
+    // This ensures KeyUnlockDataProvider is available inside the signer callback
+    val currentContext = coroutineContext
     val buildKbJwt = NimbusSdJwtOps.kbJwtIssuer(
         signer = object : JWSSigner {
             override fun getJCAContext(): JCAContext = JCAContext()
             override fun supportedJWSAlgorithms(): Set<JWSAlgorithm> = setOf(algorithm)
             override fun sign(header: JWSHeader, signingInput: ByteArray): Base64URL {
-                val signature = runBlocking {
+                // Pass the captured context to runBlocking to preserve KeyUnlockDataProvider
+                val signature = runBlocking(currentContext) {
                     credential.secureArea.sign(
                         alias = credential.alias,
                         dataToSign = signingInput,
-                        keyUnlockData = keyUnlockData
+                        unlockReason = keyUnlockData ?: UnlockReason.Unspecified
                     )
                 }
                 return Base64URL.encode(signature.toJoseEncoded(algorithm))
@@ -397,7 +402,7 @@ internal suspend fun verifiablePresentationForSdJwtVc(
         val serialized = if (containsCnf) {
             presentation.serializeWithKeyBinding(
                 credential = this, //credential
-                keyUnlockData = disclosedDocument.keyUnlockData,
+                keyUnlockData = disclosedDocument.unlockReason ?: UnlockReason.Unspecified,
                 clientId = resolvedRequestObject.client.id,
                 nonce = resolvedRequestObject.nonce,
                 signatureAlgorithm = signatureAlgorithm,
@@ -429,7 +434,7 @@ internal suspend fun verifiablePresentationForSdJwtVc(
  * @return The constructed [VerifiablePresentation.Generic] containing the base64url-encoded device response
  * @throws RuntimeException if the response generation fails
  */
-internal fun verifiablePresentationForMsoMdoc(
+internal suspend fun verifiablePresentationForMsoMdoc(
     documentManager: DocumentManager,
     disclosedDocument: DisclosedDocument,
     requestedDocuments: RequestedDocuments,

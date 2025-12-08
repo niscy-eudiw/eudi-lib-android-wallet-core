@@ -21,7 +21,7 @@ import eu.europa.ec.eudi.wallet.document.DocumentId
 import eu.europa.ec.eudi.wallet.document.IssuedDocument
 import eu.europa.ec.eudi.wallet.document.UnsignedDocument
 import org.multipaz.crypto.Algorithm
-import org.multipaz.securearea.KeyUnlockData
+import org.multipaz.securearea.UnlockReason
 import org.multipaz.securearea.SecureArea
 
 /**
@@ -90,7 +90,7 @@ sealed interface IssueEvent : OpenId4VciResult {
     /**
      * Document requires user authentication to unlock the key for signing the proof of possession.
      * @property document the document that requires user authentication
-     * @property resume the callback to resume the issuance with the [KeyUnlockData] that will be
+     * @property resume the callback to resume the issuance with the [UnlockReason] that will be
      *  used to unlock the key
      * @property cancel the callback to cancel the issuance with an optional reason
      * @property documentId the id of the document
@@ -101,7 +101,7 @@ sealed interface IssueEvent : OpenId4VciResult {
         val document: UnsignedDocument,
         val signingAlgorithm: Algorithm,
         val keysRequireAuth: Map<KeyAlias, SecureArea>,
-        val resume: (keyUnlockData: Map<KeyAlias, KeyUnlockData?>) -> Unit,
+        val resume: (keyUnlockData: Map<KeyAlias, UnlockReason>) -> Unit,
         val cancel: (reason: String?) -> Unit,
     ) : IssueEvent,
         DocumentDetails by DocumentDetails(document)

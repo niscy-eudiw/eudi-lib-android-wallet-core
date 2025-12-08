@@ -33,14 +33,16 @@ import eu.europa.ec.eudi.iso18013.transfer.response.device.DeviceResponse
 import eu.europa.ec.eudi.iso18013.transfer.response.device.ProcessedDeviceRequest
 import eu.europa.ec.eudi.wallet.internal.d
 import eu.europa.ec.eudi.wallet.internal.e
+import eu.europa.ec.eudi.wallet.keyunlock.MultipazAuthPrompt
 import eu.europa.ec.eudi.wallet.logging.Logger
+import kotlinx.coroutines.withContext
 import org.bouncycastle.util.encoders.Hex
 import org.json.JSONObject
 import org.multipaz.cbor.Cbor
 import org.multipaz.crypto.Algorithm
 import org.multipaz.util.fromBase64Url
 import org.multipaz.crypto.Crypto
-import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
+import org.multipaz.crypto.Hpke
 
 /**
  * Processes a DCAPI request by generating a response based on the provided device request and credential options.
@@ -62,11 +64,12 @@ class ProcessedDCPAPIRequest(
     ): RequestProcessor.ProcessedRequest.Success(requestedDocuments) {
 
     @OptIn(ExperimentalDigitalCredentialApi::class)
-    override fun generateResponse(
+    override suspend fun generateResponse(
         disclosedDocuments: DisclosedDocuments,
         signatureAlgorithm: Algorithm?
     ): ResponseResult {
-        try {
+        return withContext(MultipazAuthPrompt.dispatcher) {
+            try {
             val option =
                 providerGetCredentialRequest.credentialOptions[0] as GetDigitalCredentialOption
             val json = JSONObject(option.requestJson)
@@ -100,19 +103,22 @@ class ProcessedDCPAPIRequest(
             )
 
             // Encrypt the device response using HPKE
-            val (cipherText, encapsulatedPublicKey) = Crypto.hpkeEncrypt(
-                cipherSuite = Algorithm.HPKE_BASE_P256_SHA256_AES128GCM,
+            val encrypter = Hpke.getEncrypter(
+                cipherSuite = Hpke.CipherSuite.DHKEM_P256_HKDF_SHA256_HKDF_SHA256_AES_128_GCM,
                 receiverPublicKey = recipientPublicKey,
-                plainText = deviceResponse.deviceResponseBytes,
-                aad = deviceResponse.sessionTranscriptBytes
+                info = deviceResponse.sessionTranscriptBytes
             )
+            val cipherText = encrypter.encrypt(
+                plaintext = deviceResponse.deviceResponseBytes,
+                aad = ByteArray(0)
+            )
+            // In multipaz 0.95, encapsulatedKey is ByteString
+            val encapsulatedPublicKey = encrypter.encapsulatedKey.toByteArray()
 
-            val enc =
-                (encapsulatedPublicKey as EcPublicKeyDoubleCoordinate).asUncompressedPointEncoding
             val encryptedResponse = CBORObject.NewArray().apply {
                 Add(DCAPI)
                 Add(CBORObject.NewMap().apply {
-                    Add(ENC, enc)
+                    Add(ENC, encapsulatedPublicKey)
                     Add(CIPHER_TEXT, cipherText)
                 })
             }.EncodeToBytes()
@@ -122,21 +128,22 @@ class ProcessedDCPAPIRequest(
             val response = responseJson.toString()
             logger?.d(TAG, "Response JSON: $response")
 
-            return ResponseResult.Success(
+            ResponseResult.Success(
                 DCAPIResponse(
                     deviceResponseBytes = deviceResponse.deviceResponseBytes,
                     intent = createResponseIntent(response),
                     documentIds = deviceResponse.documentIds
                 )
             )
-        } catch (e: Exception) {
-            logger?.e(TAG, "Error generating response: ${e.message}", e)
-            return ResponseResult.Failure(
-                DCAPIException(
-                    message = "Error generating response: ${e.message}",
-                    cause = e
+            } catch (e: Exception) {
+                logger?.e(TAG, "Error generating response: ${e.message}", e)
+                ResponseResult.Failure(
+                    DCAPIException(
+                        message = "Error generating response: ${e.message}",
+                        cause = e
+                    )
                 )
-            )
+            }
         }
     }
 

@@ -32,6 +32,7 @@ import java.security.cert.X509Certificate
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Eudi wallet config. This config is used to configure the default settings of the Eudi wallet.
@@ -345,7 +346,7 @@ class EudiWalletConfig {
 
     var userAuthenticationRequired: Boolean = false
         internal set // internal for setting the default value from the builder
-    var userAuthenticationTimeout: Duration = 0.milliseconds
+    var userAuthenticationTimeout: Duration = DEFAULT_USER_AUTHENTICATION_TIMEOUT
         private set
     var useStrongBoxForKeys: Boolean = true
         internal set // internal for setting the default value from the builder
@@ -365,17 +366,17 @@ class EudiWalletConfig {
      *
      * The default values are:
      * - userAuthenticationRequired: false
-     * - userAuthenticationTimeout: 0
+     * - userAuthenticationTimeout: 20 seconds (allows batch operations with single auth prompt)
      * - useStrongBoxForKeys: true if supported by the device
      *
      * @param userAuthenticationRequired whether user authentication is required
      * @param userAuthenticationTimeout  If 0, user authentication is required for every use of the
-     * key, otherwise it's required within the given amount of milliseconds
+     * key, otherwise it's required within the given amount of time. Default is 20 seconds.
      * @param useStrongBoxForKeys whether to use the strong box for keys
      */
     fun configureDocumentKeyCreation(
         userAuthenticationRequired: Boolean = false,
-        userAuthenticationTimeout: Duration = 0.milliseconds,
+        userAuthenticationTimeout: Duration = DEFAULT_USER_AUTHENTICATION_TIMEOUT,
         useStrongBoxForKeys: Boolean = true,
     ) = apply {
         this.userAuthenticationRequired = userAuthenticationRequired
@@ -402,6 +403,13 @@ class EudiWalletConfig {
     companion object {
 
         const val DEFAULT_DOCUMENT_MANAGER_IDENTIFIER = "EudiWalletDocumentManager"
+
+        /**
+         * Default timeout for user authentication. After authentication, the key remains
+         * unlocked for this duration, allowing batch operations (like multi-credential issuance)
+         * to complete with a single authentication prompt.
+         */
+        val DEFAULT_USER_AUTHENTICATION_TIMEOUT: Duration = 20.seconds
 
         /**
          * Create a new EudiWalletConfig instance.
