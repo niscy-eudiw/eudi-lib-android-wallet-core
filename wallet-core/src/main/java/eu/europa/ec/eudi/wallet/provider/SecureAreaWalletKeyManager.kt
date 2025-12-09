@@ -19,7 +19,7 @@ package eu.europa.ec.eudi.wallet.provider
 import org.multipaz.crypto.Algorithm
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.KeyInfo
-import org.multipaz.securearea.KeyUnlockData
+import org.multipaz.securearea.UnlockReason
 import org.multipaz.securearea.SecureArea
 import java.security.MessageDigest
 
@@ -35,13 +35,13 @@ import java.security.MessageDigest
  * @param secureArea The underlying secure storage abstraction.
  * @param createKeySettingsProvider A lambda that provides configuration for creating new keys
  * given a selected [Algorithm].
- * @param keyUnlockDataProvider Optional provider for user-authentication data (e.g., Biometrics/PIN)
- * if the key requires unlocking before use. Defaults to null.
+ * @param unlockReasonProvider Optional provider for unlock reason (e.g., Biometrics/PIN)
+ * if the key requires unlocking before use. Defaults to UnlockReason.Unspecified.
  */
 open class SecureAreaWalletKeyManager(
     private val secureArea: SecureArea,
     private val createKeySettingsProvider: suspend (Algorithm) -> CreateKeySettings,
-    private val keyUnlockDataProvider: suspend (String, SecureArea) -> KeyUnlockData? = { _, _ -> null },
+    private val unlockReasonProvider: suspend (String, SecureArea) -> UnlockReason = { _, _ -> UnlockReason.Unspecified },
 ) : WalletKeyManager {
 
     override suspend fun getOrCreateWalletAttestationKey(
@@ -71,8 +71,8 @@ open class SecureAreaWalletKeyManager(
             secureArea.createKey(keyAlias, createKeySettings)
         }
         WalletAttestationKey(keyInfo) { data ->
-            val keyUnlockData = keyUnlockDataProvider(keyAlias, secureArea)
-            secureArea.sign(keyAlias, data, keyUnlockData).toDerEncoded()
+            val unlockReason = unlockReasonProvider(keyAlias, secureArea)
+            secureArea.sign(keyAlias, data, unlockReason).toDerEncoded()
         }
     }
 
@@ -81,8 +81,8 @@ open class SecureAreaWalletKeyManager(
             secureArea.getKeyInfo(keyAlias)
         }.map { keyInfo ->
             WalletAttestationKey(keyInfo) { data ->
-                val keyUnlockData = keyUnlockDataProvider(keyAlias, secureArea)
-                secureArea.sign(keyAlias, data, keyUnlockData).toDerEncoded()
+                val unlockReason = unlockReasonProvider(keyAlias, secureArea)
+                secureArea.sign(keyAlias, data, unlockReason).toDerEncoded()
             }
         }.getOrNull()
     }

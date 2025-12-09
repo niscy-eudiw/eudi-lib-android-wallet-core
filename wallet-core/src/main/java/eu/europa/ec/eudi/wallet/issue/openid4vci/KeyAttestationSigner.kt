@@ -23,13 +23,13 @@ import eu.europa.ec.eudi.openid4vci.Signer
 import eu.europa.ec.eudi.wallet.document.credential.ProofOfPossessionSigner
 import eu.europa.ec.eudi.wallet.provider.WalletAttestationsProvider
 import org.multipaz.securearea.KeyLockedException
-import org.multipaz.securearea.KeyUnlockData
+import org.multipaz.securearea.UnlockReason
 
 class KeyAttestationSigner internal constructor(
     override val javaAlgorithm: String,
     val signer: ProofOfPossessionSigner,
     private val keyAttestationJWT: KeyAttestationJWT,
-    private val keyUnlockData: KeyUnlockData? = null,
+    private val unlockReason: UnlockReason? = null,
 ) : Signer<KeyAttestationJWT> {
 
     var keyLockedException: KeyLockedException? = null
@@ -40,7 +40,7 @@ class KeyAttestationSigner internal constructor(
         return SignOperation(
             function = { input ->
                 try {
-                    signer.signPoP(input, keyUnlockData).toDerEncoded()
+                    signer.signPoP(input, unlockReason ?: UnlockReason.Unspecified).toDerEncoded()
                 } catch (e: KeyLockedException) {
                     keyLockedException = e
                     throw e
@@ -60,7 +60,7 @@ class KeyAttestationSigner internal constructor(
             signers: List<ProofOfPossessionSigner>,
             keyIndex: Int,
             walletAttestationsProvider: WalletAttestationsProvider,
-            keyUnlockData: Map<String, KeyUnlockData?>? = null,
+            unlockReasons: Map<String, UnlockReason>? = null,
         ): suspend (Nonce?) -> Result<KeyAttestationSigner> = { nonce ->
             runCatching {
                 val keyAttestationJWT = walletAttestationsProvider.getKeyAttestation(
@@ -75,13 +75,13 @@ class KeyAttestationSigner internal constructor(
                 val javaAlgorithm = requireNotNull(algorithm.javaAlgorithm) {
                     "No JCA algorithm name for ${algorithm.name}"
                 }
-                val keyUnlockDataForSigner = keyUnlockData?.get(signer.keyAlias)
+                val unlockReasonForSigner = unlockReasons?.get(signer.keyAlias)
 
                 KeyAttestationSigner(
                     javaAlgorithm,
                     signer,
                     keyAttestationJWT,
-                    keyUnlockDataForSigner
+                    unlockReasonForSigner
                 )
             }
         }

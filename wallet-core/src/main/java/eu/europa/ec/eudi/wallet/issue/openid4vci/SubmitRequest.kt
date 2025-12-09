@@ -26,9 +26,11 @@ import eu.europa.ec.eudi.openid4vci.ProofsSpecification
 import eu.europa.ec.eudi.openid4vci.SubmissionOutcome
 import eu.europa.ec.eudi.wallet.document.UnsignedDocument
 import eu.europa.ec.eudi.wallet.document.credential.ProofOfPossessionSigner
+import eu.europa.ec.eudi.wallet.keyunlock.MultipazAuthPrompt
 import eu.europa.ec.eudi.wallet.provider.WalletAttestationsProvider
 import kotlinx.coroutines.runBlocking
-import org.multipaz.securearea.KeyUnlockData
+import kotlinx.coroutines.withContext
+import org.multipaz.securearea.UnlockReason
 
 internal class SubmitRequest(
     val config: OpenId4VciManager.Config,
@@ -56,8 +58,8 @@ internal class SubmitRequest(
     private suspend fun submitRequest(
         unsignedDocument: UnsignedDocument,
         offeredDocument: Offer.OfferedDocument,
-        keyUnlockData: Map<KeyAlias, KeyUnlockData?>? = null,
-    ): ResponseResult<SubmissionOutcome> {
+        unlockReasons: Map<KeyAlias, UnlockReason>? = null,
+    ): Pair<List<String>, SubmissionOutcome> {
         val payload =
             IssuanceRequestPayload.ConfigurationBased(offeredDocument.configurationIdentifier)
         val signers = unsignedDocument.getPoPSigners().toList()
@@ -69,7 +71,7 @@ internal class SubmitRequest(
                     signers,
                     unsignedDocument,
                     offeredDocument,
-                    keyUnlockData
+                    unlockReasons
                 )
             }
 
@@ -79,16 +81,13 @@ internal class SubmitRequest(
                     signers,
                     unsignedDocument,
                     offeredDocument,
-                    keyUnlockData
+                    unlockReasons
                 )
             }
         }
 
         this.authorizedRequest = updatedAuthorizedRequest
-        return ResponseResult(
-            keyAliases = signers.map { it.keyAlias },
-            outcome = outcome
-        )
+        return signers.map { it.keyAlias } to outcome
     }
 
     private suspend fun requestWithNoAuthentication(
@@ -96,7 +95,7 @@ internal class SubmitRequest(
         signers: List<ProofOfPossessionSigner>,
         unsignedDocument: UnsignedDocument,
         offeredDocument: Offer.OfferedDocument,
-        keyUnlockData: Map<KeyAlias, KeyUnlockData?>?,
+        unlockReasons: Map<KeyAlias, UnlockReason>?,
     ): Pair<AuthorizedRequest, SubmissionOutcome> {
         val canBeIssuedWithoutAttestation = offeredDocument.configuration.proofTypesSupported.values
             .filterIsInstance<ProofTypeMeta.Jwt>()
@@ -107,9 +106,9 @@ internal class SubmitRequest(
         }
 
         return authorizedRequest.requestWithJwtProofWithoutAttestation(
-            payload, signers, keyUnlockData,
-            unlockResume = { updatedKeyUnlockData ->
-                submitRequest(unsignedDocument, offeredDocument, updatedKeyUnlockData)
+            payload, signers, unlockReasons,
+            unlockResume = { updatedUnlockReasons ->
+                submitRequest(unsignedDocument, offeredDocument, updatedUnlockReasons)
             }
         )
     }
@@ -119,7 +118,7 @@ internal class SubmitRequest(
         signers: List<ProofOfPossessionSigner>,
         unsignedDocument: UnsignedDocument,
         offeredDocument: Offer.OfferedDocument,
-        keyUnlockData: Map<KeyAlias, KeyUnlockData?>?,
+        unlockReasons: Map<KeyAlias, UnlockReason>?,
     ): Pair<AuthorizedRequest, SubmissionOutcome> {
 
         val proofType =
@@ -136,9 +135,9 @@ internal class SubmitRequest(
             jwtProofTypes.firstOrNull() { it.keyAttestationRequirement is KeyAttestationRequirement.Required }
         if (jwtWithAttest != null) {
             return authorizedRequest.requestWithJwtProofWithAttestation(
-                payload, signers, keyUnlockData,
-                unlockResume = { updatedKeyUnlockData ->
-                    submitRequest(unsignedDocument, offeredDocument, updatedKeyUnlockData)
+                payload, signers, unlockReasons,
+                unlockResume = { updatedUnlockReasons ->
+                    submitRequest(unsignedDocument, offeredDocument, updatedUnlockReasons)
                 }
             )
         }
@@ -147,9 +146,9 @@ internal class SubmitRequest(
             jwtProofTypes.firstOrNull { it.keyAttestationRequirement is KeyAttestationRequirement.NotRequired }
         if (jwtWithoutAttest != null) {
             return authorizedRequest.requestWithJwtProofWithoutAttestation(
-                payload, signers, keyUnlockData,
-                unlockResume = { updatedKeyUnlockData ->
-                    submitRequest(unsignedDocument, offeredDocument, updatedKeyUnlockData)
+                payload, signers, unlockReasons,
+                unlockResume = { updatedUnlockReasons ->
+                    submitRequest(unsignedDocument, offeredDocument, updatedUnlockReasons)
                 }
             )
         }
@@ -195,8 +194,8 @@ internal class SubmitRequest(
     private suspend fun AuthorizedRequest.requestWithJwtProofWithAttestation(
         payload: IssuanceRequestPayload,
         signers: List<ProofOfPossessionSigner>,
-        keyUnlockData: Map<String, KeyUnlockData?>?,
-        unlockResume: suspend (Map<String, KeyUnlockData?>) -> ResponseResult<SubmissionOutcome>,
+        unlockReasons: Map<String, UnlockReason>?,
+        unlockResume: suspend (Map<String, UnlockReason>) -> Pair<List<String>, SubmissionOutcome>,
     ): Pair<AuthorizedRequest, SubmissionOutcome> {
         val walletAttestationsProvider = checkNotNull(walletAttestationsProvider) {
             "WalletAttestationsProvider is required for attestation based client authentication"
@@ -206,7 +205,7 @@ internal class SubmitRequest(
         val proofsSpecification = ProofsSpecification.JwtProofs.WithKeyAttestation(
             proofSignerProvider = { nonce ->
                 val factory = KeyAttestationSigner.Factory(
-                    signers, keyIndex, walletAttestationsProvider, keyUnlockData
+                    signers, keyIndex, walletAttestationsProvider, unlockReasons
                 )
                 factory(nonce).getOrThrow().also { proofSigner = it }
             },
@@ -224,9 +223,11 @@ internal class SubmitRequest(
                 throw UserAuthRequiredException(
                     signingAlgorithm = proofSigner.signer.getKeyInfo().algorithm,
                     keysAndSecureAreas = keysAndSecureAreas,
-                    resume = { keyUnlockData ->
+                    resume = { unlockReasons ->
                         runBlocking {
-                            unlockResume(keyUnlockData)
+                            withContext(MultipazAuthPrompt.dispatcher) {
+                                unlockResume(unlockReasons)
+                            }
                         }
                     },
                     cause = e
@@ -241,13 +242,13 @@ internal class SubmitRequest(
     private suspend fun AuthorizedRequest.requestWithJwtProofWithoutAttestation(
         payload: IssuanceRequestPayload,
         signers: List<ProofOfPossessionSigner>,
-        keyUnlockData: Map<String, KeyUnlockData?>?,
-        unlockResume: suspend (Map<String, KeyUnlockData?>) -> ResponseResult<SubmissionOutcome>,
+        unlockReasons: Map<String, UnlockReason>?,
+        unlockResume: suspend (Map<String, UnlockReason>) -> Pair<List<String>, SubmissionOutcome>,
     ): Pair<AuthorizedRequest, SubmissionOutcome> {
         var proofSigner: BatchProofSigner? = null
         try {
             proofSigner =
-                BatchProofSigner(signers, keyUnlockData)
+                BatchProofSigner(signers, unlockReasons)
             val proofsSpecification = ProofsSpecification.JwtProofs.NoKeyAttestation(proofSigner)
             return with(issuer) {
                 request(payload, proofsSpecification)
@@ -261,9 +262,13 @@ internal class SubmitRequest(
                 throw UserAuthRequiredException(
                     signingAlgorithm = proofSigner.algorithm,
                     keysAndSecureAreas = keysAndSecureAreas,
-                    resume = { keyUnlockData -> runBlocking {
-                        unlockResume(keyUnlockData)
-                    } },
+                    resume = { unlockReasons ->
+                        runBlocking {
+                            withContext(MultipazAuthPrompt.dispatcher) {
+                                unlockResume(unlockReasons)
+                            }
+                        }
+                    },
                     cause = e
                 )
             } else {
