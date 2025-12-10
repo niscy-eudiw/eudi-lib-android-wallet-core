@@ -2,6 +2,55 @@
 
 See release notes in project's github repository.
 
+## [0.12.0-SNAPSHOT]
+
+__2 Dec 2024__
+
+### Breaking Changes - Multipaz 0.95 Migration
+
+- **HPKE API Migration**: Migrated from `Crypto.hpkeEncrypt()` to `Hpke.getEncrypter()` pattern
+  - Changed from static method to object-oriented encrypter API
+  - Now uses `Hpke.CipherSuite.DHKEM_P256_HKDF_SHA256_HKDF_SHA256_AES_128_GCM`
+  - Requires suspend function handling with `runBlocking` or coroutine context
+  - Updated in `ProcessedDCPAPIRequest.kt`
+
+- **KeyUnlockData → UnlockReason Type Migration**: Replaced `KeyUnlockData` with `UnlockReason` across all modules
+  - Updated imports: `org.multipaz.securearea.KeyUnlockData` → `org.multipaz.securearea.UnlockReason`
+  - Added null-safe defaults with `UnlockReason.Unspecified` where needed
+  - Affected files:
+    - `OpenId4VpUtils.kt`: Function parameters and signature binding
+    - `BatchProofSigner.kt`: Proof signing with unlock data
+    - `SubmitRequest.kt`: Credential submission authentication
+    - `Exceptions.kt`: UserAuthRequiredException
+    - `IssueEvent.kt`: DocumentRequiresUserAuth event
+
+- **DeviceResponseParser API**: Updated to use suspend functions
+  - Added `runBlocking` wrappers where needed
+  - Updated in `MsoMdocParser.kt`
+
+### Configuration Changes
+
+- **Composite Builds**: Added local library substitution in `settings.gradle.kts`
+  - Included `eudi-lib-android-wallet-document-manager` for local development
+  - Included `eudi-lib-android-iso18013-data-transfer` for local development
+  - Enables cross-repository development without publishing intermediate versions
+
+### Dependencies
+
+- Bump multipaz to 0.95.0
+- Update eudi-lib-android-wallet-document-manager (composite build)
+- Update eudi-lib-android-iso18013-data-transfer (composite build)
+
+### ISO 18013-5 Data Transfer Library Updates
+
+- **Fixed DeviceRequestParser Deprecation**: Migrated from deprecated `DeviceRequestParser` to new `DeviceRequest.fromDataItem()` API
+  - Updated `DeviceRequestProcessor.kt` to use new multipaz 0.95 device request parsing
+  - Added CBOR conversion layer: `Cbor.decode()` for ByteArray → DataItem transformation
+  - Implemented `verifyReaderAuthentication()` call for proper request verification
+  - Updated `DocRequest` extension functions to work with new multipaz API
+  - Reader authentication now handled at DeviceRequest level per multipaz 0.95 architecture
+  - All deprecation warnings resolved
+
 ## [0.11.0-SNAPSHOT]
 
 __ 25 Jul 2024__

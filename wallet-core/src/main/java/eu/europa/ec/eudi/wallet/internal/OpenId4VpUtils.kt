@@ -315,7 +315,7 @@ internal val EncryptionMethod.nimbus: com.nimbusds.jose.EncryptionMethod
  *
  * @receiver The SD-JWT to serialize.
  * @param credential The credential used for signing.
- * @param keyUnlockData Data to unlock the signing key.
+ * @param keyUnlockData The reason for unlocking the key, used for authentication prompts.
  * @param clientId The verifier's client ID.
  * @param nonce The nonce for the session.
  * @param signatureAlgorithm The algorithm to use for signing.
@@ -402,7 +402,7 @@ internal suspend fun verifiablePresentationForSdJwtVc(
         val serialized = if (containsCnf) {
             presentation.serializeWithKeyBinding(
                 credential = this, //credential
-                keyUnlockData = disclosedDocument.unlockReason ?: UnlockReason.Unspecified,
+                keyUnlockData = disclosedDocument.unlockReason,
                 clientId = resolvedRequestObject.client.id,
                 nonce = resolvedRequestObject.nonce,
                 signatureAlgorithm = signatureAlgorithm,

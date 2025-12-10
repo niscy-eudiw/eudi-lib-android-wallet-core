@@ -16,10 +16,12 @@
 
 package eu.europa.ec.eudi.wallet.keyunlock
 
+import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.multipaz.securearea.AndroidKeystoreKeyUnlockData
@@ -33,22 +35,16 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.resume
 
 /**
- * A [KeyUnlockDataProvider] implementation that shows Android's authentication prompt
- * when a key needs to be unlocked for signing operations.
+ * Provides Android biometric/credential authentication for key unlock operations.
  *
- * This provider supports both biometric (fingerprint, face) AND device credential
- * (PIN, pattern, password) authentication methods.
+ * Handles device capability detection to ensure proper authenticator selection:
+ * - BIOMETRIC_STRONG (Class 3) for crypto operations on capable devices
+ * - DEVICE_CREDENTIAL fallback when strong biometrics unavailable
  *
- * This provider:
- * 1. Creates [AndroidKeystoreKeyUnlockData] for the locked key
- * 2. Shows an authentication prompt with the CryptoObject
- * 3. Returns the authenticated KeyUnlockData on success
- * 4. Throws [KeyLockedException] on failure/cancellation
- *
- * @property activityProvider Function that returns the current FragmentActivity
- * @property defaultTitle Default title for the authentication prompt
- * @property defaultSubtitle Default subtitle for the authentication prompt
- * @property mainThreadDispatcher Dispatcher provider for main thread operations (injectable for testing)
+ * @property activityProvider Returns the current FragmentActivity for prompt display
+ * @property defaultTitle Default prompt title
+ * @property defaultSubtitle Default prompt subtitle
+ * @property mainThreadDispatcher Dispatcher for main thread operations (injectable for testing)
  */
 internal class AndroidAuthPromptProvider(
     private val activityProvider: () -> FragmentActivity?,
@@ -65,37 +61,13 @@ internal class AndroidAuthPromptProvider(
         alias: String,
         unlockReason: UnlockReason
     ): KeyUnlockData {
-        val activity = activityProvider()
-            ?: throw KeyLockedException("No activity available for authentication prompt")
-
-        // Ensure we're working with Android Keystore
-        val androidSecureArea = secureArea as? AndroidKeystoreSecureArea
-            ?: throw KeyLockedException("SecureArea is not AndroidKeystoreSecureArea")
-
-        // Create unlock data for the key
+        val activity = requireActivity()
+        val androidSecureArea = requireAndroidKeystore(secureArea)
         val unlockData = AndroidKeystoreKeyUnlockData(androidSecureArea, alias)
+        val cryptoObject = getCryptoObject(unlockData)
+        val (title, subtitle) = extractPromptText(unlockReason)
 
-        // Get CryptoObject for signing
-        val cryptoObject = try {
-            unlockData.getCryptoObjectForSigning()
-        } catch (e: Exception) {
-            throw KeyLockedException("Failed to get CryptoObject: ${e.message}")
-        }
-
-        // Determine prompt text from UnlockReason
-        val (title, subtitle) = when (unlockReason) {
-            is UnlockReason.HumanReadable -> unlockReason.title to unlockReason.subtitle
-            else -> defaultTitle to defaultSubtitle
-        }
-
-        // Show authentication prompt and wait for result
-        val authenticated = showAuthPrompt(
-            activity = activity,
-            cryptoObject = cryptoObject,
-            title = title,
-            subtitle = subtitle
-        )
-
+        val authenticated = showAuthPrompt(activity, cryptoObject, title, subtitle)
         if (!authenticated) {
             throw KeyLockedException("User cancelled authentication")
         }
@@ -103,18 +75,26 @@ internal class AndroidAuthPromptProvider(
         return unlockData
     }
 
-    /**
-     * Shows an authentication prompt and suspends until the user authenticates or cancels.
-     *
-     * BiometricPrompt must be created and authenticate() must be called on the main thread.
-     * We use withContext(mainThreadDispatcher.dispatcher) to ensure this requirement is met.
-     *
-     * @param activity The FragmentActivity to show the prompt in
-     * @param cryptoObject The CryptoObject to authenticate with
-     * @param title The title to display
-     * @param subtitle The subtitle to display
-     * @return true if authentication succeeded, false if cancelled/failed
-     */
+    private fun requireActivity(): FragmentActivity =
+        activityProvider() ?: throw KeyLockedException("No activity available for authentication prompt")
+
+    private fun requireAndroidKeystore(secureArea: SecureArea): AndroidKeystoreSecureArea =
+        secureArea as? AndroidKeystoreSecureArea
+            ?: throw KeyLockedException("SecureArea is not AndroidKeystoreSecureArea")
+
+    private suspend fun getCryptoObject(unlockData: AndroidKeystoreKeyUnlockData): BiometricPrompt.CryptoObject? =
+        try {
+            unlockData.getCryptoObjectForSigning()
+        } catch (e: Exception) {
+            throw KeyLockedException("Failed to get CryptoObject: ${e.message}")
+        }
+
+    private fun extractPromptText(unlockReason: UnlockReason): Pair<String, String> =
+        when (unlockReason) {
+            is UnlockReason.HumanReadable -> unlockReason.title to unlockReason.subtitle
+            else -> defaultTitle to defaultSubtitle
+        }
+
     private suspend fun showAuthPrompt(
         activity: FragmentActivity,
         cryptoObject: BiometricPrompt.CryptoObject?,
@@ -122,48 +102,102 @@ internal class AndroidAuthPromptProvider(
         subtitle: String
     ): Boolean = withContext(mainThreadDispatcher.dispatcher) {
         suspendCancellableCoroutine { continuation ->
-            val executor = ContextCompat.getMainExecutor(activity)
+            val biometricPrompt = createBiometricPrompt(activity, continuation)
+            val authConfig = resolveAuthConfig(activity, cryptoObject)
+            val promptInfo = buildPromptInfo(title, subtitle, authConfig.authenticators)
 
-            val callback = object : BiometricPrompt.AuthenticationCallback() {
-                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                    if (continuation.isActive) {
-                        continuation.resume(true)
-                    }
-                }
+            executeAuthentication(biometricPrompt, promptInfo, authConfig.cryptoObject)
+            continuation.invokeOnCancellation { biometricPrompt.cancelAuthentication() }
+        }
+    }
 
-                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                    if (continuation.isActive) {
-                        continuation.resume(false)
-                    }
-                }
+    private fun createBiometricPrompt(
+        activity: FragmentActivity,
+        continuation: CancellableContinuation<Boolean>
+    ): BiometricPrompt {
+        val executor = ContextCompat.getMainExecutor(activity)
+        val callback = AuthenticationCallback(continuation)
+        return BiometricPrompt(activity, executor, callback)
+    }
 
-                override fun onAuthenticationFailed() {
-                    // Don't resume here - let user retry
-                    // Only resume on success or error (which includes too many failures)
-                }
-            }
+    /**
+     * Resolves authentication configuration based on device capabilities.
+     *
+     * CryptoObject requires BIOMETRIC_STRONG (Class 3). On devices without it,
+     * falls back to DEVICE_CREDENTIAL which supports crypto operations.
+     */
+    private fun resolveAuthConfig(
+        activity: FragmentActivity,
+        cryptoObject: BiometricPrompt.CryptoObject?
+    ): AuthConfig {
+        if (cryptoObject == null) {
+            return AuthConfig(
+                authenticators = Authenticators.BIOMETRIC_WEAK or Authenticators.DEVICE_CREDENTIAL,
+                cryptoObject = null
+            )
+        }
 
-            val biometricPrompt = BiometricPrompt(activity, executor, callback)
+        val hasStrongBiometric = hasStrongBiometricSupport(activity)
+        return if (hasStrongBiometric) {
+            AuthConfig(
+                authenticators = Authenticators.BIOMETRIC_STRONG or Authenticators.DEVICE_CREDENTIAL,
+                cryptoObject = cryptoObject
+            )
+        } else {
+            AuthConfig(
+                authenticators = Authenticators.DEVICE_CREDENTIAL,
+                cryptoObject = cryptoObject
+            )
+        }
+    }
 
-            val promptInfo = BiometricPrompt.PromptInfo.Builder()
-                .setTitle(title)
-                .setSubtitle(subtitle)
-                // Allow both biometric (fingerprint, face) and device credential (PIN, pattern, password)
-                .setAllowedAuthenticators(Authenticators.BIOMETRIC_STRONG or Authenticators.DEVICE_CREDENTIAL)
-                .setConfirmationRequired(false)
-                .build()
+    private fun hasStrongBiometricSupport(activity: FragmentActivity): Boolean =
+        BiometricManager.from(activity)
+            .canAuthenticate(Authenticators.BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS
 
-            // Authenticate with CryptoObject if available
-            if (cryptoObject != null) {
-                biometricPrompt.authenticate(promptInfo, cryptoObject)
-            } else {
-                biometricPrompt.authenticate(promptInfo)
-            }
+    private fun buildPromptInfo(
+        title: String,
+        subtitle: String,
+        authenticators: Int
+    ): BiometricPrompt.PromptInfo =
+        BiometricPrompt.PromptInfo.Builder()
+            .setTitle(title)
+            .setSubtitle(subtitle)
+            .setAllowedAuthenticators(authenticators)
+            .setConfirmationRequired(false)
+            .build()
 
-            // Cancel the prompt if the coroutine is cancelled
-            continuation.invokeOnCancellation {
-                biometricPrompt.cancelAuthentication()
-            }
+    private fun executeAuthentication(
+        prompt: BiometricPrompt,
+        promptInfo: BiometricPrompt.PromptInfo,
+        cryptoObject: BiometricPrompt.CryptoObject?
+    ) {
+        if (cryptoObject != null) {
+            prompt.authenticate(promptInfo, cryptoObject)
+        } else {
+            prompt.authenticate(promptInfo)
+        }
+    }
+
+    private data class AuthConfig(
+        val authenticators: Int,
+        val cryptoObject: BiometricPrompt.CryptoObject?
+    )
+
+    private class AuthenticationCallback(
+        private val continuation: CancellableContinuation<Boolean>
+    ) : BiometricPrompt.AuthenticationCallback() {
+
+        override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+            if (continuation.isActive) continuation.resume(true)
+        }
+
+        override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+            if (continuation.isActive) continuation.resume(false)
+        }
+
+        override fun onAuthenticationFailed() {
+            // Allow retry - only complete on success or terminal error
         }
     }
 }

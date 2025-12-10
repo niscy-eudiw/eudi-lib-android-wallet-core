@@ -53,6 +53,7 @@ import org.multipaz.crypto.Hpke
  * @property providerGetCredentialRequest The provider get credential request containing the credential options.
  * @property logger Optional logger for logging events.
  * @param origin The origin of the request.
+ * @param requestedDocuments The documents requested for this DCAPI presentation.
  */
 
 class ProcessedDCPAPIRequest(
@@ -63,6 +64,16 @@ class ProcessedDCPAPIRequest(
     requestedDocuments: RequestedDocuments
     ): RequestProcessor.ProcessedRequest.Success(requestedDocuments) {
 
+    /**
+     * Generates an encrypted DCAPI response for the disclosed documents.
+     *
+     * This is a suspend function that runs within [MultipazAuthPrompt.dispatcher] context
+     * to support biometric/device credential authentication when signing with Android Keystore keys.
+     *
+     * @param disclosedDocuments The documents with claims the user has consented to disclose.
+     * @param signatureAlgorithm Optional signature algorithm to use for signing the device response.
+     * @return [ResponseResult.Success] with encrypted [DCAPIResponse] or [ResponseResult.Failure] on error.
+     */
     @OptIn(ExperimentalDigitalCredentialApi::class)
     override suspend fun generateResponse(
         disclosedDocuments: DisclosedDocuments,
@@ -112,7 +123,6 @@ class ProcessedDCPAPIRequest(
                 plaintext = deviceResponse.deviceResponseBytes,
                 aad = ByteArray(0)
             )
-            // In multipaz 0.95, encapsulatedKey is ByteString
             val encapsulatedPublicKey = encrypter.encapsulatedKey.toByteArray()
 
             val encryptedResponse = CBORObject.NewArray().apply {

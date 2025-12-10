@@ -40,20 +40,5 @@ dependencyResolutionManagement {
     }
 }
 
-// Include local libraries for multipaz 0.95 migration
-includeBuild("../eudi-lib-android-wallet-document-manager") {
-    dependencySubstitution {
-        substitute(module("eu.europa.ec.eudi:eudi-lib-android-wallet-document-manager"))
-            .using(project(":document-manager"))
-    }
-}
-
-includeBuild("../eudi-lib-android-iso18013-data-transfer") {
-    dependencySubstitution {
-        substitute(module("eu.europa.ec.eudi:eudi-lib-android-iso18013-data-transfer"))
-            .using(project(":transfer-manager"))
-    }
-}
-
 rootProject.name = "eudi-lib-android-wallet-core"
 include(":wallet-core")

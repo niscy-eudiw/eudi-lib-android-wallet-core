@@ -370,8 +370,10 @@ class EudiWalletConfig {
      * - useStrongBoxForKeys: true if supported by the device
      *
      * @param userAuthenticationRequired whether user authentication is required
-     * @param userAuthenticationTimeout  If 0, user authentication is required for every use of the
-     * key, otherwise it's required within the given amount of time. Default is 20 seconds.
+     * @param userAuthenticationTimeout the duration for which the key remains unlocked after authentication.
+     *        If [Duration.ZERO], user authentication is required for every use of the key.
+     *        Otherwise, authentication is valid for the specified duration.
+     *        Default is [DEFAULT_USER_AUTHENTICATION_TIMEOUT] (20 seconds).
      * @param useStrongBoxForKeys whether to use the strong box for keys
      */
     fun configureDocumentKeyCreation(
