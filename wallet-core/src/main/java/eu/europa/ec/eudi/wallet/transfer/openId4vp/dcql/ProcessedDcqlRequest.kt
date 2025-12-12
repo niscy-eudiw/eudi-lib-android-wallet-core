@@ -67,6 +67,9 @@ class ProcessedDcqlRequest(
     /**
      * Generates an OpenID4VP response with verifiable presentations for the selected documents.
      *
+     * This is a suspend function that runs within [MultipazAuthPrompt.dispatcher] context
+     * to support biometric/PIN/device credential authentication when signing with Android Keystore keys.
+     *
      * This method creates appropriate verifiable presentations based on the document format:
      * - For MSO mdoc format documents, it generates ISO 18013-5 compatible presentations
      * - For SD-JWT VC format documents, it creates SD-JWT format verifiable presentations

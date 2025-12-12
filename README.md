@@ -119,6 +119,58 @@ dependencies {
 
 ### Initialize the library
 
+**REQUIRED** - Initialize `MultipazAuthPrompt` in your `Application.onCreate()`:
+
+```kotlin
+class WalletApp : Application() {
+    override fun onCreate() {
+        super.onCreate()
+
+        // Initialize MultipazAuthPrompt - REQUIRED for strong authentication
+        // (biometric, PIN, or device credential)
+        MultipazAuthPrompt.initialize(this)
+    }
+}
+```
+
+With custom prompt messages:
+
+```kotlin
+MultipazAuthPrompt.initialize(
+    application = this,
+    title = "Verify your identity",
+    subtitle = "Use biometric or PIN to continue"
+)
+```
+
+This is required for user authentication (biometric/PIN/device credential) to work during document issuance and presentation.
+By default, `MultipazAuthPrompt` uses `AndroidAuthPromptProvider` which handles `AndroidKeystoreSecureArea` with the system BiometricPrompt.
+
+For other SecureAreas (e.g., `CloudSecureArea`, `SoftwareSecureArea`) or custom authentication UI, set a custom provider:
+
+```kotlin
+MultipazAuthPrompt.setCustomProvider(object : KeyUnlockDataProvider {
+    override suspend fun getKeyUnlockData(
+        secureArea: SecureArea,
+        alias: String,
+        unlockReason: UnlockReason
+    ): KeyUnlockData {
+        return when (secureArea) {
+            is AndroidKeystoreSecureArea -> {
+                // Your implementation: show biometric/PIN prompt, return AndroidKeystoreKeyUnlockData
+            }
+            is CloudSecureArea -> {
+                // Your implementation: show passphrase dialog, return CloudKeyUnlockData
+            }
+            is SoftwareSecureArea -> {
+                // Your implementation: show passphrase dialog, return SoftwareKeyUnlockData
+            }
+            else -> throw KeyLockedException("Unsupported SecureArea")
+        }
+    }
+})
+```
+
 To instantiate a `EudiWallet` use the `EudiWallet.Builder` class or the `EudiWallet.invoke` method,
 from the EudiWallet companion object.
 
@@ -673,13 +725,18 @@ val onIssueEvent = OnIssueEvent { event ->
             val signingAlgorithm = event.signingAlgorithm
             val document = event.document
 
-            // Create keyUnlockData (e.g., prompt for biometrics)
-            val keyUnlockData = event.keysRequireAuth.mapValues { (keyAlias, secureArea) ->
-                getDefaultKeyUnlockData(secureArea, keyAlias)
+            // Provide unlock reasons for authentication prompt
+            // Use HumanReadable for custom prompt text, or Unspecified for defaults
+            val unlockReasons = event.keysRequireAuth.mapValues { (_, _) ->
+                UnlockReason.HumanReadable(
+                    title = "Issue ${document.name}",
+                    subtitle = "Authenticate to complete issuance",
+                    requireConfirmation = false
+                )
             }
 
-            // Resume after authentication
-            event.resume(keyUnlockData)
+            // Resume - authentication is handled internally by MultipazAuthPrompt
+            event.resume(unlockReasons)
 
             // Or cancel the process
             // event.cancel("User cancelled authentication")
@@ -933,9 +990,12 @@ wallet.addTransferEventListener { event ->
                             elementIdentifier = "first_name"
                         ),
                     ),
-                    // keyUnlockData is required if needed to unlock the key
-                    // in order to sign the response
-                    keyUnlockData = wallet.getDefaultKeyUnlockData("document-id")
+                    // Customize auth prompt (or omit for default prompt)
+                    unlockReason = UnlockReason.HumanReadable(
+                        title = "Share your ID",
+                        subtitle = "Authenticate to share your data",
+                        requireConfirmation = false
+                    )
                 ),
                 // ... rest of the disclosed documents
             )
@@ -1153,14 +1213,14 @@ documents are extracted from the `processedRequest` object.
 
 The application then show the requested documents to the user and later create a
 `DisclosedDocuments` object, which includes the documents to be disclosed in the response. Each
-`DisclosedDocument` must contain the `documentId` of the disclosed document, a list of `DocItem`
-objects representing the disclosed items, and `keyUnlockData` if needed to unlock the key for
-signing the response.
+`DisclosedDocument` must contain the `documentId` of the disclosed document and a list of `DocItem`
+objects representing the disclosed items. Optionally, an `unlockReason` can be provided to customize
+the authentication prompt message.
 
 After creating the `DisclosedDocuments` object, a response can be generated using the
-`processedRequest.generateResponse` method, specifying the disclosed documents and the signature
-algorithm (`Algorithm.ES256`). The generated response is then sent using the `wallet.sendResponse`
-method.
+`processedRequest.generateResponse` suspend method, specifying the disclosed documents and the signature
+algorithm (`Algorithm.ES256`). User authentication (biometric/PIN) is handled internally.
+The generated response is then sent using the `wallet.sendResponse` method.
 
 ```kotlin
 val transferEventListener = TransferEvent.Listener { event ->
@@ -1182,14 +1242,6 @@ val transferEventListener = TransferEvent.Listener { event ->
             // get the first document by id
             val firstDocumentId = requestedDocuments.first().documentId
 
-            val firstDocument = wallet.getDocumentById(firstDocumentId) as IssuedDocument
-            // We also assume that it requires user authentication
-            // so we create the keyUnlockData to unlock the key
-            val keyUnlockData = firstDocument.DefaultKeyUnlockData
-            val cryptoObject = keyUnlockData.getCryptoObjectForSigning(Algorithm.ES256)
-            // authenticate the user using the cryptoObject
-            // ...
-
             val disclosedDocuments = DisclosedDocuments(
                 DisclosedDocument(
                     documentId = firstDocumentId,
@@ -1199,9 +1251,12 @@ val transferEventListener = TransferEvent.Listener { event ->
                             elementIdentifier = "first_name"
                         ),
                     ),
-                    // keyUnlockData is required if needed to unlock the key
-                    // in order to sign the response
-                    keyUnlockData = keyUnlockData
+                    // Customize auth prompt (or omit for default prompt)
+                    unlockReason = UnlockReason.HumanReadable(
+                        title = "Share your ID",
+                        subtitle = "Authenticate to share your data",
+                        requireConfirmation = false
+                    )
                 ),
                 // ... rest of the disclosed documents
             )
