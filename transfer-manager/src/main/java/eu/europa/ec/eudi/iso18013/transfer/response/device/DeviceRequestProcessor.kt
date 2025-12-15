@@ -30,7 +30,9 @@ import eu.europa.ec.eudi.wallet.document.DocumentManager
 import eu.europa.ec.eudi.wallet.document.ElementIdentifier
 import eu.europa.ec.eudi.wallet.document.NameSpace
 import kotlinx.coroutines.runBlocking
-import org.multipaz.mdoc.request.DeviceRequestParser
+import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.DataItem
+import org.multipaz.mdoc.request.DeviceRequest as MultipazDeviceRequest
 
 /**
  * Implementation of [RequestProcessor] for [DeviceRequest] for the ISO 18013-5 standard.
@@ -58,10 +60,12 @@ class DeviceRequestProcessor(
         try {
             require(request is DeviceRequest) { "Request must be a DeviceRequest" }
             val requestedDocuments = runBlocking {
-                DeviceRequestParser(request.deviceRequestBytes, request.sessionTranscriptBytes)
-                    .parse()
-                    .docRequests
-                    .map { docRequest -> docRequest.toRequestedMdocDocuments() }
+                val deviceRequestDataItem: DataItem = Cbor.decode(request.deviceRequestBytes)
+                val sessionTranscriptDataItem: DataItem = Cbor.decode(request.sessionTranscriptBytes)
+                val parsedRequest: MultipazDeviceRequest = MultipazDeviceRequest.fromDataItem(deviceRequestDataItem)
+
+                parsedRequest.docRequests
+                    .map { docRequest -> docRequest.toRequestedMdocDocuments(parsedRequest, sessionTranscriptDataItem) }
                     .let { helper.getRequestedDocuments(it) }
             }
             return ProcessedDeviceRequest(
@@ -124,23 +128,22 @@ class DeviceRequestProcessor(
     )
 
     /**
-     * Convert the [DeviceRequestParser.DocRequest] to [RequestedMdocDocument].
+     * Convert multipaz [org.multipaz.mdoc.request.DocRequest] to [RequestedMdocDocument].
+     * @param parsedRequest The full parsed DeviceRequest for signature verification
+     * @param sessionTranscript The session transcript DataItem for verification
      * @return the [RequestedMdocDocument]
      */
-    private fun DeviceRequestParser.DocRequest.toRequestedMdocDocuments(): RequestedMdocDocument {
+    private fun org.multipaz.mdoc.request.DocRequest.toRequestedMdocDocuments(
+        parsedRequest: MultipazDeviceRequest,
+        sessionTranscript: DataItem
+    ): RequestedMdocDocument {
         return RequestedMdocDocument(
             docType = docType,
-            requested = namespaces.associate { nameSpace ->
-                nameSpace to getEntryNames(nameSpace)
-                    .associate { elementIdentifier ->
-                        elementIdentifier to getIntentToRetain(
-                            nameSpace,
-                            elementIdentifier
-                        )
-                    }
+            requested = nameSpaces.mapValues { (_, dataElements) ->
+                dataElements.mapKeys { (elementName, _) -> elementName }
             },
             readerAuthentication = {
-                readerTrustStore?.performReaderAuthentication(this)
+                readerTrustStore?.performReaderAuthentication(this, parsedRequest, sessionTranscript)
             },
         )
     }

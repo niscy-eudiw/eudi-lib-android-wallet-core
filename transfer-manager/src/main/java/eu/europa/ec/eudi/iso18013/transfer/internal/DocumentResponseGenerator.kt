@@ -22,12 +22,14 @@ import eu.europa.ec.eudi.wallet.document.NameSpace
 import eu.europa.ec.eudi.wallet.document.credential.CredentialIssuedData
 import eu.europa.ec.eudi.wallet.document.credential.getIssuedData
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.multipaz.document.DocumentRequest
 import org.multipaz.document.NameSpacedData
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.response.DocumentGenerator
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.securearea.KeyUnlockData
+import org.multipaz.securearea.UnlockReason
 
 internal object DocumentResponseGenerator {
 
@@ -51,34 +53,38 @@ internal object DocumentResponseGenerator {
         elements: Map<NameSpace, List<ElementIdentifier>>? = null,
         keyUnlockData: KeyUnlockData? = null
     ): ByteArray {
+        val provider = keyUnlockData.asProvider()
         return runBlocking {
-            document.consumingCredential {
-                require(this is MdocCredential) { "Document must be in MsoMdocFormat" }
-                val credentialIssuedData =
-                    getIssuedData<CredentialIssuedData.MsoMdoc>()
-                val (nameSpacedData, staticAuthData) = credentialIssuedData.getOrThrow()
-                val dataElements = (elements ?: nameSpacedData.nameSpaceNames.associateWith {
-                    nameSpacedData.getDataElementNames(it)
-                }).flatMap { (nameSpace, elementIdentifiers) ->
-                    elementIdentifiers.map { elementIdentifier ->
-                        DocumentRequest.DataElement(nameSpace, elementIdentifier, false)
+            withContext(provider) {
+                document.consumingCredential {
+                    require(this is MdocCredential) { "Document must be in MsoMdocFormat" }
+                    val credentialIssuedData =
+                        getIssuedData<CredentialIssuedData.MsoMdoc>()
+                    val (nameSpacedData, staticAuthData) = credentialIssuedData.getOrThrow()
+                    val dataElements = (elements ?: nameSpacedData.nameSpaceNames.associateWith {
+                        nameSpacedData.getDataElementNames(it)
+                    }).flatMap { (nameSpace, elementIdentifiers) ->
+                        elementIdentifiers.map { elementIdentifier ->
+                            DocumentRequest.DataElement(nameSpace, elementIdentifier, false)
+                        }
                     }
-                }
-                val request = DocumentRequest(dataElements)
+                    val request = DocumentRequest(dataElements)
 
-                val mergedIssuerNamespaces = MdocUtil.mergeIssuerNamesSpaces(
-                    request, nameSpacedData, staticAuthData
-                )
-                DocumentGenerator(docType, staticAuthData.issuerAuth, transcript)
-                    .setIssuerNamespaces(mergedIssuerNamespaces)
-                    .setDeviceNamespacesSignature(
-                        dataElements = NameSpacedData.Builder().build(),
-                        secureArea = secureArea,
-                        keyAlias = alias,
-                        keyUnlockData = keyUnlockData
+                    val mergedIssuerNamespaces = MdocUtil.mergeIssuerNamesSpaces(
+                        request, nameSpacedData, staticAuthData
                     )
-                    .generate()
-            }.getOrThrow()
+
+                    DocumentGenerator(docType, staticAuthData.issuerAuth, transcript)
+                        .setIssuerNamespaces(mergedIssuerNamespaces)
+                        .setDeviceNamespacesSignature(
+                            dataElements = NameSpacedData.Builder().build(),
+                            secureArea = secureArea,
+                            keyAlias = alias,
+                            unlockReason = UnlockReason.Unspecified
+                        )
+                        .generate()
+                }.getOrThrow()
+            }
         }
     }
 
