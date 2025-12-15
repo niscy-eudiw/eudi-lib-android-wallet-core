@@ -26,7 +26,7 @@ import eu.europa.ec.eudi.openid4vci.ProofsSpecification
 import eu.europa.ec.eudi.openid4vci.SubmissionOutcome
 import eu.europa.ec.eudi.wallet.document.UnsignedDocument
 import eu.europa.ec.eudi.wallet.document.credential.ProofOfPossessionSigner
-import eu.europa.ec.eudi.wallet.keyunlock.MultipazAuthPrompt
+import eu.europa.ec.eudi.wallet.keyunlock.UserAuthPromptHelper
 import eu.europa.ec.eudi.wallet.provider.WalletAttestationsProvider
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -225,7 +225,7 @@ internal class SubmitRequest(
                     keysAndSecureAreas = keysAndSecureAreas,
                     resume = { unlockReasons ->
                         runBlocking {
-                            withContext(MultipazAuthPrompt.dispatcher) {
+                            withContext(UserAuthPromptHelper.dispatcher) {
                                 unlockResume(unlockReasons)
                             }
                         }
@@ -264,7 +264,7 @@ internal class SubmitRequest(
                     keysAndSecureAreas = keysAndSecureAreas,
                     resume = { unlockReasons ->
                         runBlocking {
-                            withContext(MultipazAuthPrompt.dispatcher) {
+                            withContext(UserAuthPromptHelper.dispatcher) {
                                 unlockResume(unlockReasons)
                             }
                         }

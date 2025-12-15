@@ -57,17 +57,17 @@ class CustomProviderInstrumentedTest {
     fun setUp() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         application = context.applicationContext as Application
-        MultipazAuthPrompt.reset()
+        UserAuthPromptHelper.reset()
     }
 
     @After
     fun tearDown() {
-        MultipazAuthPrompt.reset()
+        UserAuthPromptHelper.reset()
     }
 
     @Test
     fun testCustomProviderReceivesCorrectParameters() = runBlocking {
-        MultipazAuthPrompt.initialize(application)
+        UserAuthPromptHelper.initialize(application)
 
         var receivedSecureArea: SecureArea? = null
         var receivedAlias: String? = null
@@ -86,7 +86,7 @@ class CustomProviderInstrumentedTest {
             }
         }
 
-        MultipazAuthPrompt.setCustomProvider(customProvider)
+        UserAuthPromptHelper.setCustomProvider(customProvider)
 
         val storage = EphemeralStorage()
         val softwareSecureArea = SoftwareSecureArea.create(storage)
@@ -94,8 +94,8 @@ class CustomProviderInstrumentedTest {
         val testReason = UnlockReason.HumanReadable("Test Title", "Test Subtitle", false)
 
         try {
-            withContext(MultipazAuthPrompt.dispatcher) {
-                MultipazAuthPrompt.dispatcher.getKeyUnlockData(
+            withContext(UserAuthPromptHelper.dispatcher) {
+                UserAuthPromptHelper.dispatcher.getKeyUnlockData(
                     softwareSecureArea,
                     testAlias,
                     testReason
@@ -113,7 +113,7 @@ class CustomProviderInstrumentedTest {
 
     @Test
     fun testCustomProviderCanHandleSoftwareSecureArea() = runBlocking {
-        MultipazAuthPrompt.initialize(application)
+        UserAuthPromptHelper.initialize(application)
 
         val customProvider = object : KeyUnlockDataProvider {
             override suspend fun getKeyUnlockData(
@@ -128,12 +128,12 @@ class CustomProviderInstrumentedTest {
             }
         }
 
-        MultipazAuthPrompt.setCustomProvider(customProvider)
+        UserAuthPromptHelper.setCustomProvider(customProvider)
 
         val storage = EphemeralStorage()
         val softwareSecureArea = SoftwareSecureArea.create(storage)
 
-        val unlockData = MultipazAuthPrompt.dispatcher.getKeyUnlockData(
+        val unlockData = UserAuthPromptHelper.dispatcher.getKeyUnlockData(
             softwareSecureArea,
             "test_alias",
             UnlockReason.Unspecified
@@ -145,7 +145,7 @@ class CustomProviderInstrumentedTest {
 
     @Test
     fun testCompositeProviderHandlesMultipleSecureAreaTypes() = runBlocking {
-        MultipazAuthPrompt.initialize(application)
+        UserAuthPromptHelper.initialize(application)
 
         var softwareSecureAreaHandled = false
         var androidKeystoreDetected = false
@@ -170,13 +170,13 @@ class CustomProviderInstrumentedTest {
             }
         }
 
-        MultipazAuthPrompt.setCustomProvider(compositeProvider)
+        UserAuthPromptHelper.setCustomProvider(compositeProvider)
 
         // Test SoftwareSecureArea path
         val storage = EphemeralStorage()
         val softwareSecureArea = SoftwareSecureArea.create(storage)
 
-        val unlockData = MultipazAuthPrompt.dispatcher.getKeyUnlockData(
+        val unlockData = UserAuthPromptHelper.dispatcher.getKeyUnlockData(
             softwareSecureArea,
             "software_key",
             UnlockReason.Unspecified
@@ -189,7 +189,7 @@ class CustomProviderInstrumentedTest {
         val androidSecureArea = AndroidKeystoreSecureArea.create(storage)
 
         try {
-            MultipazAuthPrompt.dispatcher.getKeyUnlockData(
+            UserAuthPromptHelper.dispatcher.getKeyUnlockData(
                 androidSecureArea,
                 "android_key",
                 UnlockReason.Unspecified
@@ -204,7 +204,7 @@ class CustomProviderInstrumentedTest {
 
     @Test
     fun testCustomProviderWithHumanReadableReason() = runBlocking {
-        MultipazAuthPrompt.initialize(application)
+        UserAuthPromptHelper.initialize(application)
 
         var capturedTitle: String? = null
         var capturedSubtitle: String? = null
@@ -223,7 +223,7 @@ class CustomProviderInstrumentedTest {
             }
         }
 
-        MultipazAuthPrompt.setCustomProvider(customProvider)
+        UserAuthPromptHelper.setCustomProvider(customProvider)
 
         val storage = EphemeralStorage()
         val softwareSecureArea = SoftwareSecureArea.create(storage)
@@ -233,7 +233,7 @@ class CustomProviderInstrumentedTest {
             requireConfirmation = true
         )
 
-        MultipazAuthPrompt.dispatcher.getKeyUnlockData(
+        UserAuthPromptHelper.dispatcher.getKeyUnlockData(
             softwareSecureArea,
             "key",
             reason
@@ -245,14 +245,14 @@ class CustomProviderInstrumentedTest {
 
     @Test
     fun testDefaultProviderThrowsForNonAndroidKeystore() = runBlocking {
-        MultipazAuthPrompt.initialize(application)
+        UserAuthPromptHelper.initialize(application)
         // Don't set custom provider - use default AndroidAuthPromptProvider
 
         val storage = EphemeralStorage()
         val softwareSecureArea = SoftwareSecureArea.create(storage)
 
         try {
-            MultipazAuthPrompt.dispatcher.getKeyUnlockData(
+            UserAuthPromptHelper.dispatcher.getKeyUnlockData(
                 softwareSecureArea,
                 "test_key",
                 UnlockReason.Unspecified
@@ -266,7 +266,7 @@ class CustomProviderInstrumentedTest {
 
     @Test
     fun testProviderInCoroutineContext() = runBlocking {
-        MultipazAuthPrompt.initialize(application)
+        UserAuthPromptHelper.initialize(application)
 
         var providerFoundInContext = false
 
@@ -281,13 +281,13 @@ class CustomProviderInstrumentedTest {
             }
         }
 
-        MultipazAuthPrompt.setCustomProvider(customProvider)
+        UserAuthPromptHelper.setCustomProvider(customProvider)
 
         val storage = EphemeralStorage()
         val softwareSecureArea = SoftwareSecureArea.create(storage)
 
         // Use withContext to add provider to coroutine context
-        withContext(MultipazAuthPrompt.dispatcher) {
+        withContext(UserAuthPromptHelper.dispatcher) {
             // The provider should be accessible from context
             val provider = coroutineContext[KeyUnlockDataProvider.Key]
             assertNotNull(provider)

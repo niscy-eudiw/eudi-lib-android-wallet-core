@@ -33,7 +33,7 @@ import eu.europa.ec.eudi.iso18013.transfer.response.device.DeviceResponse
 import eu.europa.ec.eudi.iso18013.transfer.response.device.ProcessedDeviceRequest
 import eu.europa.ec.eudi.wallet.internal.d
 import eu.europa.ec.eudi.wallet.internal.e
-import eu.europa.ec.eudi.wallet.keyunlock.MultipazAuthPrompt
+import eu.europa.ec.eudi.wallet.keyunlock.UserAuthPromptHelper
 import eu.europa.ec.eudi.wallet.logging.Logger
 import kotlinx.coroutines.withContext
 import org.bouncycastle.util.encoders.Hex
@@ -67,7 +67,7 @@ class ProcessedDCPAPIRequest(
     /**
      * Generates an encrypted DCAPI response for the disclosed documents.
      *
-     * This is a suspend function that runs within [MultipazAuthPrompt.dispatcher] context
+     * This is a suspend function that runs within [UserAuthPromptHelper.dispatcher] context
      * to support biometric/device credential authentication when signing with Android Keystore keys.
      *
      * @param disclosedDocuments The documents with claims the user has consented to disclose.
@@ -79,7 +79,7 @@ class ProcessedDCPAPIRequest(
         disclosedDocuments: DisclosedDocuments,
         signatureAlgorithm: Algorithm?
     ): ResponseResult {
-        return withContext(MultipazAuthPrompt.dispatcher) {
+        return withContext(UserAuthPromptHelper.dispatcher) {
             try {
             val option =
                 providerGetCredentialRequest.credentialOptions[0] as GetDigitalCredentialOption

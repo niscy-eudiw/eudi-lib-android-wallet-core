@@ -119,58 +119,6 @@ dependencies {
 
 ### Initialize the library
 
-**REQUIRED** - Initialize `MultipazAuthPrompt` in your `Application.onCreate()`:
-
-```kotlin
-class WalletApp : Application() {
-    override fun onCreate() {
-        super.onCreate()
-
-        // Initialize MultipazAuthPrompt - REQUIRED for strong authentication
-        // (biometric, PIN, or device credential)
-        MultipazAuthPrompt.initialize(this)
-    }
-}
-```
-
-With custom prompt messages:
-
-```kotlin
-MultipazAuthPrompt.initialize(
-    application = this,
-    title = "Verify your identity",
-    subtitle = "Use biometric or PIN to continue"
-)
-```
-
-This is required for user authentication (biometric/PIN/device credential) to work during document issuance and presentation.
-By default, `MultipazAuthPrompt` uses `AndroidAuthPromptProvider` which handles `AndroidKeystoreSecureArea` with the system BiometricPrompt.
-
-For other SecureAreas (e.g., `CloudSecureArea`, `SoftwareSecureArea`) or custom authentication UI, set a custom provider:
-
-```kotlin
-MultipazAuthPrompt.setCustomProvider(object : KeyUnlockDataProvider {
-    override suspend fun getKeyUnlockData(
-        secureArea: SecureArea,
-        alias: String,
-        unlockReason: UnlockReason
-    ): KeyUnlockData {
-        return when (secureArea) {
-            is AndroidKeystoreSecureArea -> {
-                // Your implementation: show biometric/PIN prompt, return AndroidKeystoreKeyUnlockData
-            }
-            is CloudSecureArea -> {
-                // Your implementation: show passphrase dialog, return CloudKeyUnlockData
-            }
-            is SoftwareSecureArea -> {
-                // Your implementation: show passphrase dialog, return SoftwareKeyUnlockData
-            }
-            else -> throw KeyLockedException("Unsupported SecureArea")
-        }
-    }
-})
-```
-
 To instantiate a `EudiWallet` use the `EudiWallet.Builder` class or the `EudiWallet.invoke` method,
 from the EudiWallet companion object.
 
@@ -281,6 +229,58 @@ val customWallet = EudiWallet(context, config) {
 See the [CustomizeSecureArea.md](CustomizeSecureArea.md) for more information on how to use the
 wallet-core library with custom SecureArea implementations.
 
+#### UserAuthPromptHelper Configuration
+
+Initialize `UserAuthPromptHelper` in your `Application.onCreate()` to enable user authentication (biometric/PIN/device credential) during document issuance and presentation:
+
+```kotlin
+class WalletApp : Application() {
+    override fun onCreate() {
+        super.onCreate()
+
+        // Initialize UserAuthPromptHelper for strong authentication
+        // (biometric, PIN, or device credential)
+        UserAuthPromptHelper.initialize(this)
+    }
+}
+```
+
+With custom prompt messages:
+
+```kotlin
+UserAuthPromptHelper.initialize(
+    application = this,
+    title = "Verify your identity",
+    subtitle = "Use biometric or PIN to continue"
+)
+```
+
+By default, `UserAuthPromptHelper` uses `AndroidAuthPromptProvider` which handles `AndroidKeystoreSecureArea` with the system BiometricPrompt.
+
+For other SecureAreas (e.g., `CloudSecureArea`, `SoftwareSecureArea`) or custom authentication UI, set a custom provider:
+
+```kotlin
+UserAuthPromptHelper.setCustomProvider(object : KeyUnlockDataProvider {
+    override suspend fun getKeyUnlockData(
+        secureArea: SecureArea,
+        alias: String,
+        unlockReason: UnlockReason
+    ): KeyUnlockData {
+        return when (secureArea) {
+            is AndroidKeystoreSecureArea -> {
+                // Your implementation: show biometric/PIN prompt, return AndroidKeystoreKeyUnlockData
+            }
+            is CloudSecureArea -> {
+                // Your implementation: show passphrase dialog, return CloudKeyUnlockData
+            }
+            is SoftwareSecureArea -> {
+                // Your implementation: show passphrase dialog, return SoftwareKeyUnlockData
+            }
+            else -> throw KeyLockedException("Unsupported SecureArea")
+        }
+    }
+})
+```
 
 #### WalletKeyManager Configuration
 This interface is responsible for managing Attestation Keys used during Attestation Based Client Authentication with OpenId4Vci.
@@ -735,7 +735,7 @@ val onIssueEvent = OnIssueEvent { event ->
                 )
             }
 
-            // Resume - authentication is handled internally by MultipazAuthPrompt
+            // Resume - authentication is handled internally by UserAuthPromptHelper
             event.resume(unlockReasons)
 
             // Or cancel the process

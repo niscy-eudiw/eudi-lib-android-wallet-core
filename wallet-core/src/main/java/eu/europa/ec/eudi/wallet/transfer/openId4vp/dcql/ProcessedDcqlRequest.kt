@@ -36,7 +36,7 @@ import eu.europa.ec.eudi.wallet.internal.verifiablePresentationForSdJwtVc
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.FORMAT_MSO_MDOC
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.FORMAT_SD_JWT_VC
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.OpenId4VpResponse
-import eu.europa.ec.eudi.wallet.keyunlock.MultipazAuthPrompt
+import eu.europa.ec.eudi.wallet.keyunlock.UserAuthPromptHelper
 import kotlinx.coroutines.withContext
 import org.multipaz.crypto.Algorithm
 
@@ -67,7 +67,7 @@ class ProcessedDcqlRequest(
     /**
      * Generates an OpenID4VP response with verifiable presentations for the selected documents.
      *
-     * This is a suspend function that runs within [MultipazAuthPrompt.dispatcher] context
+     * This is a suspend function that runs within [UserAuthPromptHelper.dispatcher] context
      * to support biometric/PIN/device credential authentication when signing with Android Keystore keys.
      *
      * This method creates appropriate verifiable presentations based on the document format:
@@ -87,7 +87,7 @@ class ProcessedDcqlRequest(
         disclosedDocuments: DisclosedDocuments,
         signatureAlgorithm: Algorithm?,
     ): ResponseResult {
-        return withContext(MultipazAuthPrompt.dispatcher) {
+        return withContext(UserAuthPromptHelper.dispatcher) {
             val result = try {
             // Set to track all the documents that will be included in the response
             val respondedDocumentsMap =
