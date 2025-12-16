@@ -47,16 +47,15 @@ internal fun ReaderTrustStore.performReaderAuthentication(
     parsedRequest: MultipazDeviceRequest,
     sessionTranscript: DataItem
 ): ReaderAuth? {
-    // Get reader authentication from DocRequest
-    val readerAuth = docRequest.readerAuth ?: return null
 
     val isSignatureValid = try {
         parsedRequest.verifyReaderAuthentication(sessionTranscript)
         true
-    } catch (e: SignatureVerificationException) {
+    } catch (_: SignatureVerificationException) {
         false
     }
-
+    // Get reader authentication from DocRequest
+    val readerAuth = docRequest.readerAuth ?: return null
     // Get raw COSE bytes for the ReaderAuth field
     val readerAuthBytes = Cbor.encode(readerAuth.toDataItem())
 
@@ -69,16 +68,11 @@ internal fun ReaderTrustStore.performReaderAuthentication(
 
     if (certificates.isEmpty()) return null
 
-    // Verify trust against the trust store
-    val isTrusted = runCatching {
-        validateCertificationTrustPath(certificates)
-    }.isSuccess
-
     return ReaderAuth(
         readerAuth = readerAuthBytes,
         readerSignIsValid = isSignatureValid,
         readerCertificateChain = certificates,
-        readerCertificatedIsTrusted = isTrusted,
+        readerCertificatedIsTrusted = validateCertificationTrustPath(certificates),
         readerCommonName = certificates.cn
     )
 }

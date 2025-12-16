@@ -113,7 +113,7 @@ internal class QrEngagement(
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     internal val deviceRetrievalHelperListener = object : DeviceRetrievalHelper.Listener {
         override fun onEReaderKeyReceived(eReaderKey: EcPublicKey) {
-            Log.d(this.TAG, "DeviceRetrievalHelper Listener (NFC): OnEReaderKeyReceived")
+            Log.d(this.TAG, "DeviceRetrievalHelper Listener (QR): OnEReaderKeyReceived")
         }
 
         override fun onDeviceRequest(deviceRequestBytes: ByteArray) {

@@ -23,10 +23,11 @@ import androidx.core.net.toUri
 import com.android.identity.android.mdoc.deviceretrieval.DeviceRetrievalHelper
 import com.android.identity.android.mdoc.transport.DataTransport
 import com.android.identity.android.mdoc.transport.DataTransportOptions
+import org.multipaz.cbor.Cbor
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.mdoc.engagement.EngagementParser
+import org.multipaz.mdoc.engagement.DeviceEngagement
 import org.multipaz.mdoc.origininfo.OriginInfo
 
 /**
@@ -127,7 +128,7 @@ internal class EngagementToApp(
             uri.encodedSchemeSpecificPart,
             Base64.URL_SAFE or Base64.NO_PADDING,
         )
-        val engagement = EngagementParser(encodedReaderEngagement).parse()
+        val engagement = DeviceEngagement.fromDataItem(Cbor.decode(encodedReaderEngagement))
         check(engagement.connectionMethods.isNotEmpty()) { "No connection methods in engagement" }
 
         // For now, just pick the first transport
