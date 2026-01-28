@@ -70,6 +70,10 @@ import eu.europa.ec.eudi.openid4vci.RefreshToken
 import eu.europa.ec.eudi.openid4vci.Grant
 import eu.europa.ec.eudi.openid4vci.TransactionId
 import java.time.Instant
+import eu.europa.ec.eudi.openid4vci.ClientAttestationJWT
+import eu.europa.ec.eudi.openid4vci.ClientAttestationPoPJWTSpec
+import com.nimbusds.jwt.SignedJWT
+import kotlinx.coroutines.runBlocking
 
 /**
  * Checks if the issuer supports pre-authorization.
@@ -380,7 +384,7 @@ fun DeferredIssuanceContext.serialize(
  * Extension to deserialize (Restore) the context.
  * Useful when the Wallet UI asks to check for the deferred credential later.
  */
-// --- DESERIALIZATION (RESTORE) ---
+// DESERIALIZATION (RESTORE)
 
 fun ByteArray.restore(
     walletKeyManager: WalletKeyManager,
@@ -389,8 +393,28 @@ fun ByteArray.restore(
 
     val dto = Json.decodeFromString<StoredDeferredContext>(this.toString(Charsets.UTF_8))
 
-    // Recreate DPoP Signer (if needed)
-    val dPoPSigner = dto.dPoPKeyAlias?.let { walletKeyManager.createSignerAdapter(it) }
+    // RECREATE Client Authentication
+    // We have the string (JWT) but need to rebuild the Signer.
+    val clientAuthentication = if (dto.clientAttestationJwt != null && dto.clientAttestationPopKeyId != null) {
+
+        // Parse the stored JWT string back into a SignedJWT object
+        val jwt = runCatching {
+            ClientAttestationJWT(SignedJWT.parse(dto.clientAttestationJwt))
+        }.getOrNull() ?: error("Invalid client attestation JWT in stored context")
+
+        val popSigner = walletKeyManager.createSignerAdapter(dto.clientAttestationPopKeyId)
+
+        val popSpec = ClientAttestationPoPJWTSpec(signer = popSigner)
+        ClientAuthentication.AttestationBased(jwt, popSpec)
+    } else {
+        // Fallback for when no attestation was used
+        ClientAuthentication.None(dto.clientId)
+    }
+
+    // Recreate DPoP Signer
+    val dPoPSigner = dto.dPoPKeyAlias?.let { alias ->
+        walletKeyManager.createSignerAdapter(alias)
+    }
 
     // Recreate Encryption Spec (if needed)
     val reqEncSpec = if (dto.requestEncryptionKeyJwk != null && dto.requestEncryptionMethod != null) {
@@ -404,23 +428,12 @@ fun ByteArray.restore(
         EncryptionMethod.parse(it) to null // Assuming no compression or default
     }
 
-    // Recreate Client Authentication
-    // Logic: If we have an attestation Key ID, we try to rebuild AttestationBased auth
-    val clientAuth = if (dto.clientAttestationJwt != null && dto.clientAttestationPopKeyId != null) {
-        // Note: You might need to parse the JWT or regenerate it.
-        // For now, assuming you can reconstruct or fall back to None if expired.
-        // This part depends heavily on if you stored the static JWT or want to regenerate it.
-        ClientAuthentication.None(dto.clientId) // Simplified for safety unless you have the JWT parser
-    } else {
-        ClientAuthentication.None(dto.clientId)
-    }
-
-    // 4. Build Configuration
+    // Build Configuration
     val config = DeferredIssuerConfig(
         credentialIssuerId = CredentialIssuerId(dto.credentialIssuerId).getOrThrow(),
-        clientAuthentication = clientAuth,
+        clientAuthentication = clientAuthentication,
         deferredEndpoint = URI(dto.deferredEndpoint).toURL(),
-        authorizationServerId = URI(dto.authorizationServerId).toURL(), // Correctly mapped
+        authorizationServerId = URI(dto.authorizationServerId).toURL(),
         challengeEndpoint = dto.challengeEndpoint?.let { URI(it).toURL() },
         tokenEndpoint = URI(dto.tokenEndpoint).toURL(),
         requestEncryptionSpec = reqEncSpec,
@@ -429,7 +442,7 @@ fun ByteArray.restore(
         clock = clock
     )
 
-    // 5. Build Transaction
+    // Build Transaction
     val accessToken = if (dto.accessTokenType == "DPoP") {
         AccessToken.DPoP(dto.accessToken, null)
     } else {
@@ -450,4 +463,34 @@ fun ByteArray.restore(
     )
 
     return DeferredIssuanceContext(config, transaction) to dto.popKeyAliases
+}
+
+private fun WalletKeyManager.createSignerAdapter(keyAlias: String): Signer<JWK> {
+
+    val key = runBlocking {
+        this@createSignerAdapter.getWalletAttestationKey(keyAlias)
+    } ?: error("Key alias '$keyAlias' not found in WalletKeyManager")
+
+    return object : Signer<JWK> {
+
+        override val javaAlgorithm: String = key.keyInfo.algorithm.javaAlgorithm
+            ?: error("Key algorithm is required for alias $keyAlias")
+
+        override suspend fun acquire(): SignOperation<JWK> {
+            return SignOperation(
+                // The library calls this function when it needs a signature
+                function = { inputData ->
+                    key.signFunction(inputData)
+                },
+                // The public key to embed in the header
+                publicMaterial = JWK.parse(
+                    key.keyInfo.publicKey.toJwk().toString()
+                )
+            )
+        }
+
+        override suspend fun release(signOperation: SignOperation<JWK>?) {
+            // No-op for Android Keystore
+        }
+    }
 }

@@ -89,13 +89,13 @@ fun example() {
         val issuer = Issuer.make(config, offer, httpClient).getOrThrow()
 
         // authorization
-        val authorizedRequestRrepared = issuer.prepareAuthorizationRequest().getOrThrow()
+        val authorizedRequestPrepared = issuer.prepareAuthorizationRequest().getOrThrow()
 
         val authorizationCode =
             AuthorizationCode("") // Obtain authorization code through user interaction or pre-authorization
         val serverState = "" // Obtain server state if applicable
         var authorizedRequest = with(issuer) {
-            authorizedRequestRrepared.authorizeWithAuthorizationCode(authorizationCode, serverState)
+            authorizedRequestPrepared.authorizeWithAuthorizationCode(authorizationCode, serverState)
         }.getOrThrow()
 
 
@@ -130,12 +130,20 @@ fun example() {
 
             val result = when (outcome) {
                 is SubmissionOutcome.Deferred -> {
-                    // TODO store deferred context and outcome result
+                    // store deferred context and outcome result TODO
+                    val keyAliases = pendingDocument.unsignedDocument.getPoPSigners().toList().map { it.keyAlias }
+
                     val deferredIssuanceContext = with(issuer) {
                         authorizedRequest.deferredContext(outcome)
                     }
-                    val deferredContext: ByteArray = TODO()
-                    documentManager.storeDeferredDocument(pendingDocument.unsignedDocument, deferredContext).kotlinResult
+
+//                    val deferredContext: ByteArray = TODO()
+
+                    val deferredContextBytes = deferredIssuanceContext.serialize(
+                        keyAliases
+                    )
+
+                    documentManager.storeDeferredDocument(pendingDocument.unsignedDocument, deferredContextBytes).kotlinResult
                 }
                 is SubmissionOutcome.Failed -> {
                     // clear up pending document
