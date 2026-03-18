@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024-2025 European Commission
+ * Copyright (c) 2024-2026 European Commission
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,8 @@ import eu.europa.ec.eudi.wallet.internal.d
 import eu.europa.ec.eudi.wallet.issue.openid4vci.OpenId4VciManager.Companion.TAG
 import eu.europa.ec.eudi.wallet.logging.Logger
 import eu.europa.ec.eudi.wallet.provider.WalletKeyManager
+import eu.europa.ec.eudi.wallet.trust.IssuerTrustConfig
+import eu.europa.ec.eudi.wallet.trust.evaluateIssuerTrust
 
 internal class ProcessDeferredOutcome(
     val documentManager: DocumentManager,
@@ -31,9 +33,10 @@ internal class ProcessDeferredOutcome(
     val callback: OpenId4VciManager.OnResult<DeferredIssueResult>,
     val deferredContext: DeferredContext?,
     val logger: Logger? = null,
+    val issuerTrustConfig: IssuerTrustConfig? = null,
 ) {
 
-    fun process(
+    suspend fun process(
         deferredDocument: DeferredDocument,
         keyAliases: List<String>,
         outcome: DeferredCredentialQueryOutcome,
@@ -72,10 +75,18 @@ internal class ProcessDeferredOutcome(
 
                 is DeferredCredentialQueryOutcome.Issued -> {
                     val credentials = outcome.credentials.map { it.credential }.zip(keyAliases)
+
+                    val trustResult = evaluateIssuerTrust(
+                        issuerTrustConfig = issuerTrustConfig,
+                        document = deferredDocument,
+                        credential = credentials.first().first,
+                        logger = logger,
+                    )
+
                     documentManager.storeIssuedDocument(deferredDocument, credentials) {
                         logger?.d(TAG, message = it)
                     }.onSuccess { document ->
-                        callback(DeferredIssueResult.DocumentIssued(document))
+                        callback(DeferredIssueResult.DocumentIssued(document, trustResult))
                     }.onFailure { error ->
                         documentManager.deleteDocumentById(deferredDocument.id)
                         callback(

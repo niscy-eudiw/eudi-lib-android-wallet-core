@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024-2025 European Commission
+ * Copyright (c) 2024-2026 European Commission
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ import eu.europa.ec.eudi.wallet.issue.openid4vci.dpop.DPopConfig
 import eu.europa.ec.eudi.wallet.logging.Logger
 import eu.europa.ec.eudi.wallet.provider.WalletAttestationsProvider
 import eu.europa.ec.eudi.wallet.provider.WalletKeyManager
+import eu.europa.ec.eudi.wallet.trust.IssuerTrustConfig
 import io.ktor.client.HttpClient
 import java.util.concurrent.Executor
 
@@ -275,6 +276,7 @@ interface OpenId4VciManager {
         var ktorHttpClientFactory: (() -> HttpClient)? = null
         var walletKeyManager: WalletKeyManager? = null
         var walletAttestationsProvider: WalletAttestationsProvider? = null
+        internal var issuerTrustConfig: IssuerTrustConfig? = null
 
         /**
          * Set the [Config] to use
@@ -330,6 +332,15 @@ interface OpenId4VciManager {
         }
 
         /**
+         * Set the [IssuerTrustConfig] to use for issuer trust verification
+         * @param config the issuer trust configuration
+         * @return this builder
+         */
+        internal fun issuerTrustConfig(config: IssuerTrustConfig) = apply {
+            this.issuerTrustConfig = config
+        }
+
+        /**
          * Build the [OpenId4VciManager]
          * @return the [OpenId4VciManager]
          * @throws [IllegalStateException] if config or documentManager is not set
@@ -351,7 +362,8 @@ interface OpenId4VciManager {
                 logger = logger,
                 ktorHttpClientFactory = ktorHttpClientFactory,
                 walletProvider = walletAttestationsProvider,
-                walletAttestationKeyManager = walletKeyManager
+                walletAttestationKeyManager = walletKeyManager,
+                issuerTrustConfig = issuerTrustConfig
             )
         }
     }
@@ -648,7 +660,7 @@ interface OpenId4VciManager {
                 val authFlowRedirectionURI =
                     checkNotNull(authFlowRedirectionURI) { "authFlowRedirectionURI is required" }
                 return Config(
-                    issuerUrl = issuerUrl!!,
+                    issuerUrl = issuerUrl,
                     authorizationHandler = authorizationHandler,
                     clientAuthenticationType = clientAuthenticationType,
                     authFlowRedirectionURI = authFlowRedirectionURI,

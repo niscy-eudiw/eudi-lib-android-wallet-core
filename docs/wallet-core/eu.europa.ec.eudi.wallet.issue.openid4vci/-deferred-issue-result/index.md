@@ -21,7 +21,7 @@ Result of a deferred document issuance.
 |---|---|
 | [DocumentExpired](-document-expired/index.md) | [androidJvm]<br>data class [DocumentExpired](-document-expired/index.md)(val document: DeferredDocument) : [DeferredIssueResult](index.md), DocumentDetails<br>Document issuance expired. |
 | [DocumentFailed](-document-failed/index.md) | [androidJvm]<br>data class [DocumentFailed](-document-failed/index.md)(val document: Document, val cause: [Throwable](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin-stdlib/kotlin/-throwable/index.html)) : [DeferredIssueResult](index.md), DocumentDetails, [OpenId4VciResult.Erroneous](../-open-id4-vci-result/-erroneous/index.md)<br>Document issuance failed. |
-| [DocumentIssued](-document-issued/index.md) | [androidJvm]<br>data class [DocumentIssued](-document-issued/index.md)(val document: IssuedDocument) : [DeferredIssueResult](index.md), DocumentDetails<br>Document issued successfully. |
+| [DocumentIssued](-document-issued/index.md) | [androidJvm]<br>data class [DocumentIssued](-document-issued/index.md)(val document: IssuedDocument, val issuerTrustResult: CertificationChainValidation&lt;[TrustAnchor](https://developer.android.com/reference/kotlin/java/security/cert/TrustAnchor.html)&gt;? = null) : [DeferredIssueResult](index.md), DocumentDetails<br>Document issued successfully. |
 | [DocumentNotReady](-document-not-ready/index.md) | [androidJvm]<br>data class [DocumentNotReady](-document-not-ready/index.md)(val document: DeferredDocument) : [DeferredIssueResult](index.md), DocumentDetails<br>Document issuance deferred. |
 
 ## Properties

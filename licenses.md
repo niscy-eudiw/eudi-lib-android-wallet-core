@@ -1,7 +1,7 @@
 
 # EUDI Wallet Core library for Android
 ## Dependency License Report
-_2026-02-16 14:39:54 EET_
+_2026-03-18 09:53:30 EET_
 ## Android Software Development Kit License
 
 **1** **Group:** `com.google.android.gms` **Name:** `play-services-identity-credentials` **Version:** `16.0.0-alpha08` 
@@ -64,12 +64,12 @@ _2026-02-16 14:39:54 EET_
 
 ## Bouncy Castle Licence
 
-**15** **Group:** `org.bouncycastle` **Name:** `bcpkix-jdk18on` **Version:** `1.78.1` 
-> - **POM Project URL**: [https://www.bouncycastle.org/java.html](https://www.bouncycastle.org/java.html)
+**15** **Group:** `org.bouncycastle` **Name:** `bcpkix-jdk18on` **Version:** `1.83` 
+> - **POM Project URL**: [https://www.bouncycastle.org/download/bouncy-castle-java/](https://www.bouncycastle.org/download/bouncy-castle-java/)
 > - **POM License**: Bouncy Castle Licence - [https://www.bouncycastle.org/licence.html](https://www.bouncycastle.org/licence.html)
 
-**16** **Group:** `org.bouncycastle` **Name:** `bcprov-jdk18on` **Version:** `1.78.1` 
-> - **POM Project URL**: [https://www.bouncycastle.org/java.html](https://www.bouncycastle.org/java.html)
+**16** **Group:** `org.bouncycastle` **Name:** `bcprov-jdk18on` **Version:** `1.83` 
+> - **POM Project URL**: [https://www.bouncycastle.org/download/bouncy-castle-java/](https://www.bouncycastle.org/download/bouncy-castle-java/)
 > - **POM License**: Bouncy Castle Licence - [https://www.bouncycastle.org/licence.html](https://www.bouncycastle.org/licence.html)
 
 ## Unlicense

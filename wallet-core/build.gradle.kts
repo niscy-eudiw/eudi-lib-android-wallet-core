@@ -135,6 +135,9 @@ dependencies {
     // Document status
     api(libs.eudi.lib.kmp.statium)
 
+    // ETSI Trusted Lists (VerificationContext, AttestationIdentifier, etc.)
+    api(libs.eudi.lib.kmp.etsi1196x2.consultation)
+
     // Digital Credential API
     implementation(libs.androidx.credentials.registry.provider)
     implementation(libs.play.services.identity.credentials)

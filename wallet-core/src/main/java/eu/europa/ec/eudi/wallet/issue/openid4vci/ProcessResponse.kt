@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024-2025 European Commission
+ * Copyright (c) 2024-2026 European Commission
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,8 @@ import eu.europa.ec.eudi.wallet.issue.openid4vci.IssueEvent.Companion.failure
 import eu.europa.ec.eudi.wallet.issue.openid4vci.OpenId4VciManager.Companion.TAG
 import eu.europa.ec.eudi.wallet.logging.Logger
 import eu.europa.ec.eudi.wallet.provider.WalletKeyManager
+import eu.europa.ec.eudi.wallet.trust.IssuerTrustConfig
+import eu.europa.ec.eudi.wallet.trust.evaluateIssuerTrust
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
@@ -37,6 +39,7 @@ internal class ProcessResponse(
     val listener: OpenId4VciManager.OnResult<IssueEvent>,
     val issuedDocumentIds: MutableList<DocumentId>,
     val logger: Logger? = null,
+    val issuerTrustConfig: IssuerTrustConfig? = null,
 ) {
 
     suspend fun process(response: SubmitRequest.Response) {
@@ -85,7 +88,7 @@ internal class ProcessResponse(
         }
     }
 
-    fun processSubmittedRequest(
+    suspend fun processSubmittedRequest(
         unsignedDocument: UnsignedDocument,
         keyAliases: List<String>,
         outcome: SubmissionOutcome,
@@ -93,12 +96,22 @@ internal class ProcessResponse(
         when (outcome) {
             is SubmissionOutcome.Success -> runCatching {
                 val credentials = outcome.credentials.map { it.credential }.zip(keyAliases)
-                documentManager.storeIssuedDocument(unsignedDocument, credentials) { message ->
-                    logger?.d(TAG, message)
-                }.getOrThrow()
-            }.onSuccess { document ->
+
+                val trustResult = evaluateIssuerTrust(
+                    issuerTrustConfig = issuerTrustConfig,
+                    document = unsignedDocument,
+                    credential = credentials.first().first,
+                    logger = logger,
+                )
+
+                val issuedDocument = documentManager.storeIssuedDocument(
+                    unsignedDocument, credentials
+                ) { message -> logger?.d(TAG, message) }.getOrThrow()
+
+                issuedDocument to trustResult
+            }.onSuccess { (document, trustResult) ->
                 issuedDocumentIds.add(document.id)
-                listener(IssueEvent.DocumentIssued(document))
+                listener(IssueEvent.DocumentIssued(document, trustResult))
             }.onFailure { error ->
                 documentManager.deleteDocumentById(unsignedDocument.id)
                 listener(IssueEvent.DocumentFailed(unsignedDocument, error))

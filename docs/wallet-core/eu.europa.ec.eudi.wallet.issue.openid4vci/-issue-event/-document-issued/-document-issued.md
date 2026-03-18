@@ -3,4 +3,4 @@
 # DocumentIssued
 
 [androidJvm]\
-constructor(document: IssuedDocument)
+constructor(document: IssuedDocument, issuerTrustResult: CertificationChainValidation&lt;[TrustAnchor](https://developer.android.com/reference/kotlin/java/security/cert/TrustAnchor.html)&gt;? = null)

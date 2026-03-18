@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 European Commission
+ * Copyright (c) 2023-2026 European Commission
  *  
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,8 @@ import eu.europa.ec.eudi.wallet.internal.getCertificate
 import eu.europa.ec.eudi.wallet.issue.openid4vci.OpenId4VciManager
 import eu.europa.ec.eudi.wallet.logging.Logger
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.OpenId4VpConfig
+import eu.europa.ec.eudi.wallet.trust.IssuerTrustConfig
+import eu.europa.ec.eudi.wallet.trust.IssuerTrustConfigBuilder
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import java.security.cert.X509Certificate
 import kotlin.time.Duration
@@ -415,6 +417,24 @@ class EudiWalletConfig {
         zkSystemRepository: ZkSystemRepository
     ) = apply {
         this.zkSystemRepository = zkSystemRepository
+    }
+
+    internal var issuerTrustConfig: IssuerTrustConfig? = null
+        private set
+
+    /**
+     * Configure issuer trust verification for credentials issued via OpenID4VCI.
+     * Trust verification occurs after issuance, before storage. When not configured,
+     * trust verification is skipped entirely.
+     *
+     * @param block configuration block applied to the [IssuerTrustConfigBuilder]
+     * @return the [EudiWalletConfig] instance
+     * @see IssuerTrustConfigBuilder
+     */
+    fun configureIssuerTrust(
+        block: IssuerTrustConfigBuilder.() -> Unit,
+    ) = apply {
+        this.issuerTrustConfig = IssuerTrustConfigBuilder().apply(block).build()
     }
 
     companion object {

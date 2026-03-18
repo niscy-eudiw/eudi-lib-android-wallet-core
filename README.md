@@ -15,18 +15,63 @@ required to implement the EUDI Wallet functionality. On top of that, it provides
 that can be used by the application to implement the EUDI Wallet functionality.
 
 ```mermaid
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "primaryColor": "#E6F1FB",
+    "primaryTextColor": "#0C447C",
+    "primaryBorderColor": "#378ADD",
+    "lineColor": "#888780",
+    "secondaryColor": "#EAF3DE",
+    "tertiaryColor": "#F1EFE8",
+    "edgeLabelBackground": "#ffffff",
+    "fontSize": "13px"
+  }
+}}%%
+
 graph TD
-;
-    A[eudi-lib-android-wallet-core]
-    B[eudi-lib-android-wallet-document-manager] -->|DocumentManager| A
-    C[eudi-lib-android-iso18013-data-transfer] -->|TransferManager| A
-    D[eudi-lib-jvm-openid4vci-kt] -->|OpenId4VciManager| A
-    E[eudi-lib-jvm-siop-openid4vp-kt] -->|OpenId4VpManager| A
-    F[org.multipaz] -->|SecureArea,Storage| B
-    H[eudi-lib-jvm-presentation-exchange] --> E
-    G[multipaz-android] --> A
+    A("<b>eudi-lib-android-wallet-core</b>")
+
+    subgraph android ["Android"]
+        B["eudi-lib-android-wallet-\ndocument-manager"]
+        C["eudi-lib-android-iso18013-\ndata-transfer"]
+    end
+
+    subgraph jvm ["JVM / KMP"]
+        D["eudi-lib-jvm-openid4vci-kt"]
+        E["eudi-lib-jvm-openid4vp-kt"]
+        J["eudi-lib-jvm-sdjwt-kt"]
+        I["eudi-lib-kmp-etsi-1196x2"]
+        H["eudi-lib-kmp-statium"]
+    end
+
+    subgraph multipaz ["Multipaz"]
+        F["org.multipaz"]
+        G["multipaz-android"]
+    end
+
+    B -->|DocumentManager| A
+    C -->|TransferManager| A
+    D -->|OpenId4VciManager| A
+    E -->|OpenId4VpManager| A
+    J -->|SdJwtVcVerification| A
+    I -->|IssuerTrustVerification| A
+    F -->|"SecureArea, Storage"| B
+    F -->|"SecureArea, Storage"| A
+    G --> A
     B -->|DocumentManager| C
-    F -->|SecureArea,Storage| A
+    J --> B
+    H --> A
+
+    classDef core fill:#185FA5,stroke:#0C447C,color:#fff,font-weight:bold
+    classDef androidLib fill:#E6F1FB,stroke:#378ADD,color:#0C447C
+    classDef jvmLib fill:#EAF3DE,stroke:#639922,color:#27500A
+    classDef multipazLib fill:#FAEEDA,stroke:#BA7517,color:#633806
+
+    class A core
+    class B,C androidLib
+    class D,E,J,I,H jvmLib
+    class F,G multipazLib
 ```
 
 ### Features
@@ -50,6 +95,9 @@ The library supports the following features:
 |                            | Wallet Authentication                                                   | ✅ public client, <br/>✅ Attestation-Based Client Authentication (WIA)                                                  |
 |                            | Supported Proof Types                                                   | ✅ Attestation Proof Type, <br/> ✅ Proof Type without Attestation <br/> ✅ JWT Proof Type with Attestation               |
 |                            | Notify credential issuer                                                | ❌                                                                                                                      |
+| **Issuer Trust**           | Trust verification during issuance (LoTE / LOTL)                        | ✅ mso_mdoc format <br /> ✅ sd-jwt-vc format                                                                            |
+|                            | Trust policy (ENFORCE / INFORM)                                         | ✅                                                                                                                      |
+|                            | Custom credential format verifiers                                      | ✅ via CredentialTrustVerifier                                                                                           |
 | **Proximity Presentation** | ISO-18013-5 device retrieval                                            |                                                                                                                        |
 |                            | Device engagement                                                       | ✅ QR <br /> ✅ NFC                                                                                                      |
 |                            | Data transfer                                                           | ✅ BLE <br /> ❌ NFC <br /> ❌ Wifi-Aware                                                                                 |
@@ -1045,6 +1093,119 @@ val walletConfig = EudiWalletConfig()
             )
         )
     }
+```
+
+### Issuer Trust Verification
+
+The library supports verifying credential issuers against ETSI trusted lists during
+OpenID4VCI issuance. Trust verification runs after the credential is received from the issuer
+and before it is stored. It is protocol-agnostic -- built-in verifiers handle both MsoMdoc and
+SD-JWT VC formats, and custom verifiers can be registered for additional formats.
+
+When issuer trust is not configured, verification is skipped entirely and credentials are
+stored as before.
+
+#### Configuration
+
+Enable issuer trust verification via the `configureIssuerTrust` DSL on `EudiWalletConfig`:
+
+```kotlin
+val walletConfig = EudiWalletConfig {
+    // ... other configuration ...
+    configureIssuerTrust {
+        trustSource(myComposeChainTrust) // ComposeChainTrust from LoTE, LOTL, or both
+        classifications(myClassifications) // AttestationClassifications from ETSI library
+        policy {
+            default(TrustPolicy.Action.ENFORCE)
+            forContext(VerificationContext.EAA("experimental"), TrustPolicy.Action.INFORM)
+            forDocType("org.example.test", TrustPolicy.Action.INFORM)
+            forVct("urn:example:test", TrustPolicy.Action.INFORM)
+        }
+    }
+}
+```
+
+- **`trustSource`** -- sets the trust anchor source. Accepts a `ComposeChainTrust`,
+  `IsChainTrustedForEUDIW`, or a pre-built `IsChainTrustedForAttestation`.
+- **`classifications`** -- required when using `ComposeChainTrust` or `IsChainTrustedForEUDIW`
+  as the trust source. Maps credential types to verification contexts.
+- **`policy`** -- configures how the wallet acts on trust results (see below).
+
+#### Trust Policies
+
+A `TrustPolicy` determines the action taken when an issuer is not trusted:
+
+| Action    | Behaviour                                                                   |
+|-----------|-----------------------------------------------------------------------------|
+| `ENFORCE` | Reject the credential -- delete it and emit `IssueEvent.DocumentFailed`.    |
+| `INFORM`  | Store the credential regardless and attach the result to `DocumentIssued`.  |
+
+The default policy is `ENFORCE` for all credentials. Use the `policy` DSL to override per
+verification context or per attestation type. Resolution order (highest priority first):
+
+1. Per-attestation overrides (`forDocType`, `forVct`, `forAttestation`)
+2. Per-context overrides (`forContext`)
+3. Default action (`default`)
+
+#### Handling Trust Results
+
+The trust verification result is available on `IssueEvent.DocumentIssued` and
+`IssueEvent.DocumentFailed`:
+
+```kotlin
+wallet.issueDocumentByOfferUri(offerUri) { event ->
+    when (event) {
+        is IssueEvent.DocumentIssued -> {
+            when (event.issuerTrustResult) {
+                is CertificationChainValidation.Trusted -> {
+                    // Issuer is trusted
+                }
+                is CertificationChainValidation.NotTrusted -> {
+                    // INFORM policy: credential stored, but issuer was not trusted
+                }
+                null -> {
+                    // Trust verification not configured
+                }
+            }
+        }
+
+        is IssueEvent.DocumentFailed -> {
+            if (event.cause is IssuerNotTrustedException) {
+                // ENFORCE policy: credential rejected because issuer was not trusted
+            }
+        }
+
+        // ... handle other events ...
+        else -> {}
+    }
+}
+```
+
+#### Custom CredentialTrustVerifier
+
+The library includes built-in verifiers for MsoMdoc and SD-JWT VC formats. To support
+additional credential formats, implement the `CredentialTrustVerifier` interface and register
+it during configuration:
+
+```kotlin
+class MyCustomVerifier(
+    private val isChainTrusted: IsChainTrustedForAttestation<List<X509Certificate>, TrustAnchor>,
+) : CredentialTrustVerifier {
+    override suspend fun verify(
+        credentialValue: String,
+        attestationIdentifier: AttestationIdentifier,
+    ): CertificationChainValidation<TrustAnchor>? {
+        // Extract certificate chain from the credential and evaluate trust
+        // Return null if the chain cannot be extracted
+    }
+}
+
+// Register during configuration
+configureIssuerTrust {
+    trustSource(myComposeChainTrust)
+    classifications(myClassifications)
+    credentialTrustVerifier(MyCustomFormat::class, MyCustomVerifier(isChainTrusted))
+}
 ```
 
 ### Transfer documents
