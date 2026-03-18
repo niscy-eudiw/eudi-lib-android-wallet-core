@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024-2025 European Commission
+ * Copyright (c) 2024-2026 European Commission
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,6 +47,7 @@ import eu.europa.ec.eudi.wallet.issue.openid4vci.reissue.ReissuanceIssuer
 import eu.europa.ec.eudi.wallet.logging.Logger
 import eu.europa.ec.eudi.wallet.provider.WalletAttestationsProvider
 import eu.europa.ec.eudi.wallet.provider.WalletKeyManager
+import eu.europa.ec.eudi.wallet.trust.IssuerTrustConfig
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
@@ -79,6 +80,7 @@ internal class DefaultOpenId4VciManager(
     var config: OpenId4VciManager.Config,
     var logger: Logger? = null,
     var ktorHttpClientFactory: (() -> HttpClient)? = null,
+    val issuerTrustConfig: IssuerTrustConfig? = null,
 ) : OpenId4VciManager {
 
     internal val httpClientFactory
@@ -275,7 +277,8 @@ internal class DefaultOpenId4VciManager(
                                 )
                             } ?: deferredContext,
                             logger = logger,
-                            issuanceMetadataStorage = issuanceMetadataStorage,
+                            issuerTrustConfig = issuerTrustConfig,
+                            issuanceMetadataStorage = issuanceMetadataStorage
                         ).process(deferredDocument, deferredContext.keyAliases, outcome)
                     }
                 }
@@ -508,6 +511,7 @@ internal class DefaultOpenId4VciManager(
             issuedDocumentIds = issuedDocumentIds,
             deferredDocumentIds = deferredDocumentIds,
             logger = logger,
+            issuerTrustConfig = issuerTrustConfig,
             authorizedRequest = authorizedRequest,
             issuer = issuer,
             documentToConfigurationMap = requestMap,
