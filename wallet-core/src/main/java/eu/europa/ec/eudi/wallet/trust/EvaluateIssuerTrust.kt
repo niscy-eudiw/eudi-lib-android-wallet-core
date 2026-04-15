@@ -45,7 +45,10 @@ internal suspend fun evaluateIssuerTrust(
     credential: Credential,
     logger: Logger?,
 ): CertificationChainValidation<TrustAnchor>? {
-    if (issuerTrustConfig == null) return null
+    if (issuerTrustConfig == null) {
+        logger?.d(TAG, "EXIT 1: issuerTrustConfig is null")
+        return null
+    }
 
     require(credential is Credential.Str) { "Credential must be a string" }
 
@@ -54,24 +57,32 @@ internal suspend fun evaluateIssuerTrust(
         is MsoMdocFormat -> AttestationIdentifier.MDoc(fmt.docType)
         is SdJwtVcFormat -> AttestationIdentifier.SDJwtVc(fmt.vct)
         else -> {
+            logger?.d(TAG, "EXIT 2: Unknown document format ${document.format}")
             logger?.d(TAG, "Unknown document format, skipping trust verification")
             return null
         }
     }
 
+    logger?.d(TAG, "attestationIdentifier=$attestationIdentifier")
+
     // 2. Look up verifier by format
     val verifier = issuerTrustConfig.credentialTrustVerifiers[document.format::class]
     if (verifier == null) {
+        logger?.d(TAG, "EXIT 3: No verifier for ${document.format::class}, available: ${issuerTrustConfig.credentialTrustVerifiers.keys}")
         logger?.d(TAG, "No CredentialTrustVerifier for format, skipping trust verification")
         return null
     }
 
     // 3. Verify trust
+    logger?.d(TAG, "Calling verifier.verify()...")
     val result = verifier.verify(credential.value, attestationIdentifier)
     if (result == null) {
+        logger?.d(TAG, "EXIT 4: verifier.verify() returned null")
         logger?.d(TAG, "No certificate chain found, skipping trust verification")
         return null
     }
+
+    logger?.d(TAG, "Trust result: $result")
 
     // 4. Resolve policy
     val verificationContext = issuerTrustConfig.classifications
@@ -93,4 +104,4 @@ internal suspend fun evaluateIssuerTrust(
     return result
 }
 
-private const val TAG = "OpenId4VciManager"
+private const val TAG = "EvaluateTrust"
