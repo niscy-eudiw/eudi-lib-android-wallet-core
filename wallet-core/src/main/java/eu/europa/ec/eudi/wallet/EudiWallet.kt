@@ -564,12 +564,11 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
          */
         @JvmSynthetic
         internal fun getDocumentStatusResolver(): DocumentStatusResolver {
-            return documentStatusResolver ?: ktorHttpClientFactory?.let {
-                DocumentStatusResolver(
-                    ktorHttpClientFactory = it,
-                    allowedClockSkew = config.documentStatusResolverClockSkew
-                )
-            } ?: DocumentStatusResolver(allowedClockSkew = config.documentStatusResolverClockSkew)
+            return documentStatusResolver ?: DocumentStatusResolver {
+                ktorHttpClientFactory?.let { withKtorHttpClientFactory(it) }
+                withAllowedClockSkew(config.documentStatusResolverClockSkew)
+                config.statusListTrustConfig?.let { withStatusListTrustConfig(it) }
+            }
         }
 
         /**

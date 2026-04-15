@@ -29,8 +29,10 @@ import eu.europa.ec.eudi.wallet.internal.getCertificate
 import eu.europa.ec.eudi.wallet.issue.openid4vci.OpenId4VciManager
 import eu.europa.ec.eudi.wallet.logging.Logger
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.OpenId4VpConfig
+import eu.europa.ec.eudi.wallet.statium.DocumentStatusResolverConfigBuilder
 import eu.europa.ec.eudi.wallet.trust.IssuerTrustConfig
 import eu.europa.ec.eudi.wallet.trust.IssuerTrustConfigBuilder
+import eu.europa.ec.eudi.wallet.trust.StatusListTrustConfig
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import java.security.cert.X509Certificate
 import kotlin.time.Duration
@@ -448,12 +450,45 @@ class EudiWalletConfig {
     var documentStatusResolverClockSkew: Duration = Duration.ZERO
         private set
 
+    internal var statusListTrustConfig: StatusListTrustConfig? = null
+        private set
+
     /**
      * Configure the document status resolver clock skew. This allows to configure the clock skew for
      * the provided document status resolver.
      */
     fun configureDocumentStatusResolver(clockSkewInMinutes: Long) = apply {
         this.documentStatusResolverClockSkew = clockSkewInMinutes.minutes
+    }
+
+    /**
+     * Configure the document status resolver with clock skew and optional ETSI trust verification
+     * for status list token signers.
+     *
+     * Example:
+     * ```
+     * configureDocumentStatusResolver {
+     *     clockSkew(5)
+     *     configureTrust {
+     *         trustSource(myComposeChainTrust)
+     *         classifications(myClassifications)
+     *         policy {
+     *             default(TrustPolicy.Action.ENFORCE)
+     *         }
+     *     }
+     * }
+     * ```
+     *
+     * @param block configuration block applied to the [DocumentStatusResolverConfigBuilder]
+     * @return the [EudiWalletConfig] instance
+     * @see DocumentStatusResolverConfigBuilder
+     */
+    fun configureDocumentStatusResolver(
+        block: DocumentStatusResolverConfigBuilder.() -> Unit,
+    ) = apply {
+        val builder = DocumentStatusResolverConfigBuilder().apply(block)
+        this.documentStatusResolverClockSkew = builder.clockSkew
+        this.statusListTrustConfig = builder.buildTrustConfig()
     }
 
     var zkSystemRepository: ZkSystemRepository? = null

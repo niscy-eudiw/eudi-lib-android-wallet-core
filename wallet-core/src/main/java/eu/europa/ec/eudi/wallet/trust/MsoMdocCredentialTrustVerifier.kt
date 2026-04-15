@@ -45,35 +45,39 @@ internal class MsoMdocCredentialTrustVerifier(
         credentialValue: String,
         attestationIdentifier: AttestationIdentifier,
     ): CertificationChainValidation<TrustAnchor>? = runCatching {
-        // 1. Base64url-decode the credential string
+        //  Base64url-decode the credential string
         val credentialBytes = Base64.getUrlDecoder().decode(credentialValue)
 
-        // 2. Parse issuerAuth from StaticAuthData
+        //  Parse issuerAuth from StaticAuthData
         val issuerAuthBytes = StaticAuthDataParser(credentialBytes)
             .parse()
             .issuerAuth
 
-        // 3. Decode COSE_Sign1 from issuerAuth
+        //  Decode COSE_Sign1 from issuerAuth
         val coseSign1 = Cbor.decode(issuerAuthBytes).asCoseSign1
 
-        // 4. Extract x5chain from unprotected headers (COSE label 33)
+        //  Extract x5chain from unprotected headers (COSE label 33)
         val x5chainDataItem = coseSign1.unprotectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel]
-            ?: return@runCatching null
+            ?: run { android.util.Log.w("IssuerTrust", "VERIFIER NULL A: no x5chain in COSE headers"); return@runCatching null }
         val x5chain = x5chainDataItem.asX509CertChain
 
-        // 5. Convert to List<X509Certificate> (JVM extension)
+        //  Convert to List<X509Certificate> (JVM extension)
         val javaCerts = x5chain.javaX509Certificates
+        android.util.Log.d("IssuerTrust", "VERIFIER: x5chain has ${javaCerts.size} certs, leaf=${javaCerts.firstOrNull()?.subjectX500Principal}")
         require(javaCerts.isNotEmpty()) { "x5chain must contain at least one certificate" }
 
-        // 6. Evaluate trust via the ETSI library
+        //  Evaluate trust via the ETSI library
+        android.util.Log.d("IssuerTrust", "VERIFIER: calling isChainTrusted.issuance()...")
         val trustResult = isChainTrusted.issuance(javaCerts, attestationIdentifier)
-            ?: return@runCatching null
+            ?: run { android.util.Log.w("IssuerTrust", "VERIFIER NULL B: issuance() returned null"); return@runCatching null }
 
-        // 7. Verify COSE signature using the leaf certificate's public key
+        android.util.Log.d("IssuerTrust", "VERIFIER: trustResult=$trustResult")
+
+        //  Verify COSE signature using the leaf certificate's public key
         val leafCert = x5chain.certificates.first()
         val algIdentifier = coseSign1.protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]
             ?.asNumber?.toInt()
-            ?: return@runCatching null
+            ?: run { android.util.Log.w("IssuerTrust", "VERIFIER NULL C: no algorithm in COSE headers"); return@runCatching null }
         val algorithm = Algorithm.fromCoseAlgorithmIdentifier(algIdentifier)
 
         Cose.coseSign1Check(
@@ -84,5 +88,7 @@ internal class MsoMdocCredentialTrustVerifier(
         )
 
         trustResult
+    }.onFailure { e ->
+        android.util.Log.e("IssuerTrust", "MsoMdocCredentialTrustVerifier failed", e)
     }.getOrNull()
 }
