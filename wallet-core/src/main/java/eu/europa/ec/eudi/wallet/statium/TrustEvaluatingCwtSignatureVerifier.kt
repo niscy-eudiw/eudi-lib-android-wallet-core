@@ -19,6 +19,9 @@ import eu.europa.ec.eudi.etsi1196x2.consultation.AttestationIdentifier
 import eu.europa.ec.eudi.etsi1196x2.consultation.CertificationChainValidation
 import eu.europa.ec.eudi.etsi1196x2.consultation.VerificationContext
 import eu.europa.ec.eudi.statium.VerifyStatusListTokenCwtSignature
+import eu.europa.ec.eudi.wallet.internal.d
+import eu.europa.ec.eudi.wallet.internal.e
+import eu.europa.ec.eudi.wallet.logging.Logger
 import eu.europa.ec.eudi.wallet.trust.StatusListTrustConfig
 import eu.europa.ec.eudi.wallet.trust.TrustPolicy
 import org.multipaz.cbor.Cbor
@@ -43,23 +46,28 @@ internal class TrustEvaluatingCwtSignatureVerifier(
     private val delegate: VerifyStatusListTokenCwtSignature,
     private val trustConfig: StatusListTrustConfig,
     private val attestationIdentifier: AttestationIdentifier,
+    private val logger: Logger? = null,
 ) : VerifyStatusListTokenCwtSignature {
 
     override suspend fun invoke(
         statusListToken: ByteArray,
         at: Instant,
     ): Result<Unit> = runCatching {
-        // 1. Delegate cryptographic signature verification
+        // Delegate cryptographic signature verification
+        logger?.d(TAG, "CWT: delegating signature verification...")
         delegate(statusListToken, at).getOrThrow()
+        logger?.d(TAG, "CWT: signature verification passed")
 
-        // 2. Extract x5chain from COSE_Sign1 unprotected headers (label 33)
+        // Extract x5chain from COSE_Sign1 unprotected headers (label 33)
         val certs = extractX5cFromCwt(statusListToken)
+        logger?.d(TAG, "CWT: x5chain has ${certs.size} certs, leaf=${certs.firstOrNull()?.subjectX500Principal}")
 
-        // 3. Evaluate trust via ETSI
+        // Evaluate trust via ETSI
         val trustResult = trustConfig.isChainTrustedForAttestation
             .issuance(certs, attestationIdentifier)
+        logger?.d(TAG, "CWT: trustResult=$trustResult for attestation=$attestationIdentifier")
 
-        // 4. Resolve verification context from classifications
+        // Resolve verification context from classifications
         val verificationContext = trustConfig.classifications
             ?.classify(attestationIdentifier)
             ?.fold(
@@ -68,15 +76,19 @@ internal class TrustEvaluatingCwtSignatureVerifier(
                 ifQEaa = VerificationContext.QEAA,
                 ifEaa = { useCase -> VerificationContext.EAA(useCase) },
             )
+        logger?.d(TAG, "CWT: verificationContext=$verificationContext")
 
-        // 5. Apply policy
+        // Apply policy
         val action = trustConfig.trustPolicy.resolve(attestationIdentifier, verificationContext)
+        logger?.d(TAG, "CWT: policy action=$action")
         if (action == TrustPolicy.Action.ENFORCE && trustResult is CertificationChainValidation.NotTrusted) {
+            logger?.e(TAG, "CWT: ENFORCE + NotTrusted → throwing", trustResult.cause)
             throw StatusListNotTrustedException(trustResult.cause)
         }
     }
 
     companion object {
+        private const val TAG = "StatusListTrust"
         private fun extractX5cFromCwt(statusListToken: ByteArray): List<X509Certificate> {
             val coseSign1 = Cbor.decode(statusListToken).asCoseSign1
 

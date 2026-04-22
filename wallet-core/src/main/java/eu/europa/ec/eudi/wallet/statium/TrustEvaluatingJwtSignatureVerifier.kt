@@ -21,6 +21,9 @@ import eu.europa.ec.eudi.etsi1196x2.consultation.AttestationIdentifier
 import eu.europa.ec.eudi.etsi1196x2.consultation.CertificationChainValidation
 import eu.europa.ec.eudi.etsi1196x2.consultation.VerificationContext
 import eu.europa.ec.eudi.statium.VerifyStatusListTokenJwtSignature
+import eu.europa.ec.eudi.wallet.internal.d
+import eu.europa.ec.eudi.wallet.internal.e
+import eu.europa.ec.eudi.wallet.logging.Logger
 import eu.europa.ec.eudi.wallet.trust.StatusListTrustConfig
 import eu.europa.ec.eudi.wallet.trust.TrustPolicy
 import java.security.cert.X509Certificate
@@ -38,23 +41,28 @@ internal class TrustEvaluatingJwtSignatureVerifier(
     private val delegate: VerifyStatusListTokenJwtSignature,
     private val trustConfig: StatusListTrustConfig,
     private val attestationIdentifier: AttestationIdentifier,
+    private val logger: Logger? = null,
 ) : VerifyStatusListTokenJwtSignature {
 
     override suspend fun invoke(
         statusListToken: String,
         at: Instant,
     ): Result<Unit> = runCatching {
-        // 1. Delegate cryptographic signature verification
+        // Delegate cryptographic signature verification
+        logger?.d(TAG, "JWT: delegating signature verification...")
         delegate(statusListToken, at).getOrThrow()
+        logger?.d(TAG, "JWT: signature verification passed")
 
-        // 2. Extract x5c certificate chain from JWT header
+        // Extract x5c certificate chain from JWT header
         val certs = extractX5cFromJwt(statusListToken)
+        logger?.d(TAG, "JWT: x5c chain has ${certs.size} certs, leaf=${certs.firstOrNull()?.subjectX500Principal}")
 
-        // 3. Evaluate trust via ETSI
+        // Evaluate trust via ETSI
         val trustResult = trustConfig.isChainTrustedForAttestation
             .issuance(certs, attestationIdentifier)
+        logger?.d(TAG, "JWT: trustResult=$trustResult for attestation=$attestationIdentifier")
 
-        // 4. Resolve verification context from classifications
+        // Resolve verification context from classifications
         val verificationContext = trustConfig.classifications
             ?.classify(attestationIdentifier)
             ?.fold(
@@ -63,18 +71,22 @@ internal class TrustEvaluatingJwtSignatureVerifier(
                 ifQEaa = VerificationContext.QEAA,
                 ifEaa = { useCase -> VerificationContext.EAA(useCase) },
             )
+        logger?.d(TAG, "JWT: verificationContext=$verificationContext")
 
-        // 5. Apply policy
+        // Apply policy
         val action = trustConfig.trustPolicy.resolve(attestationIdentifier, verificationContext)
+        logger?.d(TAG, "JWT: policy action=$action")
         if (action == TrustPolicy.Action.ENFORCE && trustResult is CertificationChainValidation.NotTrusted) {
+            logger?.e(TAG, "JWT: ENFORCE + NotTrusted → throwing", trustResult.cause)
             throw StatusListNotTrustedException(trustResult.cause)
         }
     }
 
     companion object {
+        private const val TAG = "StatusListTrust"
         private fun extractX5cFromJwt(statusListToken: String): List<X509Certificate> {
             val signedJwt = SignedJWT.parse(statusListToken)
-            val x5cChain = signedJwt.header?.x509CertChain
+            val x5cChain = signedJwt.header?.x509CertChain?.toList()
                 ?: throw IllegalStateException("Missing x5c in JWT header")
             return x5cChain.map { certBase64 ->
                 X509CertUtils.parse(certBase64.decode())

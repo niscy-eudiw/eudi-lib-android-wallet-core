@@ -25,6 +25,8 @@ import eu.europa.ec.eudi.statium.VerifyStatusListTokenJwtSignature
 import eu.europa.ec.eudi.wallet.document.IssuedDocument
 import eu.europa.ec.eudi.wallet.document.format.MsoMdocFormat
 import eu.europa.ec.eudi.wallet.document.format.SdJwtVcFormat
+import eu.europa.ec.eudi.wallet.internal.d
+import eu.europa.ec.eudi.wallet.logging.Logger
 import eu.europa.ec.eudi.wallet.trust.StatusListTrustConfig
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.CoroutineDispatcher
@@ -90,6 +92,7 @@ interface DocumentStatusResolver {
      * @property allowedClockSkew the allowed clock skew for the verification; default is [Duration.ZERO]
      * @property extractor an instance of [StatusReferenceExtractor] to extract the status reference from the document; default is [DefaultStatusReferenceExtractor]
      * @property statusListTrustConfig optional ETSI trust configuration for status list token signers
+     * @property logger optional logger for logging events
      */
     class Builder {
 
@@ -99,6 +102,7 @@ interface DocumentStatusResolver {
         var allowedClockSkew: Duration = Duration.ZERO
         var extractor: StatusReferenceExtractor = DefaultStatusReferenceExtractor
         var statusListTrustConfig: StatusListTrustConfig? = null
+        var logger: Logger? = null
 
         /**
          * Sets the function to verify the JWT status list token signature
@@ -155,6 +159,15 @@ interface DocumentStatusResolver {
         }
 
         /**
+         * Sets the logger for logging events
+         * @param logger the logger
+         * @return the builder instance
+         */
+        fun withLogger(logger: Logger?) = apply {
+            this.logger = logger
+        }
+
+        /**
          * Builds the [DocumentStatusResolver] instance
          */
         fun build(): DocumentStatusResolver {
@@ -165,6 +178,7 @@ interface DocumentStatusResolver {
                 ktorHttpClientFactory = ktorHttpClientFactory,
                 extractor = extractor,
                 statusListTrustConfig = statusListTrustConfig,
+                logger = logger,
             )
         }
     }
@@ -195,16 +209,20 @@ class DocumentStatusResolverImpl(
     internal val ktorHttpClientFactory: () -> HttpClient,
     internal val extractor: StatusReferenceExtractor = DefaultStatusReferenceExtractor,
     internal val statusListTrustConfig: StatusListTrustConfig? = null,
+    private val logger: Logger? = null,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : DocumentStatusResolver {
 
     override suspend fun resolveStatus(document: IssuedDocument): Result<Status> = runCatching {
         withContext(ioDispatcher) {
+            logger?.d(TAG, "resolveStatus: format=${document.format}, trustConfig=${if (statusListTrustConfig != null) "present" else "null"}")
             val statusReference = extractor.extractStatusReference(document).getOrThrow()
+            logger?.d(TAG, "resolveStatus: statusReference uri=${statusReference.uri}, index=${statusReference.index}")
 
             val getStatusListToken = when (document.format) {
                 is MsoMdocFormat -> {
-                    val verifier = maybeWrapCwtVerifier(
+                    logger?.d(TAG, "resolveStatus: using CWT path for MsoMdoc")
+                    val verifier = withCwtVerifier(
                         verifyCwtSignature,
                         document.format as MsoMdocFormat,
                     )
@@ -217,7 +235,8 @@ class DocumentStatusResolverImpl(
                 }
 
                 is SdJwtVcFormat -> {
-                    val verifier = maybeWrapJwtVerifier(
+                    logger?.d(TAG, "resolveStatus: using JWT path for SdJwtVc")
+                    val verifier = withJwtVerifier(
                         verifyJwtSignature,
                         document.format as SdJwtVcFormat,
                     )
@@ -230,27 +249,33 @@ class DocumentStatusResolverImpl(
                 }
             }
 
-            with(GetStatus(getStatusListToken)) {
+            val status = with(GetStatus(getStatusListToken)) {
                 statusReference.currentStatus().getOrThrow()
             }
+            logger?.d(TAG, "resolveStatus: result=$status")
+            status
         }
     }
 
-    private fun maybeWrapJwtVerifier(
+    private fun withJwtVerifier(
         verifier: VerifyStatusListTokenJwtSignature,
         format: SdJwtVcFormat,
     ): VerifyStatusListTokenJwtSignature {
         val trustConfig = statusListTrustConfig ?: return verifier
         val attestationIdentifier = AttestationIdentifier.SDJwtVc(format.vct)
-        return TrustEvaluatingJwtSignatureVerifier(verifier, trustConfig, attestationIdentifier)
+        return TrustEvaluatingJwtSignatureVerifier(verifier, trustConfig, attestationIdentifier, logger)
     }
 
-    private fun maybeWrapCwtVerifier(
+    private fun withCwtVerifier(
         verifier: VerifyStatusListTokenCwtSignature,
         format: MsoMdocFormat,
     ): VerifyStatusListTokenCwtSignature {
         val trustConfig = statusListTrustConfig ?: return verifier
         val attestationIdentifier = AttestationIdentifier.MDoc(format.docType)
-        return TrustEvaluatingCwtSignatureVerifier(verifier, trustConfig, attestationIdentifier)
+        return TrustEvaluatingCwtSignatureVerifier(verifier, trustConfig, attestationIdentifier, logger)
+    }
+
+    companion object {
+        private const val TAG = "StatusList"
     }
 }
