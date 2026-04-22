@@ -400,7 +400,7 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
                 loggerObj = loggerToUse
             ).wrapWithTrasactionLogger(documentManagerToUse, loggerToUse)
 
-            val documentStatusResolverToUse = getDocumentStatusResolver()
+            val documentStatusResolverToUse = getDocumentStatusResolver(loggerToUse)
 
             return EudiWalletImpl(
                 context = context,
@@ -563,11 +563,12 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
          * @return the [DocumentStatusResolver] instance
          */
         @JvmSynthetic
-        internal fun getDocumentStatusResolver(): DocumentStatusResolver {
+        internal fun getDocumentStatusResolver(logger: Logger): DocumentStatusResolver {
             return documentStatusResolver ?: DocumentStatusResolver {
                 ktorHttpClientFactory?.let { withKtorHttpClientFactory(it) }
                 withAllowedClockSkew(config.documentStatusResolverClockSkew)
                 config.statusListTrustConfig?.let { withStatusListTrustConfig(it) }
+                withLogger(logger)
             }
         }
 
