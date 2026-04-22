@@ -89,7 +89,8 @@ internal class DCAPIRequestProcessor(
         val filteredProcessedDeviceRequest = ProcessedDeviceRequest(
             documentManager = documentManager,
             sessionTranscript = deviceRequest.sessionTranscriptBytes,
-            requestedDocuments = RequestedDocuments(filteredRequestedDocuments)
+            requestedDocuments = RequestedDocuments(filteredRequestedDocuments),
+            zkSystemRepository = zkSystemRepository
         )
         return ProcessedDCPAPIRequest(
             processedDeviceRequest = filteredProcessedDeviceRequest,
