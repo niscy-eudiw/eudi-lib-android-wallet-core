@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package eu.europa.ec.eudi.wallet.dcapi
+package eu.europa.ec.eudi.wallet.dcapi.response
 
 import android.content.Intent
 import eu.europa.ec.eudi.iso18013.transfer.DeviceResponseBytes

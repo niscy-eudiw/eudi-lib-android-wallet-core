@@ -15,16 +15,16 @@
  */
 
 @file:JvmMultifileClass
-package eu.europa.ec.eudi.wallet.dcapi
+package eu.europa.ec.eudi.wallet.dcapi.registration
 
 import android.content.Context
 import androidx.credentials.registry.provider.RegistryManager
 import eu.europa.ec.eudi.wallet.document.DocumentManager
 import eu.europa.ec.eudi.wallet.document.IssuedDocument
 import eu.europa.ec.eudi.wallet.document.format.MsoMdocFormat
-import eu.europa.ec.eudi.wallet.internal.d
-import eu.europa.ec.eudi.wallet.internal.e
-import eu.europa.ec.eudi.wallet.logging.Logger
+import eu.europa.ec.eudi.wallet.dcapi.internal.d
+import eu.europa.ec.eudi.wallet.dcapi.internal.e
+import eu.europa.ec.eudi.wallet.dcapi.logging.Logger
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

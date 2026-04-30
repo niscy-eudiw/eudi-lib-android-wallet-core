@@ -22,8 +22,8 @@ import eu.europa.ec.eudi.iso18013.transfer.response.Response
 import eu.europa.ec.eudi.iso18013.transfer.response.device.DeviceRequest
 import eu.europa.ec.eudi.iso18013.transfer.response.device.DeviceResponse
 import eu.europa.ec.eudi.openid4vp.ResolvedRequestObject
-import eu.europa.ec.eudi.wallet.dcapi.DCAPIRequest
-import eu.europa.ec.eudi.wallet.dcapi.DCAPIResponse
+import eu.europa.ec.eudi.wallet.dcapi.request.DCAPIRequest
+import eu.europa.ec.eudi.wallet.dcapi.response.DCAPIResponse
 import eu.europa.ec.eudi.wallet.document.DocumentId
 import eu.europa.ec.eudi.wallet.transactionLogging.TransactionLog
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.OpenId4VpRequest

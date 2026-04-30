@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package eu.europa.ec.eudi.wallet.dcapi
+package eu.europa.ec.eudi.wallet.dcapi.request
 
 import android.content.Intent
 import androidx.credentials.DigitalCredential
@@ -31,9 +31,18 @@ import eu.europa.ec.eudi.iso18013.transfer.response.RequestedDocuments
 import eu.europa.ec.eudi.iso18013.transfer.response.ResponseResult
 import eu.europa.ec.eudi.iso18013.transfer.response.device.DeviceResponse
 import eu.europa.ec.eudi.iso18013.transfer.response.device.ProcessedDeviceRequest
-import eu.europa.ec.eudi.wallet.internal.d
-import eu.europa.ec.eudi.wallet.internal.e
-import eu.europa.ec.eudi.wallet.logging.Logger
+import eu.europa.ec.eudi.wallet.dcapi.DCAPIException
+import eu.europa.ec.eudi.wallet.dcapi.internal.DATA
+import eu.europa.ec.eudi.wallet.dcapi.internal.DCAPI
+import eu.europa.ec.eudi.wallet.dcapi.internal.DC_API_PROTOCOL_ORG_ISO_MDOC
+import eu.europa.ec.eudi.wallet.dcapi.internal.ENCRYPTION_INFO
+import eu.europa.ec.eudi.wallet.dcapi.internal.PROTOCOL
+import eu.europa.ec.eudi.wallet.dcapi.internal.REQUESTS
+import eu.europa.ec.eudi.wallet.dcapi.internal.d
+import eu.europa.ec.eudi.wallet.dcapi.internal.e
+import eu.europa.ec.eudi.wallet.dcapi.internal.toBase64
+import eu.europa.ec.eudi.wallet.dcapi.logging.Logger
+import eu.europa.ec.eudi.wallet.dcapi.response.DCAPIResponse
 import kotlinx.coroutines.runBlocking
 import org.bouncycastle.util.encoders.Hex
 import org.json.JSONObject
@@ -53,7 +62,7 @@ import org.multipaz.crypto.Hpke
  * @param origin The origin of the request.
  */
 
-class ProcessedDCPAPIRequest(
+class ProcessedDCAPIRequest(
     private val processedDeviceRequest: ProcessedDeviceRequest,
     private val providerGetCredentialRequest: ProviderGetCredentialRequest,
     private val logger: Logger? = null,
@@ -165,7 +174,7 @@ class ProcessedDCPAPIRequest(
     }
 
     companion object {
-        private const val TAG = "ProcessedDCPAPIRequest"
+        private const val TAG = "ProcessedDCAPIRequest"
         private const val ENC = "enc"
         private const val CIPHER_TEXT = "cipherText"
         private const val RECIPIENT_PUBLIC_KEY = "recipientPublicKey"

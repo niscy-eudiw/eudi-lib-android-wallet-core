@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package eu.europa.ec.eudi.wallet.dcapi
+package eu.europa.ec.eudi.wallet.dcapi.registration
 
 import android.content.Context
 import android.graphics.BitmapFactory
@@ -23,9 +23,13 @@ import com.upokecenter.cbor.CBORObject
 import eu.europa.ec.eudi.wallet.document.IssuedDocument
 import eu.europa.ec.eudi.wallet.document.format.MsoMdocData
 import eu.europa.ec.eudi.wallet.document.format.MsoMdocFormat
-import eu.europa.ec.eudi.wallet.internal.d
-import eu.europa.ec.eudi.wallet.internal.e
-import eu.europa.ec.eudi.wallet.logging.Logger
+import eu.europa.ec.eudi.wallet.dcapi.internal.d
+import eu.europa.ec.eudi.wallet.dcapi.internal.e
+import eu.europa.ec.eudi.wallet.dcapi.internal.getAppName
+import eu.europa.ec.eudi.wallet.dcapi.internal.getIconBytes
+import eu.europa.ec.eudi.wallet.dcapi.internal.getLocale
+import eu.europa.ec.eudi.wallet.dcapi.internal.getMatcher
+import eu.europa.ec.eudi.wallet.dcapi.logging.Logger
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

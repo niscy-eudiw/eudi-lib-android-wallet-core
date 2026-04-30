@@ -29,9 +29,13 @@ import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStoreAware
 import eu.europa.ec.eudi.iso18013.transfer.response.Request
 import eu.europa.ec.eudi.iso18013.transfer.response.RequestProcessor
 import eu.europa.ec.eudi.iso18013.transfer.response.Response
-import eu.europa.ec.eudi.wallet.internal.d
-import eu.europa.ec.eudi.wallet.internal.e
-import eu.europa.ec.eudi.wallet.logging.Logger
+import eu.europa.ec.eudi.wallet.dcapi.internal.PROTOCOL
+import eu.europa.ec.eudi.wallet.dcapi.internal.REQUESTS
+import eu.europa.ec.eudi.wallet.dcapi.internal.d
+import eu.europa.ec.eudi.wallet.dcapi.internal.e
+import eu.europa.ec.eudi.wallet.dcapi.logging.Logger
+import eu.europa.ec.eudi.wallet.dcapi.request.DCAPIRequest
+import eu.europa.ec.eudi.wallet.dcapi.response.DCAPIResponse
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
 import org.json.JSONObject
@@ -72,7 +76,29 @@ class DCAPIManager(
         transferEventListeners.clear()
     }
 
-    fun resolveRequest(request: Request) {
+    /**
+     * Convenience entry point for activities handling the DCAPI intent filter.
+     *
+     * Extracts the [ProviderGetCredentialRequest] from the incoming [intent] using
+     * [PendingIntentHandler] and forwards it to [resolveRequest]. Intended to be called
+     * directly from the Activity that listens for
+     * `androidx.credentials.registry.provider.action.GET_CREDENTIAL`.
+     *
+     * Does nothing if the intent does not contain a credential request (e.g. when the
+     * activity was launched outside the DCAPI flow).
+     *
+     * @param intent The intent received by the activity.
+     */
+    fun resolveRequest(intent: Intent) {
+        val providerRequest = PendingIntentHandler.retrieveProviderGetCredentialRequest(intent)
+        if (providerRequest == null) {
+            logger?.d(TAG, "Intent does not contain a ProviderGetCredentialRequest; ignoring")
+            return
+        }
+        resolveRequest(DCAPIRequest(providerRequest))
+    }
+
+    internal fun resolveRequest(request: Request) {
         require(request is DCAPIRequest) { "Request must be an DCAPIRequest" }
         logger?.d(TAG, "Resolving DCAPI request")
         when (val protocol = request.providerGetCredentialRequest.getProtocol()) {

@@ -19,7 +19,6 @@ package eu.europa.ec.eudi.wallet.presentation
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.ComponentActivity
-import androidx.credentials.provider.PendingIntentHandler
 import eu.europa.ec.eudi.iso18013.transfer.TransferEvent
 import eu.europa.ec.eudi.iso18013.transfer.TransferManager
 import eu.europa.ec.eudi.iso18013.transfer.engagement.NfcEngagementService
@@ -28,8 +27,7 @@ import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStoreAware
 import eu.europa.ec.eudi.iso18013.transfer.response.Response
 import eu.europa.ec.eudi.iso18013.transfer.response.device.DeviceResponse
 import eu.europa.ec.eudi.wallet.dcapi.DCAPIManager
-import eu.europa.ec.eudi.wallet.dcapi.DCAPIRequest
-import eu.europa.ec.eudi.wallet.dcapi.DCAPIResponse
+import eu.europa.ec.eudi.wallet.dcapi.response.DCAPIResponse
 import eu.europa.ec.eudi.wallet.presentation.SessionTerminationFlag.Companion.SEND_SESSION_TERMINATION_MESSAGE
 import eu.europa.ec.eudi.wallet.presentation.SessionTerminationFlag.Companion.USE_TRANSPORT_SPECIFIC_SESSION_TERMINATION
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.OpenId4VpManager
@@ -105,13 +103,8 @@ class PresentationManagerImpl @JvmOverloads constructor(
     }
 
     override fun startDCAPIPresentation(intent: Intent) {
-        dcapiManager?.let {
-            val request =
-                PendingIntentHandler.retrieveProviderGetCredentialRequest(intent)
-            if (request != null) {
-                it.resolveRequest(DCAPIRequest(request))
-            }
-        } ?: throw IllegalStateException("DCAPIManager is not initialized, check the configuration")
+        dcapiManager?.resolveRequest(intent)
+            ?: throw IllegalStateException("DCAPIManager is not initialized, check the configuration")
     }
 
     override fun enableNFCEngagement(

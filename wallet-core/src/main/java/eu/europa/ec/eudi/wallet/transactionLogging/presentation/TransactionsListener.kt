@@ -19,7 +19,7 @@ package eu.europa.ec.eudi.wallet.transactionLogging.presentation
 import eu.europa.ec.eudi.iso18013.transfer.TransferEvent
 import eu.europa.ec.eudi.iso18013.transfer.response.Response
 import eu.europa.ec.eudi.iso18013.transfer.response.device.DeviceResponse
-import eu.europa.ec.eudi.wallet.dcapi.DCAPIResponse
+import eu.europa.ec.eudi.wallet.dcapi.response.DCAPIResponse
 import eu.europa.ec.eudi.wallet.document.DocumentManager
 import eu.europa.ec.eudi.wallet.logging.Logger
 import eu.europa.ec.eudi.wallet.transactionLogging.TransactionLog

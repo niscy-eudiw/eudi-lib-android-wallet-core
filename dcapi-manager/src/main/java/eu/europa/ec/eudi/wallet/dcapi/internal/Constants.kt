@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 European Commission
+ * Copyright (c) 2024-2025 European Commission
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,16 @@
  * limitations under the License.
  */
 
-package eu.europa.ec.eudi.wallet.dcapi
-
-import androidx.credentials.provider.ProviderGetCredentialRequest
-import eu.europa.ec.eudi.iso18013.transfer.response.Request
-
 /**
- * Represents a request for the Digital Credential API (DCAPI).
- *
- * @property providerGetCredentialRequest The DCAPI request.
+ * Constants for the Digital Credential API (DCAPI).
  */
 
-data class DCAPIRequest(
-    val providerGetCredentialRequest: ProviderGetCredentialRequest
-): Request
+package eu.europa.ec.eudi.wallet.dcapi.internal
+
+internal const val DC_API_PROTOCOL_ORG_ISO_MDOC = "org-iso-mdoc"
+internal const val REQUESTS = "requests"
+internal const val PROTOCOL = "protocol"
+internal const val DCAPI = "dcapi"
+internal const val DATA = "data"
+internal const val DEVICE_REQUEST = "deviceRequest"
+internal const val ENCRYPTION_INFO = "encryptionInfo"

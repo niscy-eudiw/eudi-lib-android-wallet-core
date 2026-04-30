@@ -24,10 +24,11 @@ import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStore
 import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStoreImpl
 import eu.europa.ec.eudi.statium.Status
 import eu.europa.ec.eudi.wallet.dcapi.DCAPIManager
-import eu.europa.ec.eudi.wallet.dcapi.DCAPIRegistration
-import eu.europa.ec.eudi.wallet.dcapi.DCAPIRequestProcessor
-import eu.europa.ec.eudi.wallet.dcapi.DocumentManagerWithDCAPI
 import eu.europa.ec.eudi.wallet.dcapi.getDefaultPrivilegedUserAgents
+import eu.europa.ec.eudi.wallet.dcapi.registration.DCAPIRegistration
+import eu.europa.ec.eudi.wallet.dcapi.registration.DocumentManagerWithDCAPI
+import eu.europa.ec.eudi.wallet.dcapi.request.DCAPIRequestProcessor
+import eu.europa.ec.eudi.wallet.internal.asDCAPILogger
 import eu.europa.ec.eudi.wallet.issue.openid4vci.reissue.DocumentManagerWithMetadataCleanup
 import eu.europa.ec.eudi.wallet.document.DocumentId
 import eu.europa.ec.eudi.wallet.document.DocumentManager
@@ -384,7 +385,7 @@ interface EudiWallet : SampleDocumentManager, PresentationManager, DocumentStatu
                             DocumentManagerWithDCAPI(
                                 delegate = manager,
                                 dcapiRegistration = dcapiRegistration,
-                                logger = loggerToUse
+                                logger = loggerToUse.asDCAPILogger()
                             )
                         } else manager
                     }
@@ -446,15 +447,16 @@ interface EudiWallet : SampleDocumentManager, PresentationManager, DocumentStatu
             val dcapiManager = config.dcapiConfig?.takeIf { it.enabled }?.let { dcapiConfig ->
                 val privilegedAllowlist =
                     dcapiConfig.privilegedAllowlist ?: context.getDefaultPrivilegedUserAgents()
+                val dcapiLogger = loggerObj.asDCAPILogger()
                 DCAPIManager(
                     DCAPIRequestProcessor(
                         documentManager = documentManager,
                         readerTrustStore = readerTrustStore,
                         privilegedAllowlist = privilegedAllowlist,
                         zkSystemRepository = config.zkSystemRepository,
-                        logger = loggerObj
+                        logger = dcapiLogger
                     ),
-                    logger = loggerObj
+                    logger = dcapiLogger
                 )
             }
             return PresentationManagerImpl(

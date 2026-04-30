@@ -114,6 +114,8 @@ dependencies {
     api(libs.eudi.document.manager)
     api(libs.eudi.iso18013.data.transfer)
     api(libs.eudi.lib.jvm.openid4vci.kt)
+    api(project(":dcapi-manager")) // DCAPI manager
+
     // multipaz library
     api(libs.multipaz.android) {
         exclude(group = "org.bouncycastle")
@@ -133,10 +135,6 @@ dependencies {
 
     // Document status
     api(libs.eudi.lib.kmp.statium)
-
-    // Digital Credential API
-    implementation(libs.androidx.credentials)
-    implementation(libs.androidx.credentials.registry.provider)
 
     implementation(libs.kotlinx.io.core)
     implementation(libs.kotlinx.io.bytestring)

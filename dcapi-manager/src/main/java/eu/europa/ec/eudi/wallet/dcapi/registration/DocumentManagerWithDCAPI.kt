@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package eu.europa.ec.eudi.wallet.dcapi
+package eu.europa.ec.eudi.wallet.dcapi.registration
 
 import eu.europa.ec.eudi.wallet.document.DocumentId
 import eu.europa.ec.eudi.wallet.document.DocumentManager
@@ -23,7 +23,7 @@ import eu.europa.ec.eudi.wallet.document.Outcome
 import eu.europa.ec.eudi.wallet.document.ProofOfDeletion
 import eu.europa.ec.eudi.wallet.document.UnsignedDocument
 import eu.europa.ec.eudi.wallet.document.credential.IssuerProvidedCredential
-import eu.europa.ec.eudi.wallet.logging.Logger
+import eu.europa.ec.eudi.wallet.dcapi.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -39,11 +39,11 @@ import org.multipaz.context.applicationContext
  * @property logger Optional logger for logging events
  */
 
-internal class DocumentManagerWithDCAPI(
+class DocumentManagerWithDCAPI(
     private val delegate: DocumentManager,
     private val logger: Logger? = null,
-    private val dcapiRegistration: DCAPIRegistration ? = null
-    ) : DocumentManager by delegate {
+    private val dcapiRegistration: DCAPIRegistration? = null
+) : DocumentManager by delegate {
 
     private val registration: DCAPIRegistration by lazy {
         dcapiRegistration ?: DCAPIIsoMdocRegistration(

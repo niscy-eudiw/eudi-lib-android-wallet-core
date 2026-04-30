@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package eu.europa.ec.eudi.wallet.dcapi
+package eu.europa.ec.eudi.wallet.dcapi.request
 
 import androidx.credentials.ExperimentalDigitalCredentialApi
 import androidx.credentials.GetDigitalCredentialOption
@@ -29,9 +29,18 @@ import eu.europa.ec.eudi.iso18013.transfer.response.device.DeviceRequest
 import eu.europa.ec.eudi.iso18013.transfer.response.device.DeviceRequestProcessor
 import eu.europa.ec.eudi.iso18013.transfer.response.device.ProcessedDeviceRequest
 import eu.europa.ec.eudi.wallet.document.DocumentManager
-import eu.europa.ec.eudi.wallet.internal.d
-import eu.europa.ec.eudi.wallet.internal.e
-import eu.europa.ec.eudi.wallet.logging.Logger
+import eu.europa.ec.eudi.wallet.dcapi.DCAPIException
+import eu.europa.ec.eudi.wallet.dcapi.internal.DATA
+import eu.europa.ec.eudi.wallet.dcapi.internal.DC_API_PROTOCOL_ORG_ISO_MDOC
+import eu.europa.ec.eudi.wallet.dcapi.internal.DEVICE_REQUEST
+import eu.europa.ec.eudi.wallet.dcapi.internal.ENCRYPTION_INFO
+import eu.europa.ec.eudi.wallet.dcapi.internal.PROTOCOL
+import eu.europa.ec.eudi.wallet.dcapi.internal.REQUESTS
+import eu.europa.ec.eudi.wallet.dcapi.internal.d
+import eu.europa.ec.eudi.wallet.dcapi.internal.e
+import eu.europa.ec.eudi.wallet.dcapi.internal.fromBase64
+import eu.europa.ec.eudi.wallet.dcapi.internal.getDCAPIIsoMdocSessionTranscript
+import eu.europa.ec.eudi.wallet.dcapi.logging.Logger
 import org.json.JSONObject
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 
@@ -51,7 +60,7 @@ import org.multipaz.mdoc.zkp.ZkSystemRepository
 
 private const val TAG = "DCAPIRequestProcessor"
 
-internal class DCAPIRequestProcessor(
+class DCAPIRequestProcessor(
     private val documentManager: DocumentManager,
     override var readerTrustStore: ReaderTrustStore?,
     private val privilegedAllowlist: String,
@@ -92,7 +101,7 @@ internal class DCAPIRequestProcessor(
             requestedDocuments = RequestedDocuments(filteredRequestedDocuments),
             zkSystemRepository = zkSystemRepository
         )
-        return ProcessedDCPAPIRequest(
+        return ProcessedDCAPIRequest(
             processedDeviceRequest = filteredProcessedDeviceRequest,
             providerGetCredentialRequest = request.providerGetCredentialRequest,
             origin = origin,

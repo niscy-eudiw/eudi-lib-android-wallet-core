@@ -15,7 +15,7 @@
  */
 
 @file:JvmMultifileClass
-package eu.europa.ec.eudi.wallet.dcapi
+package eu.europa.ec.eudi.wallet.dcapi.internal
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -41,12 +41,6 @@ internal fun Context.getMatcher(fileName: String): ByteArray {
         ByteArray(stream.available()).apply {
             stream.read(this)
         }
-    }
-}
-
-internal fun Context.getDefaultPrivilegedUserAgents(): String {
-    return this.assets.open("privilegedUserAgents.json").use { stream ->
-        stream.readBytes().decodeToString()
     }
 }
 
