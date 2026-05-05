@@ -21,6 +21,7 @@ import android.content.Context
 import androidx.annotation.RawRes
 import eu.europa.ec.eudi.iso18013.transfer.engagement.NfcEngagementService
 import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStore
+import eu.europa.ec.eudi.iso18013.transfer.response.ReaderAuthPolicy
 import eu.europa.ec.eudi.wallet.EudiWalletConfig.Companion.DEFAULT_DOCUMENT_MANAGER_IDENTIFIER
 import eu.europa.ec.eudi.wallet.dcapi.DCAPIConfig
 import eu.europa.ec.eudi.wallet.document.DocumentExtensions.getDefaultCreateDocumentSettings
@@ -62,6 +63,11 @@ import kotlin.time.Duration.Companion.minutes
  *     .configureReaderTrustStore(
  *         // set the reader trusted certificates for the reader trust store
  *         listOf(readerCertificate)
+ *     )
+ *     .configureReaderAuthPolicy(
+ *         // set the reader authentication enforcement policy
+ *         // default is EnforceIfPresent
+ *         ReaderAuthPolicy.EnforceIfPresent
  *     )
  *     .configureOpenId4Vci {
  *         withIssuerUrl("https://issuer.com")
@@ -114,6 +120,7 @@ import kotlin.time.Duration.Companion.minutes
  * @property logLevel the log level
  * @property logSizeLimit the log size limit
  * @property readerTrustedCertificates the reader trusted certificates
+ * @property readerAuthPolicy the reader authentication enforcement policy for proximity and DCAPI presentations
  * @property userAuthenticationRequired whether user authentication is required
  * @property userAuthenticationTimeout the user authentication timeout
  * @property useStrongBoxForKeys whether to use the strong box for keys
@@ -347,6 +354,49 @@ class EudiWalletConfig {
      */
     fun configureReaderTrustStore(context: Context, @RawRes vararg certificateRes: Int) = apply {
         this.readerTrustedCertificates = certificateRes.map { context.getCertificate(it) }
+    }
+
+    /**
+     * The reader authentication enforcement policy for proximity and DCAPI presentations.
+     * This determines how the wallet handles reader authentication results when generating
+     * device responses.
+     *
+     * The available policies are:
+     * - [ReaderAuthPolicy.DoNotEnforce]: Reader authentication is evaluated but never blocks
+     *   document disclosure. This was the default behavior before version 0.27.0.
+     * - [ReaderAuthPolicy.EnforceIfPresent]: Documents are excluded from the response when
+     *   reader authentication is present but fails verification (default).
+     * - [ReaderAuthPolicy.AlwaysRequire]: Documents are excluded unless reader authentication
+     *   is present and verified.
+     *
+     * The default is [ReaderAuthPolicy.EnforceIfPresent].
+     *
+     * @see ReaderAuthPolicy
+     * @see configureReaderTrustStore
+     */
+    var readerAuthPolicy: ReaderAuthPolicy = ReaderAuthPolicy.EnforceIfPresent
+        private set
+
+    /**
+     * Configure the reader authentication enforcement policy.
+     * This policy controls how reader authentication results affect document disclosure
+     * during proximity and DCAPI presentations.
+     *
+     * When a verifier's DeviceRequest includes reader authentication and the verifier's
+     * certificate is not in the configured [ReaderTrustStore], the policy determines whether
+     * the document is included in the response or excluded.
+     *
+     * Per ISO 18013-5, when all documents are excluded due to reader authentication failure,
+     * the wallet returns a DeviceResponse with status 10 (General Error).
+     *
+     * @param readerAuthPolicy the reader authentication enforcement policy
+     * @return the [EudiWalletConfig] instance
+     *
+     * @see ReaderAuthPolicy
+     * @see configureReaderTrustStore
+     */
+    fun configureReaderAuthPolicy(readerAuthPolicy: ReaderAuthPolicy) = apply {
+        this.readerAuthPolicy = readerAuthPolicy
     }
 
     var userAuthenticationRequired: Boolean = false

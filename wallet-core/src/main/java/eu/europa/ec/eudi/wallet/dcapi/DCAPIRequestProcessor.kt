@@ -22,6 +22,7 @@ import androidx.credentials.provider.ProviderGetCredentialRequest
 import androidx.credentials.registry.provider.selectedEntryId
 import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStore
 import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStoreAware
+import eu.europa.ec.eudi.iso18013.transfer.response.ReaderAuthPolicy
 import eu.europa.ec.eudi.iso18013.transfer.response.Request
 import eu.europa.ec.eudi.iso18013.transfer.response.RequestProcessor
 import eu.europa.ec.eudi.iso18013.transfer.response.RequestedDocuments
@@ -43,6 +44,7 @@ import org.multipaz.mdoc.zkp.ZkSystemRepository
  *
  * @property documentManager The [DocumentManager] instance used to manage documents.
  * @property readerTrustStore The [ReaderTrustStore] the reader trust store.
+ * @property readerAuthPolicy The [ReaderAuthPolicy] for enforcing reader authentication results during response generation.
  * @property privilegedAllowlist The allowlist for privileged browsers/apps that are trusted.
  * @property zkSystemRepository The [ZkSystemRepository] for zero-knowledge proof systems.
  * @property logger Optional logger for logging events.
@@ -54,6 +56,7 @@ private const val TAG = "DCAPIRequestProcessor"
 internal class DCAPIRequestProcessor(
     private val documentManager: DocumentManager,
     override var readerTrustStore: ReaderTrustStore?,
+    private val readerAuthPolicy: ReaderAuthPolicy = ReaderAuthPolicy.EnforceIfPresent,
     private val privilegedAllowlist: String,
     private var zkSystemRepository: ZkSystemRepository?,
     private var logger: Logger? = null,
@@ -68,6 +71,7 @@ internal class DCAPIRequestProcessor(
         val processedDeviceRequest = DeviceRequestProcessor(
             documentManager = documentManager,
             readerTrustStore = readerTrustStore,
+            readerAuthPolicy = readerAuthPolicy,
             zkSystemRepository = zkSystemRepository
         ).process(deviceRequest) as ProcessedDeviceRequest
 
@@ -89,7 +93,8 @@ internal class DCAPIRequestProcessor(
         val filteredProcessedDeviceRequest = ProcessedDeviceRequest(
             documentManager = documentManager,
             sessionTranscript = deviceRequest.sessionTranscriptBytes,
-            requestedDocuments = RequestedDocuments(filteredRequestedDocuments)
+            requestedDocuments = RequestedDocuments(filteredRequestedDocuments),
+            readerAuthPolicy = readerAuthPolicy
         )
         return ProcessedDCPAPIRequest(
             processedDeviceRequest = filteredProcessedDeviceRequest,

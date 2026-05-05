@@ -1,7 +1,7 @@
 
 # EUDI Wallet Core library for Android
 ## Dependency License Report
-_2026-02-16 14:39:54 EET_
+_2026-05-05 12:53:46 EEST_
 ## Android Software Development Kit License
 
 **1** **Group:** `com.google.android.gms` **Name:** `play-services-identity-credentials` **Version:** `16.0.0-alpha08` 
@@ -21,7 +21,7 @@ _2026-02-16 14:39:54 EET_
 > - **POM Project URL**: [https://github.com/c-rack/cbor-java](https://github.com/c-rack/cbor-java)
 > - **POM License**: Apache License, Version 2.0 - [https://www.apache.org/licenses/LICENSE-2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
-**5** **Group:** `com.nimbusds` **Name:** `oauth2-oidc-sdk` **Version:** `11.20.1` 
+**5** **Group:** `com.nimbusds` **Name:** `oauth2-oidc-sdk` **Version:** `11.37` 
 > - **Project URL**: [https://bitbucket.org/connect2id/oauth-2.0-sdk-with-openid-connect-extensions](https://bitbucket.org/connect2id/oauth-2.0-sdk-with-openid-connect-extensions)
 > - **Manifest License**: Apache License, Version 2.0 (Not Packaged)
 > - **POM License**: Apache License, Version 2.0 - [https://www.apache.org/licenses/LICENSE-2.0](https://www.apache.org/licenses/LICENSE-2.0)
@@ -34,11 +34,11 @@ _2026-02-16 14:39:54 EET_
 > - **POM Project URL**: [https://github.com/ktorio/ktor](https://github.com/ktorio/ktor)
 > - **POM License**: Apache License, Version 2.0 - [https://www.apache.org/licenses/LICENSE-2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
-**8** **Group:** `org.jetbrains.kotlin` **Name:** `kotlin-parcelize-runtime` **Version:** `2.2.0` 
+**8** **Group:** `org.jetbrains.kotlin` **Name:** `kotlin-parcelize-runtime` **Version:** `2.2.21` 
 > - **POM Project URL**: [https://kotlinlang.org/](https://kotlinlang.org/)
 > - **POM License**: Apache License, Version 2.0 - [https://www.apache.org/licenses/LICENSE-2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
-**9** **Group:** `org.jetbrains.kotlin` **Name:** `kotlin-stdlib` **Version:** `2.2.10` 
+**9** **Group:** `org.jetbrains.kotlin` **Name:** `kotlin-stdlib` **Version:** `2.2.21` 
 > - **POM Project URL**: [https://kotlinlang.org/](https://kotlinlang.org/)
 > - **POM License**: Apache License, Version 2.0 - [https://www.apache.org/licenses/LICENSE-2.0](https://www.apache.org/licenses/LICENSE-2.0)
 

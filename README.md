@@ -165,6 +165,9 @@ val config = EudiWalletConfig()
         // set the reader trusted certificates for the reader trust store
         listOf(readerCertificate)
     )
+    // configure the reader authentication enforcement policy
+    // default is EnforceIfPresent
+    .configureReaderAuthPolicy(ReaderAuthPolicy.EnforceIfPresent)
     // configure the OpenId4Vci service
     .configureOpenId4Vci {
         withIssuerUrl("https://issuer.com")
@@ -233,6 +236,37 @@ val customWallet = EudiWallet(context, config) {
 See the [CustomizeSecureArea.md](CustomizeSecureArea.md) for more information on how to use the
 wallet-core library with custom SecureArea implementations.
 
+#### Reader Authentication Policy
+
+The `configureReaderAuthPolicy` method controls how reader authentication results affect document
+disclosure during proximity (BLE/NFC) and DCAPI presentations. This works in conjunction with the
+`ReaderTrustStore` configured via `configureReaderTrustStore`.
+
+When a verifier's DeviceRequest includes reader authentication, the wallet verifies the reader's
+certificate chain against the configured `ReaderTrustStore`. The `ReaderAuthPolicy` determines what
+happens based on the verification result:
+
+| Policy | Behavior |
+|---|---|
+| `ReaderAuthPolicy.DoNotEnforce` | Reader authentication is evaluated but never blocks document disclosure. Documents are always included in the response. |
+| `ReaderAuthPolicy.EnforceIfPresent` | **(Default)** Documents are excluded from the response when reader authentication is present but fails verification. Documents without reader authentication are included normally. |
+| `ReaderAuthPolicy.AlwaysRequire` | Documents are excluded unless reader authentication is present and verified successfully. |
+
+Per ISO 18013-5, when all documents are excluded due to reader authentication failure, the wallet
+returns a DeviceResponse with status 10 (General Error) instead of an empty success response.
+
+**Example:**
+
+```kotlin
+val config = EudiWalletConfig()
+    .configureReaderTrustStore(listOf(trustedReaderCertificate))
+    .configureReaderAuthPolicy(ReaderAuthPolicy.EnforceIfPresent)
+```
+
+> **Note:** If a verifier includes reader authentication in its request but its certificate is not in
+> the configured `ReaderTrustStore`, the document will be excluded from the response when using
+> `EnforceIfPresent` or `AlwaysRequire` policies. To allow presentations to verifiers whose
+> certificates are not in the trust store, use `ReaderAuthPolicy.DoNotEnforce`.
 
 #### WalletKeyManager Configuration
 This interface is responsible for managing Attestation Keys used during Attestation Based Client Authentication with OpenId4Vci.

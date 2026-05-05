@@ -21,7 +21,15 @@ androidJvm
 | uri | the URI |
 
 [androidJvm]\
-abstract fun [startRemotePresentation](start-remote-presentation.md)(intent: [Intent](https://developer.android.com/reference/kotlin/android/content/Intent.html))
+abstract fun [~~startRemotePresentation~~](start-remote-presentation.md)(intent: [Intent](https://developer.android.com/reference/kotlin/android/content/Intent.html))
+
+---
+
+### Deprecated
+
+Use startRemotePresentation(uri: Uri)
+
+---
 
 Start a remote presentation with the given intent The intent.data could either contain the URI of
 
