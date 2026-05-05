@@ -22,6 +22,7 @@ import eu.europa.ec.eudi.iso18013.transfer.TransferManager
 import eu.europa.ec.eudi.iso18013.transfer.engagement.BleRetrievalMethod
 import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStore
 import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStoreImpl
+import eu.europa.ec.eudi.iso18013.transfer.response.ReaderAuthPolicy
 import eu.europa.ec.eudi.statium.Status
 import eu.europa.ec.eudi.wallet.dcapi.DCAPIManager
 import eu.europa.ec.eudi.wallet.dcapi.DCAPIRegistration
@@ -449,6 +450,7 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
                     DCAPIRequestProcessor(
                         documentManager = documentManager,
                         readerTrustStore = readerTrustStore,
+                        readerAuthPolicy = config.readerAuthPolicy,
                         privilegedAllowlist = privilegedAllowlist,
                         zkSystemRepository = config.zkSystemRepository,
                         logger = loggerObj
@@ -544,6 +546,7 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
             context = context,
             documentManager = documentManager,
             readerTrustStore = readerTrustStore,
+            readerAuthPolicy = config.readerAuthPolicy,
             retrievalMethods = listOf(
                 BleRetrievalMethod(
                     peripheralServerMode = config.enableBlePeripheralMode,
