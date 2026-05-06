@@ -26,6 +26,7 @@ import io.mockk.mockkObject
 import io.mockk.mockkStatic
 import io.mockk.unmockkAll
 import io.mockk.unmockkConstructor
+import kotlinx.io.bytestring.ByteString
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -66,8 +67,8 @@ class CredentialIssuedDataTest {
         mockSdJwt = mockk(relaxed = true)
 
         // Set up common behavior for mocks to avoid "This credential is not yet certified" error
-        every { mockMdocCredential.issuerProvidedData } returns sampleIssuerProvidedData
-        every { mockSdJwtVcCredential.issuerProvidedData } returns sampleSdJwtString.toByteArray()
+        every { mockMdocCredential.issuerProvidedData } returns ByteString(sampleIssuerProvidedData)
+        every { mockSdJwtVcCredential.issuerProvidedData } returns ByteString(sampleSdJwtString.toByteArray())
 
         // Mock NameSpacedData.fromIssuerProvidedData extension function
         mockkStatic(NameSpacedData.Companion::fromIssuerProvidedData)

@@ -20,6 +20,8 @@ import com.nimbusds.jose.jwk.JWK
 import com.nimbusds.jose.jwk.KeyConverter
 import eu.europa.ec.eudi.sdjwt.DefaultSdJwtOps
 import eu.europa.ec.eudi.wallet.document.internal.sdJwtVcString
+import io.ktor.client.HttpClient
+import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -75,6 +77,6 @@ class SdJwtVcCredentialCertifier : CredentialCertification {
         val validFrom = nbf ?: iat ?: Clock.System.now()
         val validUntil = exp ?: validFrom.plus(30.days)
 
-        credential.certify(data, validFrom, validUntil)
+        credential.certify(ByteString(data))
     }
 }

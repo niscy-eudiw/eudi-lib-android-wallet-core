@@ -66,13 +66,13 @@ inline fun <reified D : CredentialIssuedData> SecureAreaBoundCredential.getIssue
     return when (this) {
         is MdocCredential -> runCatching {
             CredentialIssuedData.MsoMdoc(
-                nameSpacedData = NameSpacedData.fromIssuerProvidedData(issuerProvidedData),
-                staticAuthData = StaticAuthDataParser(issuerProvidedData).parse()
+                nameSpacedData = NameSpacedData.fromIssuerProvidedData(issuerProvidedData.toByteArray()),
+                staticAuthData = StaticAuthDataParser(issuerProvidedData.toByteArray()).parse()
             ) as D
         }
 
         is KeyBoundSdJwtVcCredential -> DefaultSdJwtOps.unverifiedIssuanceFrom(
-            String(issuerProvidedData)
+            String(issuerProvidedData.toByteArray())
         ).map {
             CredentialIssuedData.SdJwtVc(
                 issuedSdJwt = it
