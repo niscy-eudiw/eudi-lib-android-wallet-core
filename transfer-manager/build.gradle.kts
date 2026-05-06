@@ -19,11 +19,13 @@ import com.github.jk1.license.filter.LicenseBundleNormalizer
 import com.github.jk1.license.filter.ReduceDuplicateLicensesFilter
 import com.github.jk1.license.render.InventoryMarkdownReportRenderer
 import com.vanniktech.maven.publish.AndroidMultiVariantLibrary
+import org.jetbrains.dokka.gradle.formats.DokkaFormatPlugin
+import org.jetbrains.dokka.gradle.internal.InternalDokkaGradlePluginApi
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Locale
 
 plugins {
     alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
     id("kotlin-parcelize")
     alias(libs.plugins.dokka)
     alias(libs.plugins.dependency.license.report)
@@ -72,9 +74,6 @@ android {
         sourceCompatibility = JavaVersion.toVersion(libs.versions.java.get())
         targetCompatibility = JavaVersion.toVersion(libs.versions.java.get())
     }
-    kotlinOptions {
-        jvmTarget = libs.versions.java.get()
-    }
 
     packaging {
         resources {
@@ -87,6 +86,12 @@ android {
         singleVariant("release") {
             withSourcesJar()
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.fromTarget(libs.versions.java.get()))
     }
 }
 
@@ -112,7 +117,7 @@ dependencies {
     implementation(libs.bouncy.castle.prov)
     implementation(libs.bouncy.castle.pkix)
 
-    testImplementation(kotlin("test"))
+    testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.json)
     testImplementation(libs.mockito.inline)
@@ -136,26 +141,40 @@ dependencyCheck {
 
 // Dokka generation
 
-tasks.dokkaGfm.configure {
-    val outputDir = file("$rootDir/docs")
-    doFirst { delete(outputDir) }
-    outputDirectory.set(outputDir)
+@OptIn(InternalDokkaGradlePluginApi::class)
+abstract class DokkaMarkdownPlugin : DokkaFormatPlugin(formatName = "markdown") {
+    override fun DokkaFormatPlugin.DokkaFormatPluginContext.configure() {
+        project.dependencies {
+            dokkaPlugin(dokka("gfm-plugin"))
+            formatDependencies.dokkaPublicationPluginClasspathApiOnly
+                .dependencies.addLater(dokka("gfm-template-processing-plugin"))
+        }
+    }
+}
+
+apply<DokkaMarkdownPlugin>()
+
+dokka {
+    moduleName.set("transfer-manager")
+    dokkaPublications.named("markdown") {
+        outputDirectory.set(rootDir.resolve("docs"))
+    }
+}
+
+tasks.named("dokkaGeneratePublicationMarkdown").configure {
+    doFirst { delete(rootDir.resolve("docs")) }
+}
+
+tasks.named("dokkaGenerateMarkdown").configure {
+    group = "documentation"
 }
 
 tasks.register<Jar>("dokkaHtmlJar") {
     group = "documentation"
     description = "Assembles HTML documentation with Dokka."
-    dependsOn(tasks.dokkaHtml)
-    from(tasks.dokkaHtml.flatMap { it.outputDirectory })
+    dependsOn("dokkaGeneratePublicationHtml")
+    from(tasks.named("dokkaGeneratePublicationHtml"))
     archiveClassifier.set("html-docs")
-}
-
-tasks.register<Jar>("dokkaJavadocJar") {
-    group = "documentation"
-    description = "Assembles Javadoc documentation with Dokka."
-    dependsOn(tasks.dokkaJavadoc)
-    from(tasks.dokkaJavadoc.flatMap { it.outputDirectory })
-    archiveClassifier.set("javadoc")
 }
 
 // Third-party licenses report
@@ -186,7 +205,7 @@ tasks.generateLicenseReport.configure {
 tasks.register<Task>("buildDocumentation") {
     group = "documentation"
     description = "Builds the documentation and license report."
-    dependsOn("dokkaGfm", "generateLicenseReport")
+    dependsOn("dokkaGenerateMarkdown", "generateLicenseReport")
 }
 tasks.assemble.configure {
     finalizedBy("buildDocumentation")

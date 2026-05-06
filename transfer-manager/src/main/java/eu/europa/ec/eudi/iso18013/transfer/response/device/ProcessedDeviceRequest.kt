@@ -28,15 +28,19 @@ import eu.europa.ec.eudi.iso18013.transfer.response.ReaderAuthPolicy
 import eu.europa.ec.eudi.iso18013.transfer.response.RequestProcessor
 import eu.europa.ec.eudi.iso18013.transfer.response.RequestedDocuments
 import eu.europa.ec.eudi.iso18013.transfer.response.ResponseResult
+import eu.europa.ec.eudi.iso18013.transfer.zkp.matchZkSystem
 import eu.europa.ec.eudi.iso18013.transfer.zkp.MatchedZkSystem
 import eu.europa.ec.eudi.iso18013.transfer.zkp.ZkResponsePolicy
 import eu.europa.ec.eudi.wallet.document.DocumentId
 import eu.europa.ec.eudi.wallet.document.DocumentManager
+import eu.europa.ec.eudi.wallet.document.format.MsoMdocFormat
 import eu.europa.ec.eudi.wallet.document.IssuedDocument
 import kotlinx.coroutines.runBlocking
-import kotlinx.io.bytestring.ByteString
+import org.multipaz.cbor.Cbor
 import org.multipaz.crypto.Algorithm
 import org.multipaz.mdoc.response.DeviceResponseGenerator
+import org.multipaz.mdoc.response.MdocDocument
+import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.util.Constants
 import kotlin.time.ExperimentalTime
 
@@ -52,6 +56,7 @@ class ProcessedDeviceRequest(
     private val documentManager: DocumentManager,
     private val sessionTranscript: ByteArray,
     requestedDocuments: RequestedDocuments,
+    private val zkSystemRepository: ZkSystemRepository? = null,
     private val readerAuthPolicy: ReaderAuthPolicy = ReaderAuthPolicy.EnforceIfPresent,
     private val zkResponsePolicy: ZkResponsePolicy = ZkResponsePolicy.FallbackToFullDisclosure,
 ) : RequestProcessor.ProcessedRequest.Success(requestedDocuments) {
@@ -91,7 +96,14 @@ class ProcessedDeviceRequest(
                         documentManager.getValidIssuedMsoMdocDocumentById(disclosedDocument.documentId)
                     }.assertAgeOverRequestLimitForIso18013(disclosedDocument)
 
-                    val matchedZkSystem = requestedDocument?.matchedZkSystem
+                    val matchedZkSystem = requestedDocument?.let {
+                        matchZkSystem(
+                            zkSystemRepository = zkSystemRepository,
+                            requestedDocument = it,
+                            disclosedDocument = disclosedDocument,
+                            docType = (issuedDocument.format as MsoMdocFormat).docType
+                        )
+                    }
 
                     if (matchedZkSystem == null) {
                         addDocumentResponse(issuedDocument, disclosedDocument, deviceResponseGenerator)
@@ -167,8 +179,14 @@ class ProcessedDeviceRequest(
         val zkResult = runCatching {
             matchedZkSystem.system.generateProof(
                 zkSystemSpec = matchedZkSystem.spec,
-                encodedDocument = ByteString(encodedDocument),
-                encodedSessionTranscript = ByteString(sessionTranscript)
+                document = runBlocking {
+                    MdocDocument.fromDataItem(
+                        Cbor.decode(
+                            encodedDocument
+                        )
+                    )
+                },
+                sessionTranscript = Cbor.decode(sessionTranscript)
             )
         }
 
