@@ -28,7 +28,7 @@ plugins {
 }
 
 licenseReport {
-    projects = arrayOf(project) + project.subprojects
+    projects = project.subprojects.toTypedArray()
     unionParentPomLicenses = false
     excludeBoms = true
     excludeOwnGroup = true
