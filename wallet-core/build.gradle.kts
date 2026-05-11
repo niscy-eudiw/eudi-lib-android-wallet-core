@@ -113,8 +113,8 @@ kotlin {
 dependencies {
 
     // EUDI libs
-    api(libs.eudi.document.manager)
-    api(libs.eudi.iso18013.data.transfer)
+    api(project(":document-manager"))
+    api(project(":transfer-manager"))
     api(libs.eudi.lib.jvm.openid4vci.kt)
     // multipaz library
     api(libs.multipaz.android) {

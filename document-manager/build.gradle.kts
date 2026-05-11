@@ -112,11 +112,11 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
 
     // CBOR
-    implementation(libs.cbor)
-    implementation(libs.cose)
+    implementation(libs.upokecenter.cbor)
+    implementation(libs.cose.java)
 
     // sd-jwt-vc
-    implementation(libs.eudi.sd.jwt.vc.kt)
+    implementation(libs.eudi.lib.jvm.sdjwt.kt)
 
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.content.negotiation)
@@ -130,7 +130,7 @@ dependencies {
     testImplementation(kotlin("test"))
     testImplementation(libs.mockk)
     testImplementation(libs.json)
-    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.kotlin.coroutines.test)
     testImplementation(libs.ktor.client.cio)
 }
 

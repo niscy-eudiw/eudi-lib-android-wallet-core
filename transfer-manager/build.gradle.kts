@@ -92,7 +92,7 @@ android {
 
 dependencies {
     implementation(libs.appcompat)
-    implementation(libs.eudi.document.manager)
+    implementation(project(":document-manager"))
     implementation(libs.multipaz.android) {
         exclude(group = "org.bouncycastle")
         exclude(group = "io.ktor")
@@ -117,12 +117,12 @@ dependencies {
     testImplementation(libs.json)
     testImplementation(libs.mockito.inline)
     testImplementation(libs.mockito.kotlin)
-    testImplementation(libs.robolectric.robolectric)
-    testImplementation(libs.cbor)
-    testImplementation(libs.cose)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.upokecenter.cbor)
+    testImplementation(libs.cose.java)
 
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(libs.android.junit)
+    androidTestImplementation(libs.espresso.core)
 }
 
 // Dependency check
