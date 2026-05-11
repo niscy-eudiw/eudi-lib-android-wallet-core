@@ -10,4 +10,6 @@ dependencies {
     implementation(libs.sonarqube.gradle.plugin)
     implementation(libs.kover.gradle.plugin)
     implementation(libs.maven.publish.gradle.plugin)
+    // expose the typed version catalog accessor (`libs`) to precompiled script plugins
+    implementation(files(libs.javaClass.superclass.protectionDomain.codeSource.location))
 }
