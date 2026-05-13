@@ -34,10 +34,10 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.EcSignature
+import org.multipaz.prompt.Reason
 import org.multipaz.securearea.KeyInfo
 import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.securearea.SecureArea
-import org.multipaz.securearea.UnlockReason
 import java.time.Instant
 import kotlin.time.Clock
 import kotlin.time.toJavaInstant
@@ -281,7 +281,7 @@ class IssuedDocument(
                 secureArea.sign(
                     alias = alias,
                     dataToSign = dataToSign,
-                    unlockReason = UnlockReason.Unspecified
+                    unlockReason = Reason.Unspecified
                 )
             }
         }
@@ -310,7 +310,7 @@ class IssuedDocument(
                 secureArea.keyAgreement(
                     alias = alias,
                     otherKey = otherPublicKey.toEcPublicKey,
-                    unlockReason = UnlockReason.Unspecified
+                    unlockReason = Reason.Unspecified
                 )
             }
         }
@@ -355,7 +355,7 @@ class IssuedDocument(
     @Deprecated("Use findCredential()?.issuerProvidedData instead")
     val issuerProvidedData: ByteArray
         get() = runBlocking {
-            findCredential()?.issuerProvidedData
+            findCredential()?.issuerProvidedData?.toByteArray()
                 ?: throw IllegalStateException(NO_CREDENTIALS)
         }
 

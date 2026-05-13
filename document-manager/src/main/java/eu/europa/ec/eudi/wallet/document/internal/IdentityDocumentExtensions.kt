@@ -21,6 +21,8 @@ import eu.europa.ec.eudi.wallet.document.Document
 import eu.europa.ec.eudi.wallet.document.IssuedDocument
 import eu.europa.ec.eudi.wallet.document.UnsignedDocument
 import eu.europa.ec.eudi.wallet.document.format.DocumentFormat
+import eu.europa.ec.eudi.wallet.document.format.MsoMdocFormat
+import eu.europa.ec.eudi.wallet.document.format.SdJwtVcFormat
 import eu.europa.ec.eudi.wallet.document.metadata.IssuerMetadata
 import kotlin.time.Instant
 import org.multipaz.document.Document as IdentityDocument
@@ -40,11 +42,15 @@ internal val IdentityDocument.format: DocumentFormat
     get() = applicationMetadata.format
 
 /**
- * The document name stored in application metadata
+ * The document name from the Document's native displayName field.
+ * Falls back to format-specific identifiers if no display name is set.
  */
 internal val IdentityDocument.documentName: String
     @JvmSynthetic
-    get() = applicationMetadata.documentName
+    get() = displayName ?: when (val fmt = format) {
+        is MsoMdocFormat -> fmt.docType
+        is SdJwtVcFormat -> fmt.vct
+    }
 
 /**
  * The issuer metadata stored in application metadata under the key "issuerMetadata"
@@ -60,11 +66,11 @@ internal val IdentityDocument.issuerMetaData: IssuerMetadata?
         .getOrNull()
 
 /**
- * The creation date of the document stored in application metadata
+ * The creation date of the document from the Document's native created field.
  */
 internal val IdentityDocument.createdAt: Instant
     @JvmSynthetic
-    get() = applicationMetadata.createdAt
+    get() = created
 
 /**
  * The document manager id stored in application metadata

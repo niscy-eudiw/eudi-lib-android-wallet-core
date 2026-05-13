@@ -33,9 +33,9 @@ import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.EcSignature
 import org.multipaz.document.Document
+import org.multipaz.prompt.Reason
 import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.securearea.SecureArea
-import org.multipaz.securearea.UnlockReason
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -102,14 +102,14 @@ class IssuedDocumentTest {
     ): Document {
         return mockk<Document> {
             every { identifier } returns id
+            every { displayName } returns name
+            every { created } returns createdAt.toKotlinInstant()
             coEvery { getCredentials() } returns certifiedCredentials
             coEvery { getCertifiedCredentials() } returns certifiedCredentials
             coEvery { getPendingCredentials() } returns pendingCredentials
             every { metadata } returns mockk<ApplicationMetadata> {
                 every { this@mockk.format } returns format
-                every { documentName } returns name
                 every { this@mockk.documentManagerId } returns documentManagerId
-                every { this@mockk.createdAt } returns createdAt.toKotlinInstant()
                 every { this@mockk.issuedAt } returns issuedAt.toKotlinInstant()
                 every { this@mockk.credentialPolicy } returns credentialPolicy
                 every { this@mockk.issuerMetadata } returns issuerMetaData
@@ -633,7 +633,7 @@ class IssuedDocumentTest {
 
         val secureArea = mockk<SecureArea> {
             coEvery {
-                sign(eq(alias), eq(dataToSign), any<UnlockReason>())
+                sign(eq(alias), eq(dataToSign), any<Reason>())
             } returns expectedSignature
             coEvery { getKeyInvalidated(any()) } returns false
         }
@@ -788,7 +788,7 @@ class IssuedDocumentTest {
 
         val secureArea = mockk<SecureArea> {
             coEvery {
-                keyAgreement(eq(alias), any(), any<UnlockReason>())
+                keyAgreement(eq(alias), any(), any<Reason>())
             } returns expectedSharedSecret
             coEvery { getKeyInvalidated(any()) } returns false
         }

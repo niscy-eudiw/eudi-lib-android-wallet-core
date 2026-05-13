@@ -20,10 +20,10 @@ import eu.europa.ec.eudi.wallet.document.internal.asProvider
 import kotlinx.coroutines.withContext
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.EcSignature
+import org.multipaz.prompt.Reason
 import org.multipaz.securearea.KeyInfo
 import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.securearea.SecureArea
-import org.multipaz.securearea.UnlockReason
 
 /**
  * A collection of [ProofOfPossessionSigner] instances.
@@ -111,7 +111,7 @@ class ProofOfPossessionSignerImpl(
             secureArea.sign(
                 alias = keyAlias,
                 dataToSign = dataToSign,
-                unlockReason = UnlockReason.Unspecified
+                unlockReason = Reason.Unspecified
             )
         }
     }

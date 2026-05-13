@@ -21,6 +21,7 @@ import COSE.MessageTag
 import COSE.Sign1Message
 import com.upokecenter.cbor.CBORObject
 import eu.europa.ec.eudi.wallet.document.internal.getEmbeddedCBORObject
+import kotlinx.io.bytestring.ByteString
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.mdoc.mso.MobileSecurityObjectParser
 
@@ -35,11 +36,12 @@ class MsoMdocCredentialCertifier() : CredentialCertification {
         val issuerAuth =
             Message.DecodeFromBytes(issuerAuthBytes, MessageTag.Sign1) as Sign1Message
         val msoBytes = issuerAuth.GetContent().getEmbeddedCBORObject().EncodeToBytes()
+        // TODO: deprecated
         val mso = MobileSecurityObjectParser(msoBytes).parse()
         if (mso.deviceKey != credential.secureArea.getKeyInfo(credential.alias).publicKey) {
             val msg = "Public key in MSO does not match the one in the request"
             throw IllegalArgumentException(msg)
         }
-        credential.certify(data, mso.validFrom, mso.validUntil)
+        credential.certify(ByteString(data))
     }
 }
