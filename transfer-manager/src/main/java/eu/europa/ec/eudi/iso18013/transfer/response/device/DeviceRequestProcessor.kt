@@ -26,9 +26,7 @@ import eu.europa.ec.eudi.iso18013.transfer.response.Request
 import eu.europa.ec.eudi.iso18013.transfer.response.RequestProcessor
 import eu.europa.ec.eudi.iso18013.transfer.response.RequestedDocument
 import eu.europa.ec.eudi.iso18013.transfer.response.RequestedDocuments
-import eu.europa.ec.eudi.iso18013.transfer.zkp.MatchedZkSystem
 import eu.europa.ec.eudi.iso18013.transfer.zkp.ZkResponsePolicy
-import eu.europa.ec.eudi.iso18013.transfer.zkp.findMatchedZkSystem
 import eu.europa.ec.eudi.wallet.document.DocType
 import eu.europa.ec.eudi.wallet.document.DocumentManager
 import eu.europa.ec.eudi.wallet.document.ElementIdentifier
@@ -38,6 +36,7 @@ import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.mdoc.request.DocRequest
 import org.multipaz.mdoc.zkp.ZkSystemRepository
+import org.multipaz.mdoc.zkp.ZkSystemSpec
 import org.multipaz.mdoc.request.DeviceRequest as MultipazDeviceRequest
 
 /**
@@ -45,7 +44,7 @@ import org.multipaz.mdoc.request.DeviceRequest as MultipazDeviceRequest
  * @property documentManager the document manager to retrieve the requested documents
  * @property readerTrustStore the reader trust store to perform reader authentication
  * @property readerAuthPolicy the policy for enforcing reader authentication results during response generation
- * @property zkSystemRepository the zero-knowledge proof system repository
+ * @property zkSystemRepository the ZKP system repository
  * @property zkResponsePolicy the ZK response policy to use when ZK proof generation fails
  */
 class DeviceRequestProcessor(
@@ -100,6 +99,7 @@ class DeviceRequestProcessor(
                 documentManager = documentManager,
                 requestedDocuments = requestedDocuments,
                 sessionTranscript = request.sessionTranscriptBytes,
+                zkSystemRepository = zkSystemRepository,
                 readerAuthPolicy = readerAuthPolicy,
                 zkResponsePolicy = zkResponsePolicy,
             )
@@ -139,7 +139,7 @@ class DeviceRequestProcessor(
                         documentId = it.id,
                         requestedItems = docItems,
                         readerAuth = requestedDocument.readerAuthentication.invoke(),
-                        matchedZkSystem = requestedDocument.matchedZkSystem
+                        zkRequestSystemSpecs = requestedDocument.zkRequestSystemSpecs
                     )
                 }
             }.let { RequestedDocuments(it) }
@@ -151,13 +151,13 @@ class DeviceRequestProcessor(
      * @property docType the document type
      * @property requested the requested elements
      * @property readerAuthentication the reader authentication
-     * @property matchedZkSystem the matched zero-knowledge proof system and its specification, if any
+     * @property zkRequestSystemSpecs the ZKP system specs requested by the verifier, or null if none
      */
     data class RequestedMdocDocument(
         val docType: DocType,
         val requested: Map<NameSpace, Map<ElementIdentifier, Boolean>>,
         val readerAuthentication: () -> ReaderAuth?,
-        val matchedZkSystem: MatchedZkSystem? = null
+        val zkRequestSystemSpecs: List<ZkSystemSpec>? = null
     )
 
     /**
@@ -182,7 +182,7 @@ class DeviceRequestProcessor(
                     sessionTranscript = sessionTranscript
                 )
             },
-            matchedZkSystem = zkSystemRepository?.let { findMatchedZkSystem(it) }
+            zkRequestSystemSpecs = docRequestInfo?.zkRequest?.systemSpecs
         )
     }
 }
