@@ -1,7 +1,7 @@
 
 # EUDI Wallet Libraries
 ## Dependency License Report
-_2026-05-11 21:15:02 EEST_
+_2026-05-13 19:32:36 EEST_
 ## Apache License, Version 2.0
 
 **1** **Group:** `com.nimbusds` **Name:** `nimbus-jose-jwt` **Version:** `10.9` 
@@ -30,7 +30,7 @@ _2026-05-11 21:15:02 EEST_
 > - **POM Project URL**: [https://kotlinlang.org/](https://kotlinlang.org/)
 > - **POM License**: Apache License, Version 2.0 - [https://www.apache.org/licenses/LICENSE-2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
-**7** **Group:** `org.jetbrains.kotlinx` **Name:** `kotlinx-io-bytestring` **Version:** `0.8.0` 
+**7** **Group:** `org.jetbrains.kotlinx` **Name:** `kotlinx-io-core` **Version:** `0.8.2` 
 > - **POM Project URL**: [https://github.com/Kotlin/kotlinx-io](https://github.com/Kotlin/kotlinx-io)
 > - **POM License**: Apache License, Version 2.0 - [https://www.apache.org/licenses/LICENSE-2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
@@ -38,15 +38,16 @@ _2026-05-11 21:15:02 EEST_
 > - **POM Project URL**: [https://github.com/Kotlin/kotlinx.coroutines](https://github.com/Kotlin/kotlinx.coroutines)
 > - **POM License**: Apache License, Version 2.0 - [https://www.apache.org/licenses/LICENSE-2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
-**9** **Group:** `org.jetbrains.kotlinx` **Name:** `kotlinx-io-core` **Version:** `0.8.0` 
-> - **POM Project URL**: [https://github.com/Kotlin/kotlinx-io](https://github.com/Kotlin/kotlinx-io)
-> - **POM License**: Apache License, Version 2.0 - [https://www.apache.org/licenses/LICENSE-2.0](https://www.apache.org/licenses/LICENSE-2.0)
-
-**10** **Group:** `org.jetbrains.kotlinx` **Name:** `kotlinx-serialization-json` **Version:** `1.9.0` 
+**9** **Group:** `org.jetbrains.kotlinx` **Name:** `kotlinx-serialization-json` **Version:** `1.9.0` 
 > - **POM Project URL**: [https://github.com/Kotlin/kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization)
 > - **POM License**: Apache License, Version 2.0 - [https://www.apache.org/licenses/LICENSE-2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
-**11** **Group:** `org.multipaz` **Name:** `multipaz` **Version:** `0.95.0` 
+**10** **Group:** `org.jetbrains.kotlinx` **Name:** `kotlinx-io-bytestring` **Version:** `0.8.2` 
+> - **POM Project URL**: [https://github.com/Kotlin/kotlinx-io](https://github.com/Kotlin/kotlinx-io)
+> - **POM License**: Apache License, Version 2.0 - [https://www.apache.org/licenses/LICENSE-2.0](https://www.apache.org/licenses/LICENSE-2.0)
+
+**11** **Group:** `org.multipaz` **Name:** `multipaz` **Version:** `0.99.0` 
+> - **POM Project URL**: [https://github.com/openwallet-foundation/multipaz](https://github.com/openwallet-foundation/multipaz)
 > - **POM License**: Apache License, Version 2.0 - [https://www.apache.org/licenses/LICENSE-2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
 ## BSD3

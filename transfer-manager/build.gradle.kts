@@ -25,7 +25,7 @@ dependencies {
     implementation(libs.bouncy.castle.prov)
     implementation(libs.bouncy.castle.pkix)
 
-    testImplementation(kotlin("test"))
+    testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.json)
     testImplementation(libs.mockito.inline)

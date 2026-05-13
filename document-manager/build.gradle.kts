@@ -4,10 +4,10 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-android {
-    // base opt-ins already in the convention plugin; document-manager adds one extra
-    kotlinOptions {
-        freeCompilerArgs += listOf("-opt-in=kotlin.ExperimentalApi")
+// base opt-ins already in the convention plugin; document-manager adds one extra
+kotlin {
+    compilerOptions {
+        freeCompilerArgs.addAll("-opt-in=kotlin.ExperimentalApi")
     }
 }
 
@@ -36,7 +36,7 @@ dependencies {
     implementation(libs.bouncy.castle.prov)
     implementation(libs.bouncy.castle.pkix)
 
-    testImplementation(kotlin("test"))
+    testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.json)
     testImplementation(libs.kotlin.coroutines.test)
