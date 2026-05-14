@@ -27,7 +27,6 @@ import eu.europa.ec.eudi.wallet.document.format.SdJwtVcFormat
 import eu.europa.ec.eudi.wallet.issue.openid4vci.DeferredIssueResult
 import eu.europa.ec.eudi.wallet.issue.openid4vci.OpenId4VciManager
 import eu.europa.ec.eudi.wallet.issue.openid4vci.ProcessDeferredOutcome
-import eu.europa.ec.eudi.wallet.provider.WalletKeyManager
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -45,7 +44,6 @@ import java.security.cert.TrustAnchor
 class ProcessDeferredOutcomeTrustTest {
 
     private val documentManager = mockk<DocumentManager>(relaxed = true)
-    private val walletKeyManager = mockk<WalletKeyManager>()
     private val issuedDocument = mockk<IssuedDocument> {
         every { id } returns "doc-id"
         every { name } returns "Test Document"
@@ -89,8 +87,6 @@ class ProcessDeferredOutcomeTrustTest {
         config: IssuerTrustConfig? = null,
     ) = ProcessDeferredOutcome(
         documentManager = documentManager,
-        walletKeyManager = walletKeyManager,
-        clientAttestationPopKeyId = null,
         callback = callback,
         deferredContext = null,
         logger = null,

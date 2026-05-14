@@ -23,11 +23,12 @@ import org.jetbrains.annotations.VisibleForTesting
 
 internal class OfferResolver(
     private val ktorHttpClientFactory: () -> HttpClient,
+    private val issuerMetadataPolicy: IssuerMetadataPolicy = IssuerMetadataPolicy.IgnoreSigned,
 ) {
     val resolver by lazy {
         CredentialOfferRequestResolver(
             httpClient = ktorHttpClientFactory(),
-            issuerMetadataPolicy = IssuerMetadataPolicy.IgnoreSigned
+            issuerMetadataPolicy = issuerMetadataPolicy
         )
     }
 

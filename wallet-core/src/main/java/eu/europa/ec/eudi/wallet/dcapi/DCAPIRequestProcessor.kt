@@ -76,16 +76,20 @@ internal class DCAPIRequestProcessor(
         ).process(deviceRequest) as ProcessedDeviceRequest
 
         val credentialId = credRequest.selectedEntryId
-        logger?.d(TAG, "Selected credential ID: $credentialId")
+        logger?.d(TAG, "Selected credential ID (selectedEntryId): '$credentialId' (type=${credentialId?.let { it::class.simpleName }}, isNull=${credentialId == null})")
+        logger?.d(TAG, "Available requestedDocuments IDs: ${processedDeviceRequest.requestedDocuments.map { "'${it.documentId}'" }}")
+        logger?.d(TAG, "DocumentManager instance: ${documentManager::class.qualifiedName}@${System.identityHashCode(documentManager).toString(16)}")
 
         // Filter the requested documents and ProcessedDeviceRequest
         // based on the selected credential ID provided by the credential request.
-        logger?.d(TAG, "Filtering requested documents for credential ID: $credentialId")
+        logger?.d(TAG, "Filtering requested documents for credential ID: '$credentialId'")
         val filteredRequestedDocuments = processedDeviceRequest.requestedDocuments.filter {
-            it.documentId == credentialId
+            val matches = it.documentId == credentialId
+            logger?.d(TAG, "  Comparing documentId='${it.documentId}' == selectedEntryId='$credentialId' => $matches")
+            matches
         }
         if (filteredRequestedDocuments.isEmpty()) {
-            logger?.e(TAG, "No requested document found for credential ID: $credentialId")
+            logger?.e(TAG, "No requested document found for credential ID: '$credentialId'. Available IDs: ${processedDeviceRequest.requestedDocuments.map { it.documentId }}")
             return RequestProcessor.ProcessedRequest.Failure(
                 DCAPIException("No requested document found for credential ID: $credentialId")
             )

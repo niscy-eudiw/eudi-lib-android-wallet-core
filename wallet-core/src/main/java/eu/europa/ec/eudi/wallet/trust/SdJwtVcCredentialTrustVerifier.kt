@@ -55,6 +55,7 @@ internal class SdJwtVcCredentialTrustVerifier(
         val verifier = NimbusSdJwtOps.SdJwtVcVerifier(
             IssuerVerificationMethod.UsingX5c(trust),
             TypeMetadataPolicy.NotUsed,
+            checkStatus = null
         )
 
         verifier.verify(credentialValue).getOrNull()

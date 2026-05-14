@@ -16,7 +16,10 @@
 package eu.europa.ec.eudi.wallet.trust
 
 import eu.europa.ec.eudi.etsi1196x2.consultation.CertificationChainValidation
+import eu.europa.ec.eudi.openid4vci.AuthorizedRequest
+import eu.europa.ec.eudi.openid4vci.ClientAuthentication
 import eu.europa.ec.eudi.openid4vci.Credential
+import eu.europa.ec.eudi.openid4vci.Issuer
 import eu.europa.ec.eudi.openid4vci.IssuedCredential
 import eu.europa.ec.eudi.openid4vci.SubmissionOutcome
 import eu.europa.ec.eudi.wallet.document.DocumentId
@@ -27,9 +30,9 @@ import eu.europa.ec.eudi.wallet.document.UnsignedDocument
 import eu.europa.ec.eudi.wallet.document.format.SdJwtVcFormat
 import eu.europa.ec.eudi.wallet.issue.openid4vci.DeferredContextFactory
 import eu.europa.ec.eudi.wallet.issue.openid4vci.IssueEvent
+import eu.europa.ec.eudi.wallet.issue.openid4vci.Offer
 import eu.europa.ec.eudi.wallet.issue.openid4vci.OpenId4VciManager
 import eu.europa.ec.eudi.wallet.issue.openid4vci.ProcessResponse
-import eu.europa.ec.eudi.wallet.provider.WalletKeyManager
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -40,6 +43,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.multipaz.storage.Storage
 import org.robolectric.RobolectricTestRunner
 import java.security.cert.TrustAnchor
 
@@ -48,8 +52,8 @@ class ProcessResponseTrustTest {
 
     private val documentManager = mockk<DocumentManager>(relaxed = true)
     private val deferredContextFactory = mockk<DeferredContextFactory>()
-    private val walletKeyManager = mockk<WalletKeyManager>()
     private val issuedDocumentIds = mutableListOf<DocumentId>()
+    private val deferredDocumentIds = mutableListOf<DocumentId>()
     private val issuedDocument = mockk<IssuedDocument> {
         every { id } returns "doc-id"
         every { name } returns "Test Document"
@@ -94,11 +98,17 @@ class ProcessResponseTrustTest {
     ) = ProcessResponse(
         documentManager = documentManager,
         deferredContextFactory = deferredContextFactory,
-        walletKeyManager = walletKeyManager,
         clientAttestationPopKeyId = null,
         listener = listener,
         issuedDocumentIds = issuedDocumentIds,
+        deferredDocumentIds = deferredDocumentIds,
         logger = null,
+        authorizedRequest = mockk<AuthorizedRequest>(relaxed = true),
+        issuer = mockk<Issuer>(relaxed = true),
+        documentToConfigurationMap = emptyMap(),
+        dpopKeyAlias = null,
+        issuanceMetadataStorage = mockk<Storage>(relaxed = true),
+        clientAuthentication = mockk<ClientAuthentication>(relaxed = true),
         issuerTrustConfig = config,
     )
 

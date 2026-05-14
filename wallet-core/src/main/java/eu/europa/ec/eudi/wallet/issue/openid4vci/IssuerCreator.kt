@@ -58,6 +58,7 @@ internal class IssuerCreator(
     private val walletProvider: WalletAttestationsProvider?,
     private val walletAttestationKeyManager: WalletKeyManager,
     private val logger: Logger?,
+    private val issuerMetadataPolicy: IssuerMetadataPolicy = IssuerMetadataPolicy.IgnoreSigned,
 ) {
 
     internal var clientAttestationPopKeyId: String? = null
@@ -127,7 +128,7 @@ internal class IssuerCreator(
 
     private suspend fun getIssuerMetadata(credentialIssuerId: CredentialIssuerId): Pair<CredentialIssuerMetadata, List<CIAuthorizationServerMetadata>> {
         return ktorHttpClientFactory().use {
-            Issuer.metaData(it, credentialIssuerId, IssuerMetadataPolicy.IgnoreSigned)
+            Issuer.metaData(it, credentialIssuerId, issuerMetadataPolicy)
         }
     }
 
