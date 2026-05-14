@@ -17,6 +17,7 @@ package eu.europa.ec.eudi.wallet.trust
 
 import eu.europa.ec.eudi.etsi1196x2.consultation.AttestationClassifications
 import eu.europa.ec.eudi.etsi1196x2.consultation.IsChainTrustedForAttestation
+import eu.europa.ec.eudi.openid4vci.IssuerMetadataPolicy
 import eu.europa.ec.eudi.wallet.document.format.DocumentFormat
 import java.security.cert.TrustAnchor
 import java.security.cert.X509Certificate
@@ -26,16 +27,18 @@ import kotlin.reflect.KClass
  * Configuration for issuer trust verification.
  *
  * Holds the trust source, optional attestation classifications, the trust policy,
- * and per-format credential trust verifiers.
+ * per-format credential trust verifiers, and the issuer metadata policy.
  *
  * @param isChainTrustedForAttestation the ETSI trust source for validating certificate chains
  * @param classifications optional attestation classifications for mapping credentials to verification contexts
  * @param trustPolicy the policy determining how to handle trust verification results
  * @param credentialTrustVerifiers per-format verifiers that extract certificate chains from credentials
+ * @param issuerMetadataPolicy the OpenID4VCI metadata policy controlling signed metadata verification
  */
 internal data class IssuerTrustConfig(
     val isChainTrustedForAttestation: IsChainTrustedForAttestation<List<X509Certificate>, TrustAnchor>,
     val classifications: AttestationClassifications?,
     val trustPolicy: TrustPolicy,
     val credentialTrustVerifiers: Map<KClass<out DocumentFormat>, CredentialTrustVerifier>,
+    val issuerMetadataPolicy: IssuerMetadataPolicy = IssuerMetadataPolicy.IgnoreSigned,
 )

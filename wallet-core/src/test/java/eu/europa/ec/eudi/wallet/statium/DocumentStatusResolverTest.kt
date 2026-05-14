@@ -240,7 +240,6 @@ class DocumentStatusResolverTest {
         
         // When
         val resolver = DocumentStatusResolver(
-            verifySignature = verifySignature,
             ktorHttpClientFactory = mockHttpClientFactory,
             allowedClockSkew = customClockSkew
         )

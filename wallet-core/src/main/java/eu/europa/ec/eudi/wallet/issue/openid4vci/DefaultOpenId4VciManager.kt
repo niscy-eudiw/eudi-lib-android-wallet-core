@@ -88,11 +88,14 @@ internal class DefaultOpenId4VciManager(
             .wrappedWithLogging(logger)
             .wrappedWithContentNegotiation()
 
+    private val issuerMetadataPolicy: IssuerMetadataPolicy
+        get() = issuerTrustConfig?.issuerMetadataPolicy ?: IssuerMetadataPolicy.IgnoreSigned
+
     private val offerResolver: OfferResolver by lazy {
-        OfferResolver(httpClientFactory)
+        OfferResolver(httpClientFactory, issuerMetadataPolicy)
     }
     private val issuerCreator: IssuerCreator by lazy {
-        IssuerCreator(context, config, httpClientFactory, walletProvider, walletAttestationKeyManager, logger)
+        IssuerCreator(context, config, httpClientFactory, walletProvider, walletAttestationKeyManager, logger, issuerMetadataPolicy)
     }
     private val issuerAuthorization: IssuerAuthorization by lazy {
         val handler = config.authorizationHandler ?: BrowserAuthorizationHandler(context, logger)
@@ -117,7 +120,7 @@ internal class DefaultOpenId4VciManager(
         return CredentialIssuerId(config.issuerUrl).mapCatching {
             CredentialIssuerMetadataResolver(httpClientFactory()).resolve(
                 issuer = it,
-                policy = IssuerMetadataPolicy.IgnoreSigned
+                policy = issuerMetadataPolicy
             ).getOrThrow()
         }
     }

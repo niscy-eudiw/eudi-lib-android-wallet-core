@@ -22,6 +22,8 @@ import eu.europa.ec.eudi.etsi1196x2.consultation.CertificationChainValidation
 import eu.europa.ec.eudi.etsi1196x2.consultation.IsChainTrustedForAttestation
 import eu.europa.ec.eudi.etsi1196x2.consultation.IsChainTrustedForEUDIW
 import eu.europa.ec.eudi.etsi1196x2.consultation.VerificationContext
+import eu.europa.ec.eudi.openid4vci.CertificateChainTrust
+import eu.europa.ec.eudi.openid4vci.IssuerMetadataPolicy
 import eu.europa.ec.eudi.wallet.document.format.MsoMdocFormat
 import eu.europa.ec.eudi.wallet.document.format.SdJwtVcFormat
 import io.mockk.coEvery
@@ -109,5 +111,55 @@ class IssuerTrustConfigBuilderTest {
             VerificationContext.PID,
         )
         assertEquals(TrustPolicy.Action.ENFORCE, action)
+    }
+
+    @Test
+    fun defaultMetadataPolicyIsIgnoreSigned() {
+        val mockAttestation = mockk<IsChainTrustedForAttestation<List<X509Certificate>, TrustAnchor>>()
+
+        val config = IssuerTrustConfigBuilder().apply {
+            trustSource(mockAttestation)
+        }.build()
+
+        assertEquals(IssuerMetadataPolicy.IgnoreSigned, config.issuerMetadataPolicy)
+    }
+
+    @Test
+    fun requireSignedMetadataWithEudiwSource() {
+        val mockEudiw = mockk<IsChainTrustedForEUDIW<List<X509Certificate>, TrustAnchor>>()
+        val classifications = AttestationClassifications(
+            pids = AttestationIdentifierPredicate.equalsTo(AttestationIdentifier.MDoc("eu.europa.ec.eudi.pid.1")),
+        )
+
+        val config = IssuerTrustConfigBuilder().apply {
+            trustSource(mockEudiw)
+            classifications(classifications)
+            requireSignedMetadata()
+        }.build()
+
+        assertTrue(config.issuerMetadataPolicy is IssuerMetadataPolicy.RequireSigned)
+    }
+
+    @Test
+    fun preferSignedMetadataWithCustomTrust() {
+        val mockAttestation = mockk<IsChainTrustedForAttestation<List<X509Certificate>, TrustAnchor>>()
+        val customTrust = mockk<CertificateChainTrust>()
+
+        val config = IssuerTrustConfigBuilder().apply {
+            trustSource(mockAttestation)
+            preferSignedMetadata(customTrust)
+        }.build()
+
+        assertTrue(config.issuerMetadataPolicy is IssuerMetadataPolicy.PreferSigned)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun requireSignedMetadataWithoutSourceOrCustomTrustThrows() {
+        val mockAttestation = mockk<IsChainTrustedForAttestation<List<X509Certificate>, TrustAnchor>>()
+
+        IssuerTrustConfigBuilder().apply {
+            trustSource(mockAttestation)
+            requireSignedMetadata()
+        }.build()
     }
 }

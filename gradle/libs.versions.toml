@@ -17,7 +17,7 @@ eudi-lib-jvm-openid4vci-kt = "0.10.1"
 eudi-lib-jvm-openid4vp-kt = "0.12.2"
 eudi-lib-jvm-sdjwt-kt = "0.20.0"
 eudi-lib-kmp-statium = "0.5.1"
-gradle-plugin = "9.0.1"
+gradle-plugin = "9.1.1"
 java = "17"
 json = "20250517"
 junit = "5.13.2"
@@ -44,6 +44,7 @@ material = "1.12.0"
 jetbrainsKotlinJvm = "2.2.21"
 testng = "7.11.0"
 kover = "0.9.1"
+eudi-lib-kmp-etsi1196x2="0.3.0-alpha.5"
 
 [libraries]
 androidx-credentials = { module = "androidx.credentials:credentials", version.ref = "androidx-credentials" }
