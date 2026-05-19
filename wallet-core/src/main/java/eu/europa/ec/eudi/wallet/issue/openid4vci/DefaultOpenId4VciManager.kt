@@ -422,6 +422,7 @@ internal class DefaultOpenId4VciManager(
                     issuanceMetadataStorage = issuanceMetadataStorage,
                     clientAuthentication = issuerCreator.clientAuthentication,
                     replacesDocumentId = documentId,
+                    issuerTrustConfig = issuerTrustConfig,
                 ).process(response)
 
                 //  If new document(s) issued successfully, delete the old document.
