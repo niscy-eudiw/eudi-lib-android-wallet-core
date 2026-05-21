@@ -20,7 +20,6 @@ import eu.europa.ec.eudi.etsi1196x2.consultation.ComposeChainTrust
 import eu.europa.ec.eudi.etsi1196x2.consultation.IsChainTrustedForAttestation
 import eu.europa.ec.eudi.etsi1196x2.consultation.IsChainTrustedForEUDIW
 import eu.europa.ec.eudi.etsi1196x2.consultation.VerificationContext
-import eu.europa.ec.eudi.openid4vci.CertificateChainTrust
 import eu.europa.ec.eudi.openid4vci.IssuerMetadataPolicy
 import eu.europa.ec.eudi.openid4vci.IssuerTrust
 import eu.europa.ec.eudi.wallet.document.format.DocumentFormat
@@ -57,8 +56,7 @@ class IssuerTrustConfigBuilder {
     private var classifications: AttestationClassifications? = null
     private var policyBuilder: (TrustPolicy.Builder.() -> Unit)? = null
     private val customVerifiers = mutableMapOf<KClass<out DocumentFormat>, CredentialTrustVerifier>()
-    private var metadataPolicyMode: MetadataPolicyMode = MetadataPolicyMode.IGNORE
-    private var customCertificateChainTrust: CertificateChainTrust? = null
+    private var metadataPolicyMode: MetadataPolicyMode = MetadataPolicyMode.REQUIRE
 
     private enum class MetadataPolicyMode { IGNORE, REQUIRE, PREFER }
 
@@ -129,31 +127,33 @@ class IssuerTrustConfigBuilder {
      * configured ETSI trust source using
      * [VerificationContext.WalletRelyingPartyAccessCertificate].
      *
-     * If the trust source is an [IsChainTrustedForEUDIW] (set via [trustSource]),
-     * the ETSI adapter is used automatically. Otherwise, a custom
-     * [CertificateChainTrust] must be provided.
-     *
-     * @param certificateChainTrust optional custom trust validator; if null,
-     *   the ETSI-backed adapter is used (requires [IsChainTrustedForEUDIW] trust source)
+     * Requires an [IsChainTrustedForEUDIW] trust source (set via [trustSource]).
      */
-    fun requireSignedMetadata(certificateChainTrust: CertificateChainTrust? = null) {
+    fun requireSignedMetadata() {
         this.metadataPolicyMode = MetadataPolicyMode.REQUIRE
-        this.customCertificateChainTrust = certificateChainTrust
     }
 
     /**
      * Prefers signed issuer metadata for OpenID4VCI operations.
      *
-     * When set, the wallet will prefer signed JWT metadata from credential issuers but
+     * The wallet will prefer signed JWT metadata from credential issuers but
      * will fall back to unsigned metadata if signed metadata is not available.
-     * The certificate chain validation follows the same rules as [requireSignedMetadata].
+     * Use this to relax the default [requireSignedMetadata] behaviour.
      *
-     * @param certificateChainTrust optional custom trust validator; if null,
-     *   the ETSI-backed adapter is used (requires [IsChainTrustedForEUDIW] trust source)
+     * Requires an [IsChainTrustedForEUDIW] trust source (set via [trustSource]).
      */
-    fun preferSignedMetadata(certificateChainTrust: CertificateChainTrust? = null) {
+    fun preferSignedMetadata() {
         this.metadataPolicyMode = MetadataPolicyMode.PREFER
-        this.customCertificateChainTrust = certificateChainTrust
+    }
+
+    /**
+     * Disables signed issuer metadata verification.
+     *
+     * When set, the wallet will ignore signed metadata and use only unsigned metadata.
+     * Use this to explicitly opt out of the default [requireSignedMetadata] behaviour.
+     */
+    fun ignoreSignedMetadata() {
+        this.metadataPolicyMode = MetadataPolicyMode.IGNORE
     }
 
     /**
@@ -204,24 +204,22 @@ class IssuerTrustConfigBuilder {
         )
     }
 
-    private fun buildIssuerMetadataPolicy(): IssuerMetadataPolicy {
-        if (metadataPolicyMode == MetadataPolicyMode.IGNORE) {
-            return IssuerMetadataPolicy.IgnoreSigned
-        }
-
-        val chainTrust = customCertificateChainTrust
-            ?: eudiwSource?.let { EtsiCertificateChainTrust(it) }
-            ?: throw IllegalArgumentException(
-                "Signed metadata verification requires either a CertificateChainTrust " +
-                    "or an IsChainTrustedForEUDIW trust source"
-            )
-
-        val issuerTrust = IssuerTrust.ByCertificateChain(chainTrust)
-
-        return when (metadataPolicyMode) {
-            MetadataPolicyMode.REQUIRE -> IssuerMetadataPolicy.RequireSigned(issuerTrust)
-            MetadataPolicyMode.PREFER -> IssuerMetadataPolicy.PreferSigned(issuerTrust)
+    private fun buildIssuerMetadataPolicy(): IssuerMetadataPolicy =
+        when (metadataPolicyMode) {
             MetadataPolicyMode.IGNORE -> IssuerMetadataPolicy.IgnoreSigned
+            MetadataPolicyMode.REQUIRE,
+            MetadataPolicyMode.PREFER -> {
+                val source = eudiwSource
+                    ?: throw IllegalArgumentException(
+                        "Signed metadata verification requires an IsChainTrustedForEUDIW trust source. " +
+                            "Call ignoreSignedMetadata() to opt out."
+                    )
+                val issuerTrust = IssuerTrust.ByCertificateChain(EtsiCertificateChainTrust(source))
+                if (metadataPolicyMode == MetadataPolicyMode.REQUIRE) {
+                    IssuerMetadataPolicy.RequireSigned(issuerTrust)
+                } else {
+                    IssuerMetadataPolicy.PreferSigned(issuerTrust)
+                }
+            }
         }
-    }
 }

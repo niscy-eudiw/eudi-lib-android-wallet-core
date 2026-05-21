@@ -20,6 +20,7 @@ import eu.europa.ec.eudi.openid4vci.AuthorizedRequest
 import eu.europa.ec.eudi.openid4vci.ClientAuthentication
 import eu.europa.ec.eudi.openid4vci.Credential
 import eu.europa.ec.eudi.openid4vci.Issuer
+import eu.europa.ec.eudi.openid4vci.IssuerMetadataPolicy
 import eu.europa.ec.eudi.openid4vci.IssuedCredential
 import eu.europa.ec.eudi.openid4vci.SubmissionOutcome
 import eu.europa.ec.eudi.wallet.document.DocumentId
@@ -89,6 +90,7 @@ class ProcessResponseTrustTest {
             classifications = null,
             trustPolicy = TrustPolicy.uniform(action),
             credentialTrustVerifiers = mapOf(SdJwtVcFormat::class to verifier),
+            issuerMetadataPolicy = IssuerMetadataPolicy.IgnoreSigned,
         )
     }
 

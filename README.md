@@ -97,7 +97,7 @@ The library supports the following features:
 |                            | Notify credential issuer                                                | ❌                                                                                                                      |
 | **Issuer Trust**           | Trust verification during issuance (LoTE)                               | ✅ mso_mdoc format <br /> ✅ sd-jwt-vc format                                                                            |
 |                            | Trust policy (ENFORCE / INFORM)                                         | ✅                                                                                                                      |
-|                            | Signed issuer metadata verification                                     | ✅ RequireSigned / PreferSigned / IgnoreSigned                                                                           |
+|                            | Signed issuer metadata verification                                     | ✅ RequireSigned (default) / PreferSigned / IgnoreSigned                                                                 |
 |                            | Custom credential format verifiers                                      | ✅ via CredentialTrustVerifier                                                                                           |
 | **Revocation Status**      | Document status resolution (token status lists)                         | ✅ JWT <br /> ✅ CWT                                                                                                     |
 |                            | Status list token signer trust verification (LoTE)                      | ✅                                                                                                                      |
@@ -754,8 +754,8 @@ val walletConfig = EudiWalletConfig {
             forContext(VerificationContext.EAA("experimental"), TrustPolicy.Action.INFORM)
             forDocType("org.example.test", TrustPolicy.Action.INFORM)
         }
-        // Optional: enable signed issuer metadata verification (see below)
-        preferSignedMetadata()
+        // Signed metadata verification defaults to RequireSigned (see below)
+        // override by calling preferSignedMetadata() or ignoreSignedMetadata()
     }
 }
 ```
@@ -765,8 +765,8 @@ val walletConfig = EudiWalletConfig {
 - **`classifications`** -- required when using `ComposeChainTrust` or `IsChainTrustedForEUDIW`
   as the trust source. Maps credential types to verification contexts.
 - **`policy`** -- configures how the wallet acts on trust results (see below).
-- **`preferSignedMetadata()`** / **`requireSignedMetadata()`** -- controls signed issuer
-  metadata verification (see [Signed Issuer Metadata Verification](#signed-issuer-metadata-verification)).
+- **`preferSignedMetadata()`** / **`ignoreSignedMetadata()`** -- relaxes the default
+  `RequireSigned` metadata policy (see [Signed Issuer Metadata Verification](#signed-issuer-metadata-verification)).
 
 ##### Trust Policies
 
@@ -853,35 +853,29 @@ Three metadata policies are available:
 
 | Policy            | Behaviour                                                                                      |
 |-------------------|------------------------------------------------------------------------------------------------|
-| `IgnoreSigned`    | **(Default)** Signed metadata is ignored; only unsigned metadata is used.                      |
+| `RequireSigned`   | **(Default)** Signed metadata must be available and its certificate chain must be trusted. Otherwise issuance fails. |
 | `PreferSigned`    | Attempts to fetch signed metadata first. Falls back to unsigned if signed is not available. When signed metadata is served but the certificate chain is untrusted, issuance **fails**. |
-| `RequireSigned`   | Signed metadata must be available and its certificate chain must be trusted. Otherwise issuance fails. |
+| `IgnoreSigned`    | Signed metadata is ignored; only unsigned metadata is used. Must be set explicitly via `ignoreSignedMetadata()`. |
 
-Configure metadata verification within the `configureIssuerTrust` DSL:
+When `configureIssuerTrust` is used with an `IsChainTrustedForEUDIW` trust source (the
+standard LoTE setup), signed metadata verification defaults to `RequireSigned`. The library
+automatically creates the trust adapter using
+`VerificationContext.WalletRelyingPartyAccessCertificate`.
+
+To override the default metadata policy:
 
 ```kotlin
 configureIssuerTrust {
     trustSource(isChainTrusted)
     classifications(myClassifications)
-    policy { default(TrustPolicy.Action.INFORM) }
+    policy { default(TrustPolicy.Action.ENFORCE) }
 
-    // Option A: prefer signed, fall back to unsigned if not available
+    // Prefer signed, but fall back to unsigned if not available
     preferSignedMetadata()
 
-    // Option B: require signed metadata (fails if not available or untrusted)
-    // requireSignedMetadata()
+    // Or explicitly disable signed metadata verification
+    // ignoreSignedMetadata()
 }
-```
-
-When `preferSignedMetadata()` or `requireSignedMetadata()` is called without arguments, the
-library automatically creates a `CertificateChainTrust` adapter from the configured
-`trustSource`, using `VerificationContext.WalletRelyingPartyAccessCertificate` as the ETSI
-context for metadata signing certificates.
-
-You can also provide a custom `CertificateChainTrust` implementation:
-
-```kotlin
-preferSignedMetadata(myCustomCertificateChainTrust)
 ```
 
 > **Note:** Metadata verification is a separate check from credential trust verification.
@@ -996,18 +990,17 @@ val config = EudiWalletConfig {
         withSchemes("openid4vp", "eudi-openid4vp", "mdoc-openid4vp")
     }
 
-    // 1. Issuer trust verification (credential issuance)
+    // Issuer trust verification (credential issuance)
+    // Signed metadata verification defaults to RequireSigned
     configureIssuerTrust {
         trustSource(isChainTrusted)
         classifications(classifications)
         policy {
             default(TrustPolicy.Action.ENFORCE)
         }
-        // 2. Signed issuer metadata verification
-        preferSignedMetadata()
     }
 
-    // 3. Revocation status trust verification
+    // Revocation status trust verification
     configureDocumentStatusResolver {
         clockSkew(5)
         configureTrust {
@@ -1021,7 +1014,7 @@ val config = EudiWalletConfig {
 }
 
 val wallet = EudiWallet(context, config) {
-    // 4. Reader authentication with ETSI trusted lists (same trust source)
+    // Reader authentication with ETSI trusted lists (same trust source)
     withReaderTrustStore(isChainTrusted.asReaderTrustStore())
 }
 

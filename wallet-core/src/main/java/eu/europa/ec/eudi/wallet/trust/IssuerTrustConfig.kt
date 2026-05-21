@@ -40,5 +40,5 @@ internal data class IssuerTrustConfig(
     val classifications: AttestationClassifications?,
     val trustPolicy: TrustPolicy,
     val credentialTrustVerifiers: Map<KClass<out DocumentFormat>, CredentialTrustVerifier>,
-    val issuerMetadataPolicy: IssuerMetadataPolicy = IssuerMetadataPolicy.IgnoreSigned,
+    val issuerMetadataPolicy: IssuerMetadataPolicy,
 )
