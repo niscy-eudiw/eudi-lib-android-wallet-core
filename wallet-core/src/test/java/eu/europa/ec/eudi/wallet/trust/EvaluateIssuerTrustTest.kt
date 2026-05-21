@@ -21,6 +21,7 @@ import eu.europa.ec.eudi.etsi1196x2.consultation.CertificationChainValidation
 import eu.europa.ec.eudi.etsi1196x2.consultation.VerificationContext
 import eu.europa.ec.eudi.etsi1196x2.consultation.predicate
 import eu.europa.ec.eudi.openid4vci.Credential
+import eu.europa.ec.eudi.openid4vci.IssuerMetadataPolicy
 import eu.europa.ec.eudi.wallet.document.Document
 import eu.europa.ec.eudi.wallet.document.format.MsoMdocFormat
 import eu.europa.ec.eudi.wallet.document.format.SdJwtVcFormat
@@ -69,6 +70,7 @@ class EvaluateIssuerTrustTest {
             classifications = null,
             trustPolicy = TrustPolicy.uniform(TrustPolicy.Action.ENFORCE),
             credentialTrustVerifiers = emptyMap(),
+            issuerMetadataPolicy = IssuerMetadataPolicy.IgnoreSigned,
         )
 
         val result = evaluateIssuerTrust(
@@ -91,6 +93,7 @@ class EvaluateIssuerTrustTest {
             classifications = null,
             trustPolicy = TrustPolicy.uniform(TrustPolicy.Action.ENFORCE),
             credentialTrustVerifiers = mapOf(MsoMdocFormat::class to verifier),
+            issuerMetadataPolicy = IssuerMetadataPolicy.IgnoreSigned,
         )
 
         val result = evaluateIssuerTrust(
@@ -115,6 +118,7 @@ class EvaluateIssuerTrustTest {
             classifications = null,
             trustPolicy = TrustPolicy.uniform(TrustPolicy.Action.ENFORCE),
             credentialTrustVerifiers = mapOf(MsoMdocFormat::class to verifier),
+            issuerMetadataPolicy = IssuerMetadataPolicy.IgnoreSigned,
         )
 
         val result = evaluateIssuerTrust(
@@ -139,6 +143,7 @@ class EvaluateIssuerTrustTest {
             classifications = null,
             trustPolicy = TrustPolicy.uniform(TrustPolicy.Action.INFORM),
             credentialTrustVerifiers = mapOf(SdJwtVcFormat::class to verifier),
+            issuerMetadataPolicy = IssuerMetadataPolicy.IgnoreSigned,
         )
 
         val result = evaluateIssuerTrust(
@@ -163,6 +168,7 @@ class EvaluateIssuerTrustTest {
             classifications = null,
             trustPolicy = TrustPolicy.uniform(TrustPolicy.Action.ENFORCE),
             credentialTrustVerifiers = mapOf(MsoMdocFormat::class to verifier),
+            issuerMetadataPolicy = IssuerMetadataPolicy.IgnoreSigned,
         )
 
         evaluateIssuerTrust(
@@ -190,6 +196,7 @@ class EvaluateIssuerTrustTest {
             classifications = null,
             trustPolicy = policy,
             credentialTrustVerifiers = mapOf(MsoMdocFormat::class to verifier),
+            issuerMetadataPolicy = IssuerMetadataPolicy.IgnoreSigned,
         )
 
         // Should NOT throw because per-attestation override is INFORM
@@ -224,6 +231,7 @@ class EvaluateIssuerTrustTest {
             classifications = classifications,
             trustPolicy = policy,
             credentialTrustVerifiers = mapOf(MsoMdocFormat::class to verifier),
+            issuerMetadataPolicy = IssuerMetadataPolicy.IgnoreSigned,
         )
 
         // Should NOT throw because per-context override for PID is INFORM

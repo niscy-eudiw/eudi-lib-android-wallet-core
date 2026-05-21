@@ -18,6 +18,7 @@ package eu.europa.ec.eudi.wallet.trust
 import eu.europa.ec.eudi.etsi1196x2.consultation.CertificationChainValidation
 import eu.europa.ec.eudi.openid4vci.Credential
 import eu.europa.ec.eudi.openid4vci.DeferredCredentialQueryOutcome
+import eu.europa.ec.eudi.openid4vci.IssuerMetadataPolicy
 import eu.europa.ec.eudi.openid4vci.IssuedCredential
 import eu.europa.ec.eudi.wallet.document.DeferredDocument
 import eu.europa.ec.eudi.wallet.document.DocumentManager
@@ -79,6 +80,7 @@ class ProcessDeferredOutcomeTrustTest {
             classifications = null,
             trustPolicy = TrustPolicy.uniform(action),
             credentialTrustVerifiers = mapOf(SdJwtVcFormat::class to verifier),
+            issuerMetadataPolicy = IssuerMetadataPolicy.IgnoreSigned,
         )
     }
 
