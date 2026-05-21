@@ -136,15 +136,8 @@ dependencies {
     // Document status
     api(libs.eudi.lib.kmp.statium)
 
-    // ETSI Trusted Lists (VerificationContext, AttestationIdentifier, etc.)
+    // ETSI Trusted Lists
     api(libs.eudi.lib.kmp.etsi1196x2.consultation)
-    // ETSI Trusted Lists - DSS module for LOTL support (TS 119 612)
-//    implementation(libs.eudi.lib.kmp.etsi1196x2.consultation.dss)
-//    implementation(libs.dss.policy.jaxb)
-//    implementation(libs.dss.utils.google.guava)
-    // Force JAXB 4.0.7+ for Android support (DSS 6.4 pulls 3.0.2 which crashes on Android)
-//    implementation(libs.jaxb.runtime)
-//    implementation(libs.jaxb.core)
 
     // Digital Credential API
     implementation(libs.androidx.credentials)
