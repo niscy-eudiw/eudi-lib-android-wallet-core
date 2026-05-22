@@ -43,6 +43,7 @@ import eu.europa.ec.eudi.wallet.provider.WalletAttestationsProvider
 import eu.europa.ec.eudi.wallet.provider.WalletKeyManager
 import eu.europa.ec.eudi.wallet.statium.DocumentStatusResolver
 import eu.europa.ec.eudi.wallet.transactionLogging.TransactionLogger
+import eu.europa.ec.eudi.wallet.trust.EtsiReaderTrustStore
 import eu.europa.ec.eudi.wallet.transactionLogging.presentation.TransactionsDecorator
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.OpenId4VpManager
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.dcql.DcqlRequestProcessor
@@ -389,7 +390,9 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
                         } else manager
                     }
 
-            val readerTrustStoreToUse = readerTrustStore ?: defaultReaderTrustStore
+            val readerTrustStoreToUse = (readerTrustStore ?: defaultReaderTrustStore)?.also {
+                if (it is EtsiReaderTrustStore) it.logger = loggerToUse
+            }
 
             val transferManager = getTransferManager(documentManagerToUse, readerTrustStoreToUse)
 
@@ -474,12 +477,14 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
             ).absolutePath
 
         /**
-         * Get the default [ReaderTrustStore] instance based on the certificates provided in the configuration
+         * Get the default [ReaderTrustStore] instance based on the configuration.
+         * A custom [ReaderTrustStore] set via [EudiWalletConfig.configureReaderTrustStore]
+         * takes priority over certificate-based configuration.
          * @return the default [ReaderTrustStore] instance
          */
         @get:JvmSynthetic
         internal val defaultReaderTrustStore: ReaderTrustStore?
-            get() = config.readerTrustedCertificates?.let { certificates ->
+            get() = config.readerTrustStore ?: config.readerTrustedCertificates?.let { certificates ->
                 ReaderTrustStoreImpl(certificates, profileValidation = { _, _ -> true })
             }
 

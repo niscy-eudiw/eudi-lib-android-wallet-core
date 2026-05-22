@@ -18,6 +18,7 @@ package eu.europa.ec.eudi.wallet.trust
 import eu.europa.ec.eudi.etsi1196x2.consultation.IsChainTrustedForEUDIW
 import eu.europa.ec.eudi.etsi1196x2.consultation.VerificationContext
 import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStore
+import eu.europa.ec.eudi.wallet.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import java.security.cert.TrustAnchor
 import java.security.cert.X509Certificate
@@ -39,9 +40,11 @@ import kotlin.coroutines.CoroutineContext
  *        (defaults to [VerificationContext.WalletRelyingPartyAccessCertificate])
  * @param coroutineContext the coroutine context for the sync/async bridge
  *        (defaults to [Dispatchers.IO])
+ * @param logger optional [Logger] for diagnostic output
  * @return a [ReaderTrustStore] that delegates to this chain trust validator
  */
 fun IsChainTrustedForEUDIW<List<X509Certificate>, TrustAnchor>.asReaderTrustStore(
     verificationContext: VerificationContext = VerificationContext.WalletRelyingPartyAccessCertificate,
     coroutineContext: CoroutineContext = Dispatchers.IO,
-): ReaderTrustStore = EtsiReaderTrustStore(this, verificationContext, coroutineContext)
+    logger: Logger? = null,
+): ReaderTrustStore = EtsiReaderTrustStore(this, verificationContext, coroutineContext, logger)

@@ -19,6 +19,9 @@ import eu.europa.ec.eudi.etsi1196x2.consultation.CertificationChainValidation
 import eu.europa.ec.eudi.etsi1196x2.consultation.IsChainTrustedForEUDIW
 import eu.europa.ec.eudi.etsi1196x2.consultation.VerificationContext
 import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStore
+import eu.europa.ec.eudi.wallet.internal.d
+import eu.europa.ec.eudi.wallet.internal.e
+import eu.europa.ec.eudi.wallet.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import java.security.cert.TrustAnchor
@@ -42,12 +45,14 @@ import kotlin.coroutines.CoroutineContext
  *        (defaults to [VerificationContext.WalletRelyingPartyAccessCertificate])
  * @param coroutineContext the coroutine context for the sync/async bridge
  *        (defaults to [Dispatchers.IO])
+ * @param logger optional [Logger] for diagnostic output
  * @see asReaderTrustStore convenience extension function
  */
 class EtsiReaderTrustStore(
     private val isChainTrusted: IsChainTrustedForEUDIW<List<X509Certificate>, TrustAnchor>,
     private val verificationContext: VerificationContext = VerificationContext.WalletRelyingPartyAccessCertificate,
     private val coroutineContext: CoroutineContext = Dispatchers.IO,
+    @JvmField var logger: Logger? = null,
 ) : ReaderTrustStore {
 
     /**
@@ -75,8 +80,12 @@ class EtsiReaderTrustStore(
     override fun validateCertificationTrustPath(
         chainToDocumentSigner: List<X509Certificate>
     ): Boolean {
+        logger?.d(TAG, "validateCertificationTrustPath: chain has ${chainToDocumentSigner.size} certs, " +
+            "leaf=${chainToDocumentSigner.firstOrNull()?.subjectX500Principal}")
         val result = evaluateChain(chainToDocumentSigner) ?: return false
-        return result is CertificationChainValidation.Trusted
+        val trusted = result is CertificationChainValidation.Trusted
+        logger?.d(TAG, "validateCertificationTrustPath: result=$result, trusted=$trusted")
+        return trusted
     }
 
     private fun evaluateChain(
@@ -85,8 +94,12 @@ class EtsiReaderTrustStore(
         runBlocking(coroutineContext) {
             isChainTrusted(chain, verificationContext)
         }
-    } catch (@Suppress("TooGenericExceptionCaught") _: Exception) {
-        // Network errors, cold cache failures, etc. — treat as not trusted
+    } catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
+        logger?.e(TAG, "evaluateChain failed: ${e.message}", e)
         null
+    }
+
+    private companion object {
+        const val TAG = "ReaderTrust"
     }
 }
