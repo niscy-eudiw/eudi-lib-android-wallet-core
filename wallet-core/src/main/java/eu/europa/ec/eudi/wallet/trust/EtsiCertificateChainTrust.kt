@@ -19,6 +19,9 @@ import eu.europa.ec.eudi.etsi1196x2.consultation.CertificationChainValidation
 import eu.europa.ec.eudi.etsi1196x2.consultation.IsChainTrustedForEUDIW
 import eu.europa.ec.eudi.etsi1196x2.consultation.VerificationContext
 import eu.europa.ec.eudi.openid4vci.CertificateChainTrust
+import eu.europa.ec.eudi.wallet.internal.d
+import eu.europa.ec.eudi.wallet.internal.e
+import eu.europa.ec.eudi.wallet.logging.Logger
 import java.security.cert.TrustAnchor
 import java.security.cert.X509Certificate
 
@@ -30,18 +33,29 @@ import java.security.cert.X509Certificate
  * which is the correct context for metadata signing certificates per the EUDI specification.
  *
  * @param isChainTrusted the ETSI chain trust validator
+ * @param logger optional [Logger] for diagnostic output
  * @see EtsiReaderTrustStore for the analogous adapter for reader authentication
  */
 internal class EtsiCertificateChainTrust(
     private val isChainTrusted: IsChainTrustedForEUDIW<List<X509Certificate>, TrustAnchor>,
+    private val logger: Logger? = null,
 ) : CertificateChainTrust {
 
     override suspend fun isTrusted(chain: List<X509Certificate>): Boolean {
+        logger?.d(TAG, "isTrusted: chain has ${chain.size} certs, " +
+            "leaf=${chain.firstOrNull()?.subjectX500Principal}")
         return try {
             val result = isChainTrusted(chain, VerificationContext.WalletRelyingPartyAccessCertificate)
-            result is CertificationChainValidation.Trusted
-        } catch (@Suppress("TooGenericExceptionCaught") _: Exception) {
+            val trusted = result is CertificationChainValidation.Trusted
+            logger?.d(TAG, "isTrusted: result=$result, trusted=$trusted")
+            trusted
+        } catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
+            logger?.e(TAG, "isTrusted failed: ${e.message}", e)
             false
         }
+    }
+
+    private companion object {
+        const val TAG = "MetadataTrust"
     }
 }

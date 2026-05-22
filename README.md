@@ -924,13 +924,17 @@ signature verification without ETSI trust chain validation.
 reader certificate chain validation to the ETSI library's `IsChainTrustedForEUDIW`. It
 uses the `WalletRelyingPartyAccessCertificate` (WRPAC) verification context by default.
 
-Use the convenience extension to create a `ReaderTrustStore` from any ETSI chain trust validator:
+Configure it via `configureReaderTrustStore` on `EudiWalletConfig`, alongside the other
+trust features:
 
 ```kotlin
-val wallet = EudiWallet(context, config) {
-    withReaderTrustStore(isChainTrusted.asReaderTrustStore())
+val config = EudiWalletConfig {
+    configureReaderTrustStore(isChainTrusted.asReaderTrustStore())
 }
 ```
+
+This takes priority over certificate-based configuration. The legacy overloads that accept
+raw `X509Certificate` lists remain available for static trust anchors.
 
 Or create an `EtsiReaderTrustStore` explicitly with a specific verification context:
 
@@ -940,8 +944,8 @@ val readerTrustStore = EtsiReaderTrustStore(
     verificationContext = VerificationContext.WalletRelyingPartyAccessCertificate,
 )
 
-val wallet = EudiWallet(context, config) {
-    withReaderTrustStore(readerTrustStore)
+val config = EudiWalletConfig {
+    configureReaderTrustStore(readerTrustStore)
 }
 ```
 
@@ -1011,11 +1015,9 @@ val config = EudiWalletConfig {
             }
         }
     }
-}
 
-val wallet = EudiWallet(context, config) {
     // Reader authentication with ETSI trusted lists (same trust source)
-    withReaderTrustStore(isChainTrusted.asReaderTrustStore())
+    configureReaderTrustStore(isChainTrusted.asReaderTrustStore())
 }
 
 // On shutdown:

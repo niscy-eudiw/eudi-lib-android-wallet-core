@@ -325,6 +325,9 @@ class EudiWalletConfig {
     var readerTrustedCertificates: List<X509Certificate>? = null
         private set
 
+    internal var readerTrustStore: ReaderTrustStore? = null
+        private set
+
     /**
      * Configure the built-in [ReaderTrustStore]. This allows to set the reader trusted
      * certificates for the reader trust store.
@@ -358,6 +361,21 @@ class EudiWalletConfig {
      */
     fun configureReaderTrustStore(context: Context, @RawRes vararg certificateRes: Int) = apply {
         this.readerTrustedCertificates = certificateRes.map { context.getCertificate(it) }
+    }
+
+    /**
+     * Configure the [ReaderTrustStore] with a custom implementation.
+     *
+     * Use this to provide an ETSI-backed trust store (e.g. via
+     * [eu.europa.ec.eudi.wallet.trust.asReaderTrustStore]) or any other custom
+     * [ReaderTrustStore] implementation. This takes priority over certificate-based
+     * configuration set via the other [configureReaderTrustStore] overloads.
+     *
+     * @param readerTrustStore the custom reader trust store implementation
+     * @return the [EudiWalletConfig] instance
+     */
+    fun configureReaderTrustStore(readerTrustStore: ReaderTrustStore) = apply {
+        this.readerTrustStore = readerTrustStore
     }
 
     /**
