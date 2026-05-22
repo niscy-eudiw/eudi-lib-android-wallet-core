@@ -36,8 +36,8 @@ import kotlin.coroutines.CoroutineContext
  * from LoTE (ETSI TS 119 602) and/or LOTL (ETSI TS 119 612).
  *
  * This is a drop-in replacement for
- * [eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStoreImpl] — use it with
- * [eu.europa.ec.eudi.wallet.EudiWallet.Builder.withReaderTrustStore] or
+ * [eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStoreImpl] — configure it
+ * via [eu.europa.ec.eudi.wallet.EudiWalletConfig.configureReaderTrustStore] or
  * [eu.europa.ec.eudi.wallet.EudiWallet.setReaderTrustStore].
  *
  * @param isChainTrusted the ETSI chain trust validator (supports LoTE, LOTL, or combined sources)
@@ -46,7 +46,6 @@ import kotlin.coroutines.CoroutineContext
  * @param coroutineContext the coroutine context for the sync/async bridge
  *        (defaults to [Dispatchers.IO])
  * @param logger optional [Logger] for diagnostic output
- * @see asReaderTrustStore convenience extension function
  */
 class EtsiReaderTrustStore(
     private val isChainTrusted: IsChainTrustedForEUDIW<List<X509Certificate>, TrustAnchor>,
