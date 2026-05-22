@@ -20,6 +20,7 @@ package eu.europa.ec.eudi.wallet
 import android.content.Context
 import androidx.annotation.RawRes
 import eu.europa.ec.eudi.iso18013.transfer.engagement.NfcEngagementService
+import eu.europa.ec.eudi.etsi1196x2.consultation.IsChainTrustedForEUDIW
 import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStore
 import eu.europa.ec.eudi.iso18013.transfer.response.ReaderAuthPolicy
 import eu.europa.ec.eudi.wallet.EudiWalletConfig.Companion.DEFAULT_DOCUMENT_MANAGER_IDENTIFIER
@@ -33,6 +34,8 @@ import eu.europa.ec.eudi.wallet.statium.DocumentStatusResolverConfigBuilder
 import eu.europa.ec.eudi.wallet.trust.IssuerTrustConfig
 import eu.europa.ec.eudi.wallet.trust.IssuerTrustConfigBuilder
 import eu.europa.ec.eudi.wallet.trust.StatusListTrustConfig
+import eu.europa.ec.eudi.wallet.trust.asReaderTrustStore
+import java.security.cert.TrustAnchor
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import java.security.cert.X509Certificate
 import kotlin.time.Duration
@@ -366,16 +369,32 @@ class EudiWalletConfig {
     /**
      * Configure the [ReaderTrustStore] with a custom implementation.
      *
-     * Use this to provide an ETSI-backed trust store (e.g. via
-     * [eu.europa.ec.eudi.wallet.trust.asReaderTrustStore]) or any other custom
-     * [ReaderTrustStore] implementation. This takes priority over certificate-based
-     * configuration set via the other [configureReaderTrustStore] overloads.
+     * Use this to provide any custom [ReaderTrustStore] implementation.
+     * This takes priority over certificate-based configuration set via the
+     * other [configureReaderTrustStore] overloads.
      *
      * @param readerTrustStore the custom reader trust store implementation
      * @return the [EudiWalletConfig] instance
      */
     fun configureReaderTrustStore(readerTrustStore: ReaderTrustStore) = apply {
         this.readerTrustStore = readerTrustStore
+    }
+
+    /**
+     * Configure the [ReaderTrustStore] with an ETSI-backed trust source.
+     *
+     * Creates an [eu.europa.ec.eudi.wallet.trust.EtsiReaderTrustStore] that delegates
+     * reader certificate chain validation to the given [IsChainTrustedForEUDIW], using the
+     * [VerificationContext.WalletRelyingPartyAccessCertificate][eu.europa.ec.eudi.etsi1196x2.consultation.VerificationContext.WalletRelyingPartyAccessCertificate]
+     * verification context. This takes priority over certificate-based configuration.
+     *
+     * @param isChainTrusted the ETSI chain trust validator
+     * @return the [EudiWalletConfig] instance
+     */
+    fun configureReaderTrustStore(
+        isChainTrusted: IsChainTrustedForEUDIW<List<X509Certificate>, TrustAnchor>,
+    ) = apply {
+        this.readerTrustStore = isChainTrusted.asReaderTrustStore()
     }
 
     /**

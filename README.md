@@ -929,14 +929,15 @@ trust features:
 
 ```kotlin
 val config = EudiWalletConfig {
-    configureReaderTrustStore(isChainTrusted.asReaderTrustStore())
+    configureReaderTrustStore(isChainTrusted)
 }
 ```
 
 This takes priority over certificate-based configuration. The legacy overloads that accept
 raw `X509Certificate` lists remain available for static trust anchors.
 
-Or create an `EtsiReaderTrustStore` explicitly with a specific verification context:
+For advanced use cases requiring a specific verification context, create an
+`EtsiReaderTrustStore` explicitly:
 
 ```kotlin
 val readerTrustStore = EtsiReaderTrustStore(
@@ -952,7 +953,7 @@ val config = EudiWalletConfig {
 You can also update the reader trust store at runtime:
 
 ```kotlin
-wallet.setReaderTrustStore(isChainTrusted.asReaderTrustStore())
+wallet.setReaderTrustStore(EtsiReaderTrustStore(isChainTrusted))
 ```
 
 > **Note:** For best performance during presentations, pre-warm the ETSI cache on app startup.
@@ -1017,7 +1018,7 @@ val config = EudiWalletConfig {
     }
 
     // Reader authentication with ETSI trusted lists (same trust source)
-    configureReaderTrustStore(isChainTrusted.asReaderTrustStore())
+    configureReaderTrustStore(isChainTrusted)
 }
 
 // On shutdown:

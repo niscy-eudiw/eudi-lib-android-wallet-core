@@ -28,13 +28,7 @@ import kotlin.coroutines.CoroutineContext
  * Creates a [ReaderTrustStore] backed by this ETSI chain trust validator.
  *
  * Convenience extension for creating an [EtsiReaderTrustStore] with sensible defaults.
- *
- * Usage:
- * ```kotlin
- * val wallet = EudiWallet(context, config) {
- *     withReaderTrustStore(isChainTrusted.asReaderTrustStore())
- * }
- * ```
+ * Used internally by [eu.europa.ec.eudi.wallet.EudiWalletConfig.configureReaderTrustStore].
  *
  * @param verificationContext the EUDI verification context for reader authentication
  *        (defaults to [VerificationContext.WalletRelyingPartyAccessCertificate])
@@ -43,7 +37,7 @@ import kotlin.coroutines.CoroutineContext
  * @param logger optional [Logger] for diagnostic output
  * @return a [ReaderTrustStore] that delegates to this chain trust validator
  */
-fun IsChainTrustedForEUDIW<List<X509Certificate>, TrustAnchor>.asReaderTrustStore(
+internal fun IsChainTrustedForEUDIW<List<X509Certificate>, TrustAnchor>.asReaderTrustStore(
     verificationContext: VerificationContext = VerificationContext.WalletRelyingPartyAccessCertificate,
     coroutineContext: CoroutineContext = Dispatchers.IO,
     logger: Logger? = null,
