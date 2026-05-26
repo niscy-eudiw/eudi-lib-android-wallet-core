@@ -33,6 +33,9 @@ dependencies {
 
     api(libs.eudi.lib.kmp.statium)
 
+    // ETSI Trusted Lists
+    api(libs.eudi.lib.kmp.etsi1196x2.consultation)
+
     // Digital Credential API
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.registry.provider)

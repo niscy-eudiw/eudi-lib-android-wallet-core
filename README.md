@@ -15,18 +15,63 @@ required to implement the EUDI Wallet functionality. On top of that, it provides
 that can be used by the application to implement the EUDI Wallet functionality.
 
 ```mermaid
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "primaryColor": "#E6F1FB",
+    "primaryTextColor": "#0C447C",
+    "primaryBorderColor": "#378ADD",
+    "lineColor": "#888780",
+    "secondaryColor": "#EAF3DE",
+    "tertiaryColor": "#F1EFE8",
+    "edgeLabelBackground": "#ffffff",
+    "fontSize": "13px"
+  }
+}}%%
+
 graph TD
-;
-    A[eudi-lib-android-wallet-core]
-    B[eudi-lib-android-wallet-document-manager] -->|DocumentManager| A
-    C[eudi-lib-android-iso18013-data-transfer] -->|TransferManager| A
-    D[eudi-lib-jvm-openid4vci-kt] -->|OpenId4VciManager| A
-    E[eudi-lib-jvm-siop-openid4vp-kt] -->|OpenId4VpManager| A
-    F[org.multipaz] -->|SecureArea,Storage| B
-    H[eudi-lib-jvm-presentation-exchange] --> E
-    G[multipaz-android] --> A
+    A("<b>eudi-lib-android-wallet-core</b>")
+
+    subgraph android ["Android"]
+        B["eudi-lib-android-wallet-\ndocument-manager"]
+        C["eudi-lib-android-iso18013-\ndata-transfer"]
+    end
+
+    subgraph jvm ["JVM / KMP"]
+        D["eudi-lib-jvm-openid4vci-kt"]
+        E["eudi-lib-jvm-openid4vp-kt"]
+        J["eudi-lib-jvm-sdjwt-kt"]
+        I["eudi-lib-kmp-etsi-1196x2"]
+        H["eudi-lib-kmp-statium"]
+    end
+
+    subgraph multipaz ["Multipaz"]
+        F["org.multipaz"]
+        G["multipaz-android"]
+    end
+
+    B -->|DocumentManager| A
+    C -->|TransferManager| A
+    D -->|OpenId4VciManager| A
+    E -->|OpenId4VpManager| A
+    J -->|SdJwtVcVerification| A
+    I -->|IssuerTrustVerification| A
+    F -->|"SecureArea, Storage"| B
+    F -->|"SecureArea, Storage"| A
+    G --> A
     B -->|DocumentManager| C
-    F -->|SecureArea,Storage| A
+    J --> B
+    H --> A
+
+    classDef core fill:#185FA5,stroke:#0C447C,color:#fff,font-weight:bold
+    classDef androidLib fill:#E6F1FB,stroke:#378ADD,color:#0C447C
+    classDef jvmLib fill:#EAF3DE,stroke:#639922,color:#27500A
+    classDef multipazLib fill:#FAEEDA,stroke:#BA7517,color:#633806
+
+    class A core
+    class B,C androidLib
+    class D,E,J,I,H jvmLib
+    class F,G multipazLib
 ```
 
 ### Features
@@ -50,6 +95,12 @@ The library supports the following features:
 |                            | Wallet Authentication                                                   | ✅ public client, <br/>✅ Attestation-Based Client Authentication (WIA)                                                  |
 |                            | Supported Proof Types                                                   | ✅ Attestation Proof Type, <br/> ✅ Proof Type without Attestation <br/> ✅ JWT Proof Type with Attestation               |
 |                            | Notify credential issuer                                                | ❌                                                                                                                      |
+| **Issuer Trust**           | Trust verification during issuance (LoTE)                               | ✅ mso_mdoc format <br /> ✅ sd-jwt-vc format                                                                            |
+|                            | Trust policy (ENFORCE / INFORM)                                         | ✅                                                                                                                      |
+|                            | Signed issuer metadata verification                                     | ✅ RequireSigned (default) / PreferSigned / IgnoreSigned                                                                 |
+|                            | Custom credential format verifiers                                      | ✅ via CredentialTrustVerifier                                                                                           |
+| **Revocation Status**      | Document status resolution (token status lists)                         | ✅ JWT <br /> ✅ CWT                                                                                                     |
+|                            | Status list token signer trust verification (LoTE)                      | ✅                                                                                                                      |
 | **Proximity Presentation** | ISO-18013-5 device retrieval                                            |                                                                                                                        |
 |                            | Device engagement                                                       | ✅ QR <br /> ✅ NFC                                                                                                      |
 |                            | Data transfer                                                           | ✅ BLE <br /> ❌ NFC <br /> ❌ Wifi-Aware                                                                                 |
@@ -157,7 +208,7 @@ val config = EudiWalletConfig()
         userAuthenticationRequired = true,
         // set userAuthenticationTimeout to 30 seconds
         userAuthenticationTimeout = 30_000.milliseconds,
-        // set useStrongBoxForKeys to true to use the the device's StrongBox if available
+        // set useStrongBoxForKeys to true to use the device's StrongBox if available
         // to store the keys
         useStrongBoxForKeys = true
     )
@@ -180,6 +231,10 @@ val config = EudiWalletConfig()
         // withDPopConfig(DPopConfig.Default) // This is the default
         // withDPopConfig(DPopConfig.Disabled) // To disable DPoP
         // withDPopConfig(customDPopConfig) // To use custom configuration
+
+        // Configure credential response encryption
+        // By default, encryption is REQUIRED with EC P-256 and RSA 2048
+        // withResponseEncryptionConfig(EncryptionSupportConfig(...))
     }
     // configuration for proximity presentation
     // the values below are the default values
@@ -529,11 +584,458 @@ val wallet = EudiWallet(context, config) {
 }
 ```
 
+### Trusted Lists
+
+The library supports trust verification using ETSI Trusted Lists for **credential issuance**
+(issuer trust), **credential presentation** (reader/verifier authentication), **revocation
+status** (status list token signer trust), and **signed issuer metadata** verification. This
+enables dynamic trust anchor resolution from LoTE (ETSI TS 119 602) instead of static
+certificate lists.
+
+Each trust verification feature is independently configurable and opt-in. When not configured,
+the library behaves as before (credentials stored without trust checks, status resolved with
+standard signature verification, reader authentication via static certificate lists or
+disabled, unsigned metadata only).
+
+The design is **protocol-agnostic** — wallet-core defines integration contracts, and the developer
+composes trust validation using the
+[eudi-lib-kmp-etsi1196x2](https://github.com/eu-digital-identity-wallet/eudi-lib-kmp-etsi-1196x2)
+library directly (or any other trust framework).
+
+#### Dependencies
+
+The core consultation module (`etsi-1196x2-consultation`) is already included transitively via
+wallet-core. For LoTE support, add the corresponding module to your app's dependencies:
+
+```groovy
+dependencies {
+    // wallet-core (already includes etsi-1196x2-consultation transitively)
+    implementation "eu.europa.ec.eudi:eudi-lib-android-wallet-core:0.26.0-SNAPSHOT"
+
+    // For LoTE (List of Trusted Entities) support — ETSI TS 119 602
+    implementation "eu.europa.ec.eudi:etsi-119602-consultation:0.3.0-alpha.5-SNAPSHOT"
+}
+```
+
+#### Setting Up Trust Anchor Resolution (LoTE)
+
+Set up trust anchor resolution from Lists of Trusted Entities (ETSI TS 119 602):
+
+```kotlin
+// 1. Set up LoTE loading with file cache
+// HttpClient() auto-discovers the ktor-client-android engine at runtime
+val httpClient = HttpClient()
+val loadLoTE = LoadSingleLoTEWithFileCache(
+    cacheDirectory = Path(context.cacheDir.path, "lote-cache"),
+    downloadSingleLoTE = DownloadSingleLoTE(httpClient),
+    fileCacheExpiration = 24.hours,
+)
+
+// 2. Configure LoTE pointer loading and JWT verification
+val loadLoTEAndPointers = LoadLoTEAndPointers(
+    constraints = LoadLoTEAndPointers.Constraints.DoNotLoadOtherPointers,
+    verifyJwtSignature = myJwtVerifier, // Your VerifyJwtSignature implementation
+    loadLoTE = loadLoTE,
+)
+
+// 3. Build trust anchor provisioner with EU defaults
+val provisionTrustAnchors = ProvisionTrustAnchorsFromLoTEs.eudiwJvm(loadLoTEAndPointers)
+
+// 4. Configure LoTE URLs for the provider types you need
+val loteLocations = SupportedLists(
+    pidProviders = "https://trust.example.eu/pid-providers.jwt",
+    wrpacProviders = "https://trust.example.eu/wrpac-providers.jwt",
+    // pubEaaProviders = "https://trust.example.eu/pub-eaa-providers.jwt",
+    // qeaProviders = "https://trust.example.eu/qeaa-providers.jwt",
+)
+
+// 5. Create cached trust validator
+// DisposableContainer manages the lifecycle of cached trust anchors.
+// Create it at Application scope and call dispose() when no longer needed.
+val disposableScope = DisposableContainer()
+val isChainTrusted = provisionTrustAnchors.cached(disposableScope, loteLocations, ttl = 10.minutes)
+
+// Use isChainTrusted for issuer trust, metadata verification, status resolution, and reader auth (see below)
+
+// When shutting down (e.g. Application.onTerminate()):
+// disposableScope.dispose()
+```
+
+> **VerifyJwtSignature:** The ETSI library requires a `VerifyJwtSignature` implementation to
+> verify the cryptographic signature of downloaded LoTE JWT documents before trusting their
+> contents. The signing keys vary by deployment (EU production, national lists, acceptance
+> environments). The library provides only a `NotValidating` test stub — **do not use it in
+> production**.
+
+The following example shows how to implement `VerifyJwtSignature` using Nimbus JWT to verify
+the LoTE JWT signature against a list of trusted signing certificates:
+
+```kotlin
+// Trusted certificates for LoTE JWT signature verification
+// (e.g., EU Commission's LoTE signing certificate)
+val loteTrustedCertificates: List<X509Certificate> = listOf(/* your trusted certs */)
+
+val myJwtVerifier = VerifyJwtSignature { jwt ->
+    try {
+        val signedJwt = SignedJWT.parse(jwt)
+
+        // Extract x5c certificate chain from JWT header
+        val x5cChain = signedJwt.header.x509CertChain
+            ?: return@VerifyJwtSignature VerifyJwtSignature.Outcome.NotVerified(
+                IllegalStateException("Missing x5c in LoTE JWT header")
+            )
+        val chainCerts = x5cChain.mapNotNull { X509CertUtils.parse(it.decode()) }
+        if (chainCerts.isEmpty()) {
+            return@VerifyJwtSignature VerifyJwtSignature.Outcome.NotVerified(
+                IllegalStateException("No valid certificates in x5c")
+            )
+        }
+
+        // Verify JWT signature using the signing certificate's public key
+        val signingCert = chainCerts.first()
+        val verifier = when (val key = signingCert.publicKey) {
+            is ECPublicKey -> ECDSAVerifier(key)
+            is RSAPublicKey -> RSASSAVerifier(key)
+            else -> return@VerifyJwtSignature VerifyJwtSignature.Outcome.NotVerified(
+                IllegalStateException("Unsupported key type: ${key.javaClass.name}")
+            )
+        }
+        if (!signedJwt.verify(verifier)) {
+            return@VerifyJwtSignature VerifyJwtSignature.Outcome.NotVerified(
+                IllegalStateException("JWT signature verification failed")
+            )
+        }
+
+        // Validate signing certificate against trusted certificates
+        // Try direct trust first (subject DN + serial number match)
+        val directlyTrusted = loteTrustedCertificates.any { trusted ->
+            trusted.subjectX500Principal == signingCert.subjectX500Principal &&
+                trusted.serialNumber == signingCert.serialNumber
+        }
+        if (directlyTrusted) {
+            return@VerifyJwtSignature VerifyJwtSignature.Outcome.Verified(jwt)
+        }
+
+        // Fall back to PKIX chain validation
+        val certPath = CertificateFactory.getInstance("X.509").generateCertPath(chainCerts)
+        val trustAnchors = loteTrustedCertificates.map { TrustAnchor(it, null) }.toSet()
+        val params = PKIXParameters(trustAnchors).apply { isRevocationEnabled = false }
+        CertPathValidator.getInstance("PKIX").validate(certPath, params)
+
+        VerifyJwtSignature.Outcome.Verified(jwt)
+    } catch (e: Exception) {
+        VerifyJwtSignature.Outcome.NotVerified(e)
+    }
+}
+```
+>
+> **Lifecycle:** `DisposableContainer` replaces `useResources` for Android. While `useResources`
+> is a scoping block that disposes resources when the block exits (suitable for short-lived
+> operations), Android apps need long-lived trust caches. Create a `DisposableContainer` at
+> Application scope and call `dispose()` during shutdown to release cached resources.
+>
+> **HTTP Client:** `HttpClient()` with no explicit engine auto-discovers `ktor-client-android` at
+> runtime (already included as a `runtimeOnly` dependency by wallet-core). You can also pass a
+> custom `HttpClient` if you need specific configuration (logging, timeouts, etc.).
+
+#### Issuer Trust Verification
+
+Trust verification runs after the credential is received from the issuer and before it is stored.
+Built-in verifiers handle both MsoMdoc and SD-JWT VC formats, and custom verifiers can be
+registered for additional formats. When issuer trust is not configured, verification is skipped
+entirely and credentials are stored as before.
+
+Enable issuer trust verification via the `configureIssuerTrust` DSL on `EudiWalletConfig`:
+
+```kotlin
+val walletConfig = EudiWalletConfig {
+    // ... other configuration ...
+    configureIssuerTrust {
+        trustSource(isChainTrusted) // from LoTE setup above
+        classifications(myClassifications) // AttestationClassifications from ETSI library
+        policy {
+            default(TrustPolicy.Action.ENFORCE)
+            forContext(VerificationContext.EAA("experimental"), TrustPolicy.Action.INFORM)
+            forDocType("org.example.test", TrustPolicy.Action.INFORM)
+        }
+        // Signed metadata verification defaults to RequireSigned (see below)
+        // override by calling preferSignedMetadata() or ignoreSignedMetadata()
+    }
+}
+```
+
+- **`trustSource`** -- sets the trust anchor source. Accepts a `ComposeChainTrust`,
+  `IsChainTrustedForEUDIW`, or a pre-built `IsChainTrustedForAttestation`.
+- **`classifications`** -- required when using `ComposeChainTrust` or `IsChainTrustedForEUDIW`
+  as the trust source. Maps credential types to verification contexts.
+- **`policy`** -- configures how the wallet acts on trust results (see below).
+- **`preferSignedMetadata()`** / **`ignoreSignedMetadata()`** -- relaxes the default
+  `RequireSigned` metadata policy (see [Signed Issuer Metadata Verification](#signed-issuer-metadata-verification)).
+
+##### Trust Policies
+
+A `TrustPolicy` determines the action taken when an issuer is not trusted:
+
+| Action    | Behaviour                                                                   |
+|-----------|-----------------------------------------------------------------------------|
+| `ENFORCE` | Reject the credential -- delete it and emit `IssueEvent.DocumentFailed`.    |
+| `INFORM`  | Store the credential regardless and attach the result to `DocumentIssued`.  |
+
+The default policy is `ENFORCE` for all credentials. Use the `policy` DSL to override per
+verification context or per attestation type. Resolution order (highest priority first):
+
+1. Per-attestation overrides (`forDocType`, `forVct`, `forAttestation`)
+2. Per-context overrides (`forContext`)
+3. Default action (`default`)
+
+##### Handling Trust Results
+
+The trust verification result is available on `IssueEvent.DocumentIssued` and
+`IssueEvent.DocumentFailed`:
+
+```kotlin
+manager.issueDocumentByOfferUri(offerUri) { event ->
+    when (event) {
+        is IssueEvent.DocumentIssued -> {
+            when (event.issuerTrustResult) {
+                is CertificationChainValidation.Trusted -> {
+                    // Issuer is trusted
+                }
+                is CertificationChainValidation.NotTrusted -> {
+                    // INFORM policy: credential stored, but issuer was not trusted
+                }
+                null -> {
+                    // Trust verification not configured
+                }
+            }
+        }
+        is IssueEvent.DocumentFailed -> {
+            if (event.cause is IssuerNotTrustedException) {
+                // ENFORCE policy: credential rejected because issuer was not trusted
+                Log.w("Trust", "Issuer not trusted", event.cause)
+            }
+        }
+        else -> Unit
+    }
+}
+```
+
+##### Custom CredentialTrustVerifier
+
+The library includes built-in verifiers for MsoMdoc and SD-JWT VC formats. To support
+additional credential formats, implement the `CredentialTrustVerifier` interface and register
+it during configuration:
+
+```kotlin
+class MyCustomVerifier(
+    private val isChainTrusted: IsChainTrustedForAttestation<List<X509Certificate>, TrustAnchor>,
+) : CredentialTrustVerifier {
+    override suspend fun verify(
+        credentialValue: String,
+        attestationIdentifier: AttestationIdentifier,
+    ): CertificationChainValidation<TrustAnchor>? {
+        // Extract certificate chain from the credential and evaluate trust
+        // Return null if the chain cannot be extracted
+    }
+}
+
+// Register during configuration
+configureIssuerTrust {
+    trustSource(myComposeChainTrust)
+    classifications(myClassifications)
+    credentialTrustVerifier(MyCustomFormat::class, MyCustomVerifier(isChainTrusted))
+}
+```
+
+#### Signed Issuer Metadata Verification
+
+The library supports verifying signed issuer metadata (JWT type `openidvci-issuer-metadata+jwt`)
+as defined in OpenID4VCI. When an issuer provides signed metadata, the library extracts the x5c
+certificate chain from the JWT header and validates it against the configured trust source.
+
+Three metadata policies are available:
+
+| Policy            | Behaviour                                                                                      |
+|-------------------|------------------------------------------------------------------------------------------------|
+| `RequireSigned`   | **(Default)** Signed metadata must be available and its certificate chain must be trusted. Otherwise issuance fails. |
+| `PreferSigned`    | Attempts to fetch signed metadata first. Falls back to unsigned if signed is not available. When signed metadata is served but the certificate chain is untrusted, issuance **fails**. |
+| `IgnoreSigned`    | Signed metadata is ignored; only unsigned metadata is used. Must be set explicitly via `ignoreSignedMetadata()`. |
+
+When `configureIssuerTrust` is used with an `IsChainTrustedForEUDIW` trust source (the
+standard LoTE setup), signed metadata verification defaults to `RequireSigned`. The library
+automatically creates the trust adapter using
+`VerificationContext.WalletRelyingPartyAccessCertificate`.
+
+To override the default metadata policy:
+
+```kotlin
+configureIssuerTrust {
+    trustSource(isChainTrusted)
+    classifications(myClassifications)
+    policy { default(TrustPolicy.Action.ENFORCE) }
+
+    // Prefer signed, but fall back to unsigned if not available
+    preferSignedMetadata()
+
+    // Or explicitly disable signed metadata verification
+    // ignoreSignedMetadata()
+}
+```
+
+> **Note:** Metadata verification is a separate check from credential trust verification.
+> Metadata trust runs **before** credential issuance (during offer resolution / issuer metadata
+> fetch), while credential trust runs **after** the credential is received. Both are independent
+> and can be configured separately.
+
+#### Revocation Status Trust Verification
+
+The document status resolver can optionally verify that the signer of status list tokens (JWT
+or CWT) is trusted according to ETSI trusted lists. This adds an additional layer of trust
+beyond the default cryptographic signature verification (x5c/COSE_X509).
+
+Configure status list trust within the `configureDocumentStatusResolver` DSL:
+
+```kotlin
+val walletConfig = EudiWalletConfig {
+    configureDocumentStatusResolver {
+        clockSkew(5) // minutes
+        configureTrust {
+            trustSource(isChainTrusted) // same LoTE trust source
+            classifications(myClassifications)
+            policy {
+                default(TrustPolicy.Action.INFORM)
+            }
+        }
+    }
+}
+```
+
+The `configureTrust` block accepts the same DSL as issuer trust (`trustSource`,
+`classifications`, `policy`). The trust policy determines the action when the status list
+token signer is not trusted:
+
+| Action    | Behaviour                                                                          |
+|-----------|------------------------------------------------------------------------------------|
+| `ENFORCE` | Reject the status result — treat the document's revocation status as unknown.      |
+| `INFORM`  | Accept the status result regardless and let the application decide.                |
+
+When status list trust is not configured, the resolver falls back to standard x5c / COSE_X509
+signature verification without ETSI trust chain validation.
+
+#### Reader Authentication with Trusted Lists
+
+`EtsiReaderTrustStore` is a drop-in replacement for `ReaderTrustStoreImpl` that delegates
+reader certificate chain validation to the ETSI library's `IsChainTrustedForEUDIW`. It
+uses the `WalletRelyingPartyAccessCertificate` (WRPAC) verification context by default.
+
+Configure it via `configureReaderTrustStore` on `EudiWalletConfig`, alongside the other
+trust features:
+
+```kotlin
+val config = EudiWalletConfig {
+    configureReaderTrustStore(isChainTrusted)
+}
+```
+
+This takes priority over certificate-based configuration. The legacy overloads that accept
+raw `X509Certificate` lists remain available for static trust anchors.
+
+For advanced use cases requiring a specific verification context, create an
+`EtsiReaderTrustStore` explicitly:
+
+```kotlin
+val readerTrustStore = EtsiReaderTrustStore(
+    isChainTrusted = isChainTrusted,
+    verificationContext = VerificationContext.WalletRelyingPartyAccessCertificate,
+)
+
+val config = EudiWalletConfig {
+    configureReaderTrustStore(readerTrustStore)
+}
+```
+
+You can also update the reader trust store at runtime:
+
+```kotlin
+wallet.setReaderTrustStore(EtsiReaderTrustStore(isChainTrusted))
+```
+
+> **Note:** For best performance during presentations, pre-warm the ETSI cache on app startup.
+> This ensures that trust anchors are already resolved and cached before the first reader
+> authentication occurs.
+
+#### Full Configuration Example
+
+The following example shows a complete `EudiWallet` setup with issuer trust verification,
+signed metadata verification, revocation status trust, and reader authentication — all
+using the same ETSI trust source:
+
+```kotlin
+// Application-scoped — create once, dispose on shutdown
+val disposableScope = DisposableContainer()
+val isChainTrusted = provisionTrustAnchors.cached(disposableScope, loteLocations, ttl = 10.minutes)
+
+// Attestation classifications map credential types to ETSI verification contexts
+val classifications = AttestationClassifications(
+    pids = AttestationIdentifierPredicate.any(
+        setOf(
+            AttestationIdentifier.MDoc("eu.europa.ec.eudi.pid.1"),
+            AttestationIdentifier.SDJwtVc("urn:eudi:pid:1"),
+        )
+    ),
+    pubEAAs = AttestationIdentifierPredicate.equalsTo(
+        AttestationIdentifier.MDoc("org.iso.18013.5.1.mDL")
+    ),
+)
+
+val config = EudiWalletConfig {
+    configureOpenId4Vci {
+        withIssuerUrl("https://issuer.example.com")
+        withClientAuthenticationType(OpenId4VciManager.ClientAuthenticationType.AttestationBased)
+        withAuthFlowRedirectionURI("eudi-openid4ci://authorize")
+    }
+    configureOpenId4Vp {
+        withClientIdSchemes(ClientIdScheme.X509SanDns)
+        withSchemes("openid4vp", "eudi-openid4vp", "mdoc-openid4vp")
+    }
+
+    // Issuer trust verification (credential issuance)
+    // Signed metadata verification defaults to RequireSigned
+    configureIssuerTrust {
+        trustSource(isChainTrusted)
+        classifications(classifications)
+        policy {
+            default(TrustPolicy.Action.ENFORCE)
+        }
+    }
+
+    // Revocation status trust verification
+    configureDocumentStatusResolver {
+        clockSkew(5)
+        configureTrust {
+            trustSource(isChainTrusted)
+            classifications(classifications)
+            policy {
+                default(TrustPolicy.Action.INFORM)
+            }
+        }
+    }
+
+    // Reader authentication with ETSI trusted lists (same trust source)
+    configureReaderTrustStore(isChainTrusted)
+}
+
+// On shutdown:
+// disposableScope.dispose()
+```
+
 ### Issue document using OpenID4VCI
 
 The library provides issuing documents using OpenID4VCI protocol. To issue a document
 using this functionality, EudiWallet must be initialized with the `openId4VciConfig` configuration,
 during configuration. See the [Initialize the library](#initialize-the-library) section.
+
+To validate issuer trust before storing credentials, see [Trusted Lists](#trusted-lists).
 
 #### Creating an OpenId4VciManager
 
@@ -670,8 +1172,7 @@ val onIssueEvent = OnIssueEvent { event ->
             // Need to provide settings for document creation
             // Create document settings can be varied depending on the document type
 
-            val format = event.offeredDocument.documentFormat
-            val isEuPid = when (format) {
+            val isEuPid = when (val format = event.offeredDocument.documentFormat) {
                 is MsoMdocFormat -> format.docType == "eu.europa.ec.eudi.pid.1"
                 is SdJwtVcFormat -> format.vct == "urn:eudi:pid:1"
                 else -> false
@@ -1079,7 +1580,7 @@ defaults:
 val config = EudiWalletConfig()
     .configureOpenId4Vci {
         withIssuerUrl("https://issuer.com")
-        withClientId("client-id")
+        withClientAuthenticationType(OpenId4VciManager.ClientAuthenticationType.AttestationBased)
         withAuthFlowRedirectionURI("eudi-openid4ci://authorize")
         // DPoP is enabled by default with DPopConfig.Default
         // No additional configuration needed
@@ -1102,7 +1603,7 @@ If you need to disable DPoP (not recommended for production):
 val config = EudiWalletConfig()
     .configureOpenId4Vci {
         withIssuerUrl("https://issuer.com")
-        withClientId("client-id")
+        withClientAuthenticationType(OpenId4VciManager.ClientAuthenticationType.AttestationBased)
         withAuthFlowRedirectionURI("eudi-openid4ci://authorize")
         withDPopConfig(DPopConfig.Disabled)
     }
@@ -1124,7 +1625,7 @@ For advanced use cases, you can fully customize how DPoP keys are created and us
 val walletConfig = EudiWalletConfig()
     .configureOpenId4Vci {
         withIssuerUrl("https://issuer.example.com")
-        withClientId("wallet-client")
+        withClientAuthenticationType(OpenId4VciManager.ClientAuthenticationType.AttestationBased)
 
         // Custom DPoP configuration
         withDPopConfig(
@@ -1147,7 +1648,44 @@ val walletConfig = EudiWalletConfig()
     }
 ```
 
+#### Credential Response Encryption
+
+The library supports encrypting credential responses from the issuer, as defined in the
+[OpenID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html) specification.
+This is configured via the `responseEncryptionConfig` property of `OpenId4VciManager.Config`.
+
+By default, credential response encryption is **required** (`CredentialResponseEncryptionPolicy.REQUIRED`)
+with EC P-256 and RSA 2048.
+
+##### Changing the encryption policy
+
+```kotlin
+
+val config = EudiWalletConfig()
+    .configureOpenId4Vci {
+        // ..............................
+
+        // Use encryption only if the issuer supports it (instead of requiring it)
+        withResponseEncryptionConfig(
+            EncryptionSupportConfig(
+                credentialResponseEncryptionPolicy = CredentialResponseEncryptionPolicy.SUPPORTED,
+                ecConfig = EcConfig(ecKeyCurve = Curve.P_256),
+                rsaConfig = RsaConfig(rcaKeySize = 2048),
+            )
+        )
+    }
+```
+
+The available policies are:
+
+- `CredentialResponseEncryptionPolicy.REQUIRED` (default) -- encryption must be used; issuance fails
+  if the issuer does not support it.
+- `CredentialResponseEncryptionPolicy.SUPPORTED` -- encryption is used when the issuer advertises
+  support for it, but issuance proceeds unencrypted otherwise.
+
 ### Transfer documents
+
+To authenticate readers/verifiers using ETSI Trusted Lists, see [Trusted Lists](#trusted-lists).
 
 The library supports the following 3 ways to transfer documents:
 
@@ -1332,8 +1870,6 @@ wallet.addTransferEventListener { event ->
    when the activity is paused.
 
     ```kotlin
-    import androidx.appcompat.app.AppCompatActivity
-    
     class MainActivity : AppCompatActivity() {
         
         lateinit var wallet: EudiWallet

@@ -60,14 +60,18 @@ class DCAPIIsoMdocRegistration(
     override suspend fun registerCredentials() {
         withContext(ioDispatcher) {
             try {
+                logger?.d(TAG, "registerCredentials() started, documentManager=${documentManager::class.qualifiedName}@${System.identityHashCode(documentManager).toString(16)}")
                 val issuedMsoMdocDocuments = documentManager.getDocuments()
                     .filterIsInstance<IssuedDocument>()
                     .filter { it.format is MsoMdocFormat }
+                logger?.d(TAG, "Found ${issuedMsoMdocDocuments.size} issued mdoc documents: ${issuedMsoMdocDocuments.map { it.id }}")
 
                 // clear previously registered credentials
+                logger?.d(TAG, "Calling clearCredentialRegistry(isDeleteAll=true)...")
                 registryManager.clearCredentialRegistry(
                     ClearCredentialRegistryRequest(isDeleteAll = true)
                 )
+                logger?.d(TAG, "clearCredentialRegistry completed")
 
                 if (issuedMsoMdocDocuments.isEmpty()) {
                     logger?.d(TAG, "No mdoc documents to register; cleared existing registries")
@@ -82,10 +86,11 @@ class DCAPIIsoMdocRegistration(
                     ioDispatcher = ioDispatcher
                 )
 
+                logger?.d(TAG, "Calling registryManager.registerCredentials()...")
                 registryManager.registerCredentials(registry)
-                logger?.d(TAG, "Registered ${issuedMsoMdocDocuments.size} mdoc credential(s)")
+                logger?.d(TAG, "Registered ${issuedMsoMdocDocuments.size} mdoc credential(s) with registryId=$REGISTRY_ID")
             } catch (e: Exception) {
-                logger?.e(TAG, "Error during DCAPI registration", e)
+                logger?.e(TAG, "Error during DCAPI registration: ${e::class.simpleName}: ${e.message}", e)
             }
         }
     }

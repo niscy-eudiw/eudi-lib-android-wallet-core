@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024-2025 European Commission
+ * Copyright (c) 2024-2026 European Commission
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,9 @@ import eu.europa.ec.eudi.wallet.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import eu.europa.ec.eudi.wallet.provider.WalletKeyManager
+import eu.europa.ec.eudi.wallet.trust.IssuerTrustConfig
+import eu.europa.ec.eudi.wallet.trust.evaluateIssuerTrust
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.io.bytestring.ByteString
@@ -53,6 +56,7 @@ internal class ProcessResponse(
     val issuanceMetadataStorage: Storage,
     val clientAuthentication: ClientAuthentication,
     val replacesDocumentId: DocumentId? = null,
+    val issuerTrustConfig: IssuerTrustConfig? = null
 ) {
 
     suspend fun process(response: SubmitRequest.Response) {
@@ -101,7 +105,7 @@ internal class ProcessResponse(
         }
     }
 
-    fun processSubmittedRequest(
+    suspend fun processSubmittedRequest(
         unsignedDocument: UnsignedDocument,
         keyAliases: List<String>,
         outcome: SubmissionOutcome,
@@ -109,18 +113,26 @@ internal class ProcessResponse(
         when (outcome) {
             is SubmissionOutcome.Success -> runCatching {
                 val credentials = outcome.credentials.map { it.credential }.zip(keyAliases)
-                documentManager.storeIssuedDocument(unsignedDocument, credentials) { message ->
-                    logger?.d(TAG, message)
-                }.getOrThrow()
-            }.onSuccess { document ->
-                issuedDocumentIds.add(document.id)
 
+                val trustResult = evaluateIssuerTrust(
+                    issuerTrustConfig = issuerTrustConfig,
+                    document = unsignedDocument,
+                    credential = credentials.first().first,
+                    logger = logger,
+                )
+
+                val issuedDocument = documentManager.storeIssuedDocument(
+                    unsignedDocument, credentials
+                ) { message -> logger?.d(TAG, message) }.getOrThrow()
+
+                issuedDocument to trustResult
+            }.onSuccess { (document, trustResult) ->
+                issuedDocumentIds.add(document.id)
+                listener(IssueEvent.DocumentIssued(document, trustResult))
                 // Store issuance metadata in background coroutine
                 CoroutineScope(Dispatchers.IO).launch {
                     storeIssuanceMetadata(document.id, unsignedDocument, keyAliases)
                 }
-
-                listener(IssueEvent.DocumentIssued(document))
             }.onFailure { error ->
                 documentManager.deleteDocumentById(unsignedDocument.id)
                 listener(IssueEvent.DocumentFailed(unsignedDocument, error))

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024-2025 European Commission
+ * Copyright (c) 2024-2026 European Commission
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,6 +47,7 @@ import eu.europa.ec.eudi.wallet.issue.openid4vci.reissue.ReissuanceIssuer
 import eu.europa.ec.eudi.wallet.logging.Logger
 import eu.europa.ec.eudi.wallet.provider.WalletAttestationsProvider
 import eu.europa.ec.eudi.wallet.provider.WalletKeyManager
+import eu.europa.ec.eudi.wallet.trust.IssuerTrustConfig
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
@@ -79,6 +80,7 @@ internal class DefaultOpenId4VciManager(
     var config: OpenId4VciManager.Config,
     var logger: Logger? = null,
     var ktorHttpClientFactory: (() -> HttpClient)? = null,
+    val issuerTrustConfig: IssuerTrustConfig? = null,
 ) : OpenId4VciManager {
 
     internal val httpClientFactory
@@ -86,11 +88,14 @@ internal class DefaultOpenId4VciManager(
             .wrappedWithLogging(logger)
             .wrappedWithContentNegotiation()
 
+    private val issuerMetadataPolicy: IssuerMetadataPolicy
+        get() = issuerTrustConfig?.issuerMetadataPolicy ?: IssuerMetadataPolicy.IgnoreSigned
+
     private val offerResolver: OfferResolver by lazy {
-        OfferResolver(httpClientFactory)
+        OfferResolver(httpClientFactory, issuerMetadataPolicy)
     }
     private val issuerCreator: IssuerCreator by lazy {
-        IssuerCreator(context, config, httpClientFactory, walletProvider, walletAttestationKeyManager, logger)
+        IssuerCreator(context, config, httpClientFactory, walletProvider, walletAttestationKeyManager, logger, issuerMetadataPolicy)
     }
     private val issuerAuthorization: IssuerAuthorization by lazy {
         val handler = config.authorizationHandler ?: BrowserAuthorizationHandler(context, logger)
@@ -115,7 +120,7 @@ internal class DefaultOpenId4VciManager(
         return CredentialIssuerId(config.issuerUrl).mapCatching {
             CredentialIssuerMetadataResolver(httpClientFactory()).resolve(
                 issuer = it,
-                policy = IssuerMetadataPolicy.IgnoreSigned
+                policy = issuerMetadataPolicy
             ).getOrThrow()
         }
     }
@@ -275,7 +280,8 @@ internal class DefaultOpenId4VciManager(
                                 )
                             } ?: deferredContext,
                             logger = logger,
-                            issuanceMetadataStorage = issuanceMetadataStorage,
+                            issuerTrustConfig = issuerTrustConfig,
+                            issuanceMetadataStorage = issuanceMetadataStorage
                         ).process(deferredDocument, deferredContext.keyAliases, outcome)
                     }
                 }
@@ -416,6 +422,7 @@ internal class DefaultOpenId4VciManager(
                     issuanceMetadataStorage = issuanceMetadataStorage,
                     clientAuthentication = issuerCreator.clientAuthentication,
                     replacesDocumentId = documentId,
+                    issuerTrustConfig = issuerTrustConfig,
                 ).process(response)
 
                 //  If new document(s) issued successfully, delete the old document.
@@ -508,6 +515,7 @@ internal class DefaultOpenId4VciManager(
             issuedDocumentIds = issuedDocumentIds,
             deferredDocumentIds = deferredDocumentIds,
             logger = logger,
+            issuerTrustConfig = issuerTrustConfig,
             authorizedRequest = authorizedRequest,
             issuer = issuer,
             documentToConfigurationMap = requestMap,

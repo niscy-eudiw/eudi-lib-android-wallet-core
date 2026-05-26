@@ -16,6 +16,7 @@
 
 package eu.europa.ec.eudi.wallet
 
+import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStore
 import eu.europa.ec.eudi.wallet.issue.openid4vci.OpenId4VciManager
 import eu.europa.ec.eudi.wallet.logging.Logger
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.ClientIdScheme
@@ -132,5 +133,16 @@ class EudiWalletConfigTest {
 
         assertEquals(Logger.OFF, config.logLevel)
         assertEquals(10, config.logSizeLimit)
+    }
+
+    @Test
+    fun testConfigureReaderTrustStoreWithCustomImplementation() {
+        val customTrustStore = mockk<ReaderTrustStore>()
+        val config = EudiWalletConfig {
+            configureReaderTrustStore(customTrustStore)
+        }
+
+        assertEquals(customTrustStore, config.readerTrustStore)
+        assertNull(config.readerTrustedCertificates)
     }
 }

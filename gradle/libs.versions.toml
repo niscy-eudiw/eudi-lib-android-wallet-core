@@ -45,6 +45,7 @@ test-runner = "1.6.2"
 testng = "7.11.0"
 upokecenter-cbor = "4.5.6"
 zxing-core = "3.5.3"
+eudi-lib-kmp-etsi1196x2="0.3.0-alpha.5"
 
 [libraries]
 androidx-credentials = { module = "androidx.credentials:credentials", version.ref = "androidx-credentials" }
@@ -63,6 +64,7 @@ espresso-intents = { module = "androidx.test.espresso:espresso-intents", version
 eudi-lib-jvm-openid4vci-kt = { module = "eu.europa.ec.eudi:eudi-lib-jvm-openid4vci-kt", version.ref = "eudi-lib-jvm-openid4vci-kt" }
 eudi-lib-jvm-siop-openid4vp-kt = { module = "eu.europa.ec.eudi:eudi-lib-jvm-openid4vp-kt", version.ref = "eudi-lib-jvm-openid4vp-kt" }
 eudi-lib-jvm-sdjwt-kt = { module = "eu.europa.ec.eudi:eudi-lib-jvm-sdjwt-kt", version.ref = "eudi-lib-jvm-sdjwt-kt" }
+eudi-lib-kmp-etsi1196x2-consultation = { module = "eu.europa.ec.eudi:etsi-1196x2-consultation", version.ref = "eudi-lib-kmp-etsi1196x2" }
 eudi-lib-kmp-statium = { module = "eu.europa.ec.eudi:eudi-lib-kmp-statium-android", version.ref = "eudi-lib-kmp-statium" }
 json = { module = "org.json:json", version.ref = "json" }
 junit = { module = "junit:junit", version.ref = "junit" }

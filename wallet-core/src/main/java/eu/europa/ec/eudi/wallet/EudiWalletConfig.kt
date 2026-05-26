@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 European Commission
+ * Copyright (c) 2023-2026 European Commission
  *  
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ package eu.europa.ec.eudi.wallet
 import android.content.Context
 import androidx.annotation.RawRes
 import eu.europa.ec.eudi.iso18013.transfer.engagement.NfcEngagementService
+import eu.europa.ec.eudi.etsi1196x2.consultation.IsChainTrustedForEUDIW
 import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStore
 import eu.europa.ec.eudi.iso18013.transfer.response.ReaderAuthPolicy
 import eu.europa.ec.eudi.wallet.EudiWalletConfig.Companion.DEFAULT_DOCUMENT_MANAGER_IDENTIFIER
@@ -29,6 +30,12 @@ import eu.europa.ec.eudi.wallet.internal.getCertificate
 import eu.europa.ec.eudi.wallet.issue.openid4vci.OpenId4VciManager
 import eu.europa.ec.eudi.wallet.logging.Logger
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.OpenId4VpConfig
+import eu.europa.ec.eudi.wallet.statium.DocumentStatusResolverConfigBuilder
+import eu.europa.ec.eudi.wallet.trust.IssuerTrustConfig
+import eu.europa.ec.eudi.wallet.trust.IssuerTrustConfigBuilder
+import eu.europa.ec.eudi.wallet.trust.StatusListTrustConfig
+import eu.europa.ec.eudi.wallet.trust.asReaderTrustStore
+import java.security.cert.TrustAnchor
 import org.multipaz.mdoc.zkp.ZkSystemRepository
 import java.security.cert.X509Certificate
 import kotlin.time.Duration
@@ -321,6 +328,9 @@ class EudiWalletConfig {
     var readerTrustedCertificates: List<X509Certificate>? = null
         private set
 
+    internal var readerTrustStore: ReaderTrustStore? = null
+        private set
+
     /**
      * Configure the built-in [ReaderTrustStore]. This allows to set the reader trusted
      * certificates for the reader trust store.
@@ -354,6 +364,37 @@ class EudiWalletConfig {
      */
     fun configureReaderTrustStore(context: Context, @RawRes vararg certificateRes: Int) = apply {
         this.readerTrustedCertificates = certificateRes.map { context.getCertificate(it) }
+    }
+
+    /**
+     * Configure the [ReaderTrustStore] with a custom implementation.
+     *
+     * Use this to provide any custom [ReaderTrustStore] implementation.
+     * This takes priority over certificate-based configuration set via the
+     * other [configureReaderTrustStore] overloads.
+     *
+     * @param readerTrustStore the custom reader trust store implementation
+     * @return the [EudiWalletConfig] instance
+     */
+    fun configureReaderTrustStore(readerTrustStore: ReaderTrustStore) = apply {
+        this.readerTrustStore = readerTrustStore
+    }
+
+    /**
+     * Configure the [ReaderTrustStore] with an ETSI-backed trust source.
+     *
+     * Creates an [eu.europa.ec.eudi.wallet.trust.EtsiReaderTrustStore] that delegates
+     * reader certificate chain validation to the given [IsChainTrustedForEUDIW], using the
+     * [VerificationContext.WalletRelyingPartyAccessCertificate][eu.europa.ec.eudi.etsi1196x2.consultation.VerificationContext.WalletRelyingPartyAccessCertificate]
+     * verification context. This takes priority over certificate-based configuration.
+     *
+     * @param isChainTrusted the ETSI chain trust validator
+     * @return the [EudiWalletConfig] instance
+     */
+    fun configureReaderTrustStore(
+        isChainTrusted: IsChainTrustedForEUDIW<List<X509Certificate>, TrustAnchor>,
+    ) = apply {
+        this.readerTrustStore = isChainTrusted.asReaderTrustStore()
     }
 
     /**
@@ -399,7 +440,7 @@ class EudiWalletConfig {
         this.readerAuthPolicy = readerAuthPolicy
     }
 
-    var userAuthenticationRequired: Boolean = false
+    var userAuthenticationRequired: Boolean = true
         internal set // internal for setting the default value from the builder
     var userAuthenticationTimeout: Duration = 0.milliseconds
         private set
@@ -420,7 +461,7 @@ class EudiWalletConfig {
      * **Note**: when setting useStrongBoxForKeys to true, the device must support the StrongBox.
      *
      * The default values are:
-     * - userAuthenticationRequired: false
+     * - userAuthenticationRequired: true
      * - userAuthenticationTimeout: 0
      * - useStrongBoxForKeys: true if supported by the device
      *
@@ -430,7 +471,7 @@ class EudiWalletConfig {
      * @param useStrongBoxForKeys whether to use the strong box for keys
      */
     fun configureDocumentKeyCreation(
-        userAuthenticationRequired: Boolean = false,
+        userAuthenticationRequired: Boolean = true,
         userAuthenticationTimeout: Duration = 0.milliseconds,
         useStrongBoxForKeys: Boolean = true,
     ) = apply {
@@ -446,12 +487,45 @@ class EudiWalletConfig {
     var documentStatusResolverClockSkew: Duration = Duration.ZERO
         private set
 
+    internal var statusListTrustConfig: StatusListTrustConfig? = null
+        private set
+
     /**
      * Configure the document status resolver clock skew. This allows to configure the clock skew for
      * the provided document status resolver.
      */
     fun configureDocumentStatusResolver(clockSkewInMinutes: Long) = apply {
         this.documentStatusResolverClockSkew = clockSkewInMinutes.minutes
+    }
+
+    /**
+     * Configure the document status resolver with clock skew and optional ETSI trust verification
+     * for status list token signers.
+     *
+     * Example:
+     * ```
+     * configureDocumentStatusResolver {
+     *     clockSkew(5)
+     *     configureTrust {
+     *         trustSource(myComposeChainTrust)
+     *         classifications(myClassifications)
+     *         policy {
+     *             default(TrustPolicy.Action.ENFORCE)
+     *         }
+     *     }
+     * }
+     * ```
+     *
+     * @param block configuration block applied to the [DocumentStatusResolverConfigBuilder]
+     * @return the [EudiWalletConfig] instance
+     * @see DocumentStatusResolverConfigBuilder
+     */
+    fun configureDocumentStatusResolver(
+        block: DocumentStatusResolverConfigBuilder.() -> Unit,
+    ) = apply {
+        val builder = DocumentStatusResolverConfigBuilder().apply(block)
+        this.documentStatusResolverClockSkew = builder.clockSkew
+        this.statusListTrustConfig = builder.buildTrustConfig()
     }
 
     var zkSystemRepository: ZkSystemRepository? = null
@@ -465,6 +539,24 @@ class EudiWalletConfig {
         zkSystemRepository: ZkSystemRepository
     ) = apply {
         this.zkSystemRepository = zkSystemRepository
+    }
+
+    internal var issuerTrustConfig: IssuerTrustConfig? = null
+        private set
+
+    /**
+     * Configure issuer trust verification for credentials issued via OpenID4VCI.
+     * Trust verification occurs after issuance, before storage. When not configured,
+     * trust verification is skipped entirely.
+     *
+     * @param block configuration block applied to the [IssuerTrustConfigBuilder]
+     * @return the [EudiWalletConfig] instance
+     * @see IssuerTrustConfigBuilder
+     */
+    fun configureIssuerTrust(
+        block: IssuerTrustConfigBuilder.() -> Unit,
+    ) = apply {
+        this.issuerTrustConfig = IssuerTrustConfigBuilder().apply(block).build()
     }
 
     companion object {

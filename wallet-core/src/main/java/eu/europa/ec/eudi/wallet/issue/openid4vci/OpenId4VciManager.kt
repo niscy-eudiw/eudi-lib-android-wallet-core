@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024-2025 European Commission
+ * Copyright (c) 2024-2026 European Commission
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,8 +19,13 @@ package eu.europa.ec.eudi.wallet.issue.openid4vci
 import android.content.Context
 import android.net.Uri
 import androidx.annotation.IntDef
+import com.nimbusds.jose.jwk.Curve
 import eu.europa.ec.eudi.openid4vci.CredentialConfigurationIdentifier
 import eu.europa.ec.eudi.openid4vci.CredentialIssuerMetadata
+import eu.europa.ec.eudi.openid4vci.CredentialResponseEncryptionPolicy
+import eu.europa.ec.eudi.openid4vci.EcConfig
+import eu.europa.ec.eudi.openid4vci.EncryptionSupportConfig
+import eu.europa.ec.eudi.openid4vci.RsaConfig
 import eu.europa.ec.eudi.wallet.document.DeferredDocument
 import eu.europa.ec.eudi.wallet.document.DocumentId
 import eu.europa.ec.eudi.wallet.document.DocumentManager
@@ -33,6 +38,7 @@ import eu.europa.ec.eudi.wallet.logging.Logger
 import org.multipaz.storage.Storage
 import eu.europa.ec.eudi.wallet.provider.WalletAttestationsProvider
 import eu.europa.ec.eudi.wallet.provider.WalletKeyManager
+import eu.europa.ec.eudi.wallet.trust.IssuerTrustConfig
 import io.ktor.client.HttpClient
 import java.util.concurrent.Executor
 
@@ -311,6 +317,7 @@ interface OpenId4VciManager {
         var ktorHttpClientFactory: (() -> HttpClient)? = null
         var walletKeyManager: WalletKeyManager? = null
         var walletAttestationsProvider: WalletAttestationsProvider? = null
+        internal var issuerTrustConfig: IssuerTrustConfig? = null
 
         /**
          * Set the [Config] to use
@@ -366,6 +373,15 @@ interface OpenId4VciManager {
         }
 
         /**
+         * Set the [IssuerTrustConfig] to use for issuer trust verification
+         * @param config the issuer trust configuration
+         * @return this builder
+         */
+        internal fun issuerTrustConfig(config: IssuerTrustConfig) = apply {
+            this.issuerTrustConfig = config
+        }
+
+        /**
          * Build the [OpenId4VciManager]
          * @return the [OpenId4VciManager]
          * @throws [IllegalStateException] if config or documentManager is not set
@@ -387,7 +403,8 @@ interface OpenId4VciManager {
                 logger = logger,
                 ktorHttpClientFactory = ktorHttpClientFactory,
                 walletProvider = walletAttestationsProvider,
-                walletAttestationKeyManager = walletKeyManager
+                walletAttestationKeyManager = walletKeyManager,
+                issuerTrustConfig = issuerTrustConfig
             )
         }
     }
@@ -427,6 +444,14 @@ interface OpenId4VciManager {
      *
      *           @see DPopConfig for configuration options
      * @property parUsage if PAR should be used
+     * @property responseEncryptionConfig configuration for credential response encryption.
+     *           Controls whether credential responses from the issuer are encrypted, and which
+     *           algorithms are supported.
+     *
+     *           **Default:** encryption required with EC P-256 and RSA 2048
+     *
+     *           @see EncryptionSupportConfig
+     *           @see CredentialResponseEncryptionPolicy
      */
     data class Config @JvmOverloads constructor(
         val issuerUrl: String,
@@ -436,6 +461,11 @@ interface OpenId4VciManager {
         val dpopConfig: DPopConfig = DPopConfig.Default,
         @ParUsage val parUsage: Int = IF_SUPPORTED,
         val issuanceMetadataStorage: Storage? = null,
+        val responseEncryptionConfig: EncryptionSupportConfig = EncryptionSupportConfig(
+            credentialResponseEncryptionPolicy = CredentialResponseEncryptionPolicy.REQUIRED,
+            ecConfig = EcConfig(ecKeyCurve = Curve.P_256),
+            rsaConfig = RsaConfig(rcaKeySize = 2048),
+        ),
     ) {
         /**
          * PAR usage for the OpenId4Vci issuer
@@ -549,6 +579,12 @@ interface OpenId4VciManager {
             var parUsage: Int = IF_SUPPORTED
 
             var issuanceMetadataStorage: Storage? = null
+
+            var responseEncryptionConfig: EncryptionSupportConfig = EncryptionSupportConfig(
+                credentialResponseEncryptionPolicy = CredentialResponseEncryptionPolicy.REQUIRED,
+                ecConfig = EcConfig(ecKeyCurve = Curve.P_256),
+                rsaConfig = RsaConfig(rcaKeySize = 2048),
+            )
 
             /**
              * Set the issuer url
@@ -703,6 +739,23 @@ interface OpenId4VciManager {
             }
 
             /**
+             * Sets the credential response encryption configuration.
+             *
+             * Controls whether and how credential responses from the issuer are encrypted.
+             * The configuration includes the encryption policy, EC key curve, and RSA key size.
+             *
+             * **Default:** [CredentialResponseEncryptionPolicy.REQUIRED] with EC P-256 and RSA 2048
+             *
+             * @param responseEncryptionConfig The [EncryptionSupportConfig] to use
+             * @return This builder instance for method chaining
+             * @see EncryptionSupportConfig
+             * @see CredentialResponseEncryptionPolicy
+             */
+            fun withResponseEncryptionConfig(responseEncryptionConfig: EncryptionSupportConfig) = apply {
+                this.responseEncryptionConfig = responseEncryptionConfig
+            }
+
+            /**
              * Build the [Config]
              * @return the [Config]
              */
@@ -713,13 +766,14 @@ interface OpenId4VciManager {
                 val authFlowRedirectionURI =
                     checkNotNull(authFlowRedirectionURI) { "authFlowRedirectionURI is required" }
                 return Config(
-                    issuerUrl = issuerUrl!!,
+                    issuerUrl = issuerUrl,
                     authorizationHandler = authorizationHandler,
                     clientAuthenticationType = clientAuthenticationType,
                     authFlowRedirectionURI = authFlowRedirectionURI,
                     dpopConfig = dpopConfig,
                     parUsage = parUsage,
-                    issuanceMetadataStorage = issuanceMetadataStorage
+                    issuanceMetadataStorage = issuanceMetadataStorage,
+                    responseEncryptionConfig = responseEncryptionConfig,
                 )
             }
         }
