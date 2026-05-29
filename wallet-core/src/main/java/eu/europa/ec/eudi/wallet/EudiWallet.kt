@@ -44,6 +44,10 @@ import eu.europa.ec.eudi.wallet.provider.WalletKeyManager
 import eu.europa.ec.eudi.wallet.statium.DocumentStatusResolver
 import eu.europa.ec.eudi.wallet.transactionLogging.TransactionLogger
 import eu.europa.ec.eudi.wallet.trust.EtsiReaderTrustStore
+import eu.europa.ec.eudi.wallet.trust.EtsiTrustProvider
+import eu.europa.ec.eudi.wallet.trust.IssuerTrustConfigBuilder
+import eu.europa.ec.eudi.wallet.trust.asReaderTrustStore
+import eu.europa.ec.eudi.wallet.statium.DocumentStatusResolverConfigBuilder
 import eu.europa.ec.eudi.wallet.transactionLogging.presentation.TransactionsDecorator
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.OpenId4VpManager
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.dcql.DcqlRequestProcessor
@@ -362,6 +366,25 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
             ensureStrongBoxIsSupported(loggerToUse)
             ensureUserAuthIsSupported(loggerToUse)
 
+            // Build ETSI trust provider if configured
+            val etsiTrustProvider = config.etsiTrustConfig?.let {
+                EtsiTrustProvider(config = it, context = context, logger = loggerToUse)
+            }
+            val etsiSource = etsiTrustProvider?.isChainTrusted
+            val etsiClassifications = config.etsiTrustConfig?.classifications
+
+            // Resolve deferred issuer trust config
+            config.issuerTrustConfig = config.issuerTrustBlock?.let { block ->
+                IssuerTrustConfigBuilder().apply(block).build(etsiSource, etsiClassifications)
+            }
+
+            // Resolve deferred status resolver config
+            config.statusResolverBlock?.let { block ->
+                val builder = DocumentStatusResolverConfigBuilder().apply(block)
+                config.documentStatusResolverClockSkew = builder.clockSkew
+                config.statusListTrustConfig = builder.buildTrustConfig(etsiSource, etsiClassifications)
+            }
+
             // Create shared issuance metadata storage (used by both the wrapper and OpenId4VciManager)
             val issuanceMetadataStorage = config.openId4VciConfig?.issuanceMetadataStorage ?: run {
                 val storagePath = File(
@@ -390,7 +413,14 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
                         } else manager
                     }
 
-            val readerTrustStoreToUse = (readerTrustStore ?: defaultReaderTrustStore)?.also {
+            val readerTrustStoreToUse = (readerTrustStore
+                ?: config.readerTrustStore
+                ?: if (config.useEtsiReaderTrust && etsiSource != null) {
+                    etsiSource.asReaderTrustStore()
+                } else null
+                ?: config.readerTrustedCertificates?.let { certificates ->
+                    ReaderTrustStoreImpl(certificates, profileValidation = { _, _ -> true })
+                })?.also {
                 if (it is EtsiReaderTrustStore) it.logger = loggerToUse
             }
 
@@ -475,18 +505,6 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
                 context.noBackupFilesDir.path,
                 "${config.documentManagerIdentifier}.db"
             ).absolutePath
-
-        /**
-         * Get the default [ReaderTrustStore] instance based on the configuration.
-         * A custom [ReaderTrustStore] set via [EudiWalletConfig.configureReaderTrustStore]
-         * takes priority over certificate-based configuration.
-         * @return the default [ReaderTrustStore] instance
-         */
-        @get:JvmSynthetic
-        internal val defaultReaderTrustStore: ReaderTrustStore?
-            get() = config.readerTrustStore ?: config.readerTrustedCertificates?.let { certificates ->
-                ReaderTrustStoreImpl(certificates, profileValidation = { _, _ -> true })
-            }
 
         /**
          * Get the default [Storage] instance based on the configuration

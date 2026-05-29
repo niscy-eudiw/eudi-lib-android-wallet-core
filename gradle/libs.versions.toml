@@ -1,5 +1,5 @@
 [versions]
-agp = "9.0.1"
+agp = "9.1.1"
 androidx-credentials = "1.6.0"
 androidx-credentials-registry = "1.0.0-alpha04"
 appcompat = "1.7.1"
@@ -65,6 +65,7 @@ eudi-lib-jvm-openid4vci-kt = { module = "eu.europa.ec.eudi:eudi-lib-jvm-openid4v
 eudi-lib-jvm-siop-openid4vp-kt = { module = "eu.europa.ec.eudi:eudi-lib-jvm-openid4vp-kt", version.ref = "eudi-lib-jvm-openid4vp-kt" }
 eudi-lib-jvm-sdjwt-kt = { module = "eu.europa.ec.eudi:eudi-lib-jvm-sdjwt-kt", version.ref = "eudi-lib-jvm-sdjwt-kt" }
 eudi-lib-kmp-etsi1196x2-consultation = { module = "eu.europa.ec.eudi:etsi-1196x2-consultation", version.ref = "eudi-lib-kmp-etsi1196x2" }
+eudi-lib-kmp-etsi119602-consultation = { module = "eu.europa.ec.eudi:etsi-119602-consultation", version.ref = "eudi-lib-kmp-etsi1196x2" }
 eudi-lib-kmp-statium = { module = "eu.europa.ec.eudi:eudi-lib-kmp-statium-android", version.ref = "eudi-lib-kmp-statium" }
 json = { module = "org.json:json", version.ref = "json" }
 junit = { module = "junit:junit", version.ref = "junit" }

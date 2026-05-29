@@ -173,12 +173,32 @@ class IssuerTrustConfigBuilder {
      * @throws IllegalArgumentException if no trust source is configured, or if classifications
      *   are missing when required by the trust source type
      */
-    internal fun build(): IssuerTrustConfig {
+    internal fun build(): IssuerTrustConfig = build(null, null)
+
+    /**
+     * Builds the [IssuerTrustConfig], using the provided defaults for trust source and
+     * classifications when they have not been explicitly set via [trustSource] / [classifications].
+     *
+     * This is used by [eu.europa.ec.eudi.wallet.EudiWallet.Builder] to inject the centrally
+     * configured ETSI trust source from [eu.europa.ec.eudi.wallet.EudiWalletConfig.configureEtsiTrust].
+     *
+     * @param defaultSource default EUDIW trust source if [trustSource] was not called
+     * @param defaultClassifications default classifications if [classifications] was not called
+     * @return a validated [IssuerTrustConfig]
+     * @throws IllegalArgumentException if no trust source is available
+     */
+    internal fun build(
+        defaultSource: IsChainTrustedForEUDIW<List<X509Certificate>, TrustAnchor>?,
+        defaultClassifications: AttestationClassifications?,
+    ): IssuerTrustConfig {
+        val effectiveEudiwSource = eudiwSource ?: defaultSource
+        val effectiveClassifications = classifications ?: defaultClassifications
+
         val attestation = preBuiltAttestation ?: run {
-            val eudiw = requireNotNull(eudiwSource) {
+            val eudiw = requireNotNull(effectiveEudiwSource) {
                 "A trust source must be provided via trustSource()"
             }
-            val cls = requireNotNull(classifications) {
+            val cls = requireNotNull(effectiveClassifications) {
                 "AttestationClassifications must be provided when using IsChainTrustedForEUDIW as trust source"
             }
             IsChainTrustedForAttestation(eudiw, cls)
@@ -193,23 +213,25 @@ class IssuerTrustConfigBuilder {
         )
         val verifiers = defaultVerifiers + customVerifiers
 
-        val issuerMetadataPolicy = buildIssuerMetadataPolicy()
+        val issuerMetadataPolicy = buildIssuerMetadataPolicy(effectiveEudiwSource)
 
         return IssuerTrustConfig(
             isChainTrustedForAttestation = attestation,
-            classifications = classifications,
+            classifications = effectiveClassifications,
             trustPolicy = trustPolicy,
             credentialTrustVerifiers = verifiers,
             issuerMetadataPolicy = issuerMetadataPolicy,
         )
     }
 
-    private fun buildIssuerMetadataPolicy(): IssuerMetadataPolicy =
+    private fun buildIssuerMetadataPolicy(
+        effectiveSource: IsChainTrustedForEUDIW<List<X509Certificate>, TrustAnchor>? = eudiwSource,
+    ): IssuerMetadataPolicy =
         when (metadataPolicyMode) {
             MetadataPolicyMode.IGNORE -> IssuerMetadataPolicy.IgnoreSigned
             MetadataPolicyMode.REQUIRE,
             MetadataPolicyMode.PREFER -> {
-                val source = eudiwSource
+                val source = effectiveSource
                     ?: throw IllegalArgumentException(
                         "Signed metadata verification requires an IsChainTrustedForEUDIW trust source. " +
                             "Call ignoreSignedMetadata() to opt out."

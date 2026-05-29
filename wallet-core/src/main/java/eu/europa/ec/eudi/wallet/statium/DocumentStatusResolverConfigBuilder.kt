@@ -15,8 +15,12 @@
  */
 package eu.europa.ec.eudi.wallet.statium
 
+import eu.europa.ec.eudi.etsi1196x2.consultation.AttestationClassifications
+import eu.europa.ec.eudi.etsi1196x2.consultation.IsChainTrustedForEUDIW
 import eu.europa.ec.eudi.wallet.trust.StatusListTrustConfig
 import eu.europa.ec.eudi.wallet.trust.StatusListTrustConfigBuilder
+import java.security.cert.TrustAnchor
+import java.security.cert.X509Certificate
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 
@@ -75,5 +79,30 @@ class DocumentStatusResolverConfigBuilder {
      */
     internal fun buildTrustConfig(): StatusListTrustConfig? {
         return trustConfigBuilder?.build()
+    }
+
+    /**
+     * Builds the [StatusListTrustConfig], using the provided defaults for trust source and
+     * classifications when they have not been explicitly set inside [configureTrust].
+     *
+     * When [configureTrust] was not called but ETSI defaults are available, a default
+     * [StatusListTrustConfig] is created automatically using the provided defaults.
+     *
+     * @param defaultSource default EUDIW trust source from [eu.europa.ec.eudi.wallet.EudiWalletConfig.configureEtsiTrust]
+     * @param defaultClassifications default classifications from [eu.europa.ec.eudi.wallet.EudiWalletConfig.configureEtsiTrust]
+     * @return the built [StatusListTrustConfig], or null if no trust source is available
+     */
+    internal fun buildTrustConfig(
+        defaultSource: IsChainTrustedForEUDIW<List<X509Certificate>, TrustAnchor>?,
+        defaultClassifications: AttestationClassifications?,
+    ): StatusListTrustConfig? {
+        return if (trustConfigBuilder != null) {
+            trustConfigBuilder!!.build(defaultSource, defaultClassifications)
+        } else if (defaultSource != null && defaultClassifications != null) {
+            // Auto-create with ETSI defaults when configureTrust was not called
+            StatusListTrustConfigBuilder().build(defaultSource, defaultClassifications)
+        } else {
+            null
+        }
     }
 }

@@ -116,14 +116,28 @@ class StatusListTrustConfigBuilder {
      * @throws IllegalArgumentException if no trust source is configured, or if classifications
      *   are missing when required by the trust source type
      */
-    internal fun build(): StatusListTrustConfig {
+    internal fun build(): StatusListTrustConfig = build(null, null)
+
+    /**
+     * Builds the [StatusListTrustConfig], using the provided defaults for trust source and
+     * classifications when they have not been explicitly set via [trustSource] / [classifications].
+     *
+     * @param defaultSource default EUDIW trust source if [trustSource] was not called
+     * @param defaultClassifications default classifications if [classifications] was not called
+     * @return a validated [StatusListTrustConfig]
+     * @throws IllegalArgumentException if no trust source is available
+     */
+    internal fun build(
+        defaultSource: IsChainTrustedForEUDIW<List<X509Certificate>, TrustAnchor>?,
+        defaultClassifications: AttestationClassifications?,
+    ): StatusListTrustConfig {
+        val effectiveClassifications = classifications ?: defaultClassifications
+
         val attestation = preBuiltAttestation ?: run {
-            val eudiw = requireNotNull(eudiwSource) {
-                "A trust source must be provided via trustSource()"
-            }
-            val cls = requireNotNull(classifications) {
-                "AttestationClassifications must be provided when using IsChainTrustedForEUDIW as trust source"
-            }
+            val eudiw = eudiwSource ?: defaultSource
+                ?: error("A trust source must be provided via trustSource()")
+            val cls = effectiveClassifications
+                ?: error("AttestationClassifications must be provided when using IsChainTrustedForEUDIW as trust source")
             IsChainTrustedForAttestation(eudiw, cls)
         }
 
@@ -132,7 +146,7 @@ class StatusListTrustConfigBuilder {
 
         return StatusListTrustConfig(
             isChainTrustedForAttestation = attestation,
-            classifications = classifications,
+            classifications = effectiveClassifications,
             trustPolicy = trustPolicy,
         )
     }
