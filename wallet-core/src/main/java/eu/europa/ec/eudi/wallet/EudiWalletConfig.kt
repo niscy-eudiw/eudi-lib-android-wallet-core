@@ -31,6 +31,8 @@ import eu.europa.ec.eudi.wallet.issue.openid4vci.OpenId4VciManager
 import eu.europa.ec.eudi.wallet.logging.Logger
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.OpenId4VpConfig
 import eu.europa.ec.eudi.wallet.statium.DocumentStatusResolverConfigBuilder
+import eu.europa.ec.eudi.wallet.trust.EtsiTrustConfig
+import eu.europa.ec.eudi.wallet.trust.EtsiTrustConfigBuilder
 import eu.europa.ec.eudi.wallet.trust.IssuerTrustConfig
 import eu.europa.ec.eudi.wallet.trust.IssuerTrustConfigBuilder
 import eu.europa.ec.eudi.wallet.trust.StatusListTrustConfig
@@ -397,6 +399,23 @@ class EudiWalletConfig {
         this.readerTrustStore = isChainTrusted.asReaderTrustStore()
     }
 
+    internal var useEtsiReaderTrust: Boolean = false
+        private set
+
+    /**
+     * Configure the [ReaderTrustStore] using the ETSI trust source from [configureEtsiTrust].
+     *
+     * Creates an [eu.europa.ec.eudi.wallet.trust.EtsiReaderTrustStore] that delegates
+     * reader certificate chain validation to the centrally configured ETSI trust source.
+     * Requires [configureEtsiTrust] to be called.
+     *
+     * @return the [EudiWalletConfig] instance
+     * @see configureEtsiTrust
+     */
+    fun configureReaderTrustStore() = apply {
+        this.useEtsiReaderTrust = true
+    }
+
     /**
      * The reader authentication enforcement policy for proximity and DCAPI presentations.
      * This determines how the wallet handles reader authentication results when generating
@@ -485,9 +504,12 @@ class EudiWalletConfig {
     }
 
     var documentStatusResolverClockSkew: Duration = Duration.ZERO
-        private set
+        internal set
 
     internal var statusListTrustConfig: StatusListTrustConfig? = null
+        internal set
+
+    internal var statusResolverBlock: (DocumentStatusResolverConfigBuilder.() -> Unit)? = null
         private set
 
     /**
@@ -501,6 +523,10 @@ class EudiWalletConfig {
     /**
      * Configure the document status resolver with clock skew and optional ETSI trust verification
      * for status list token signers.
+     *
+     * When [configureEtsiTrust] is also called, `trustSource()` and `classifications()` inside
+     * the `configureTrust` block are optional — they default to the centrally configured
+     * ETSI trust source. Explicit calls override the defaults.
      *
      * Example:
      * ```
@@ -519,13 +545,12 @@ class EudiWalletConfig {
      * @param block configuration block applied to the [DocumentStatusResolverConfigBuilder]
      * @return the [EudiWalletConfig] instance
      * @see DocumentStatusResolverConfigBuilder
+     * @see configureEtsiTrust
      */
     fun configureDocumentStatusResolver(
         block: DocumentStatusResolverConfigBuilder.() -> Unit,
     ) = apply {
-        val builder = DocumentStatusResolverConfigBuilder().apply(block)
-        this.documentStatusResolverClockSkew = builder.clockSkew
-        this.statusListTrustConfig = builder.buildTrustConfig()
+        this.statusResolverBlock = block
     }
 
     var zkSystemRepository: ZkSystemRepository? = null
@@ -542,6 +567,9 @@ class EudiWalletConfig {
     }
 
     internal var issuerTrustConfig: IssuerTrustConfig? = null
+        internal set
+
+    internal var issuerTrustBlock: (IssuerTrustConfigBuilder.() -> Unit)? = null
         private set
 
     /**
@@ -549,14 +577,67 @@ class EudiWalletConfig {
      * Trust verification occurs after issuance, before storage. When not configured,
      * trust verification is skipped entirely.
      *
+     * When [configureEtsiTrust] is also called, `trustSource()` and `classifications()`
+     * are optional — they default to the centrally configured ETSI trust source.
+     * Explicit calls override the defaults.
+     *
      * @param block configuration block applied to the [IssuerTrustConfigBuilder]
      * @return the [EudiWalletConfig] instance
      * @see IssuerTrustConfigBuilder
+     * @see configureEtsiTrust
      */
     fun configureIssuerTrust(
         block: IssuerTrustConfigBuilder.() -> Unit,
     ) = apply {
-        this.issuerTrustConfig = IssuerTrustConfigBuilder().apply(block).build()
+        this.issuerTrustBlock = block
+    }
+
+    internal var etsiTrustConfig: EtsiTrustConfig? = null
+        private set
+
+    /**
+     * Configure the ETSI LoTE (List of Trusted Entities) trust infrastructure.
+     *
+     * This centralizes the trust source configuration so it can be shared across all
+     * trust verification areas (issuer trust, status list trust, reader authentication).
+     * The core builds the underlying trust pipeline internally from the provided parameters.
+     *
+     * When this is configured, [configureIssuerTrust], [configureDocumentStatusResolver],
+     * and [configureReaderTrustStore] no longer require explicit `trustSource()` and
+     * `classifications()` calls — they default to the central ETSI trust source.
+     *
+     * Each trust area still needs to be explicitly enabled via its own `configure*` call.
+     *
+     * Example:
+     * ```
+     * configureEtsiTrust {
+     *     loteLocations(SupportedLists(
+     *         pidProviders = Uri("https://trustedlist.../PIDProviders.jwt"),
+     *         wrpacProviders = Uri("https://trustedlist.../WRPACProviders.jwt"),
+     *     ))
+     *     classifications(AttestationClassifications(
+     *         pids = AttestationIdentifierPredicate.any(setOf(
+     *             AttestationIdentifier.MDoc("eu.europa.ec.eudi.pid.1"),
+     *         )),
+     *     ))
+     *     // Optional:
+     *     relaxCertificateProfiles()
+     * }
+     * configureIssuerTrust {
+     *     policy { default(TrustPolicy.Action.INFORM) }
+     * }
+     * configureDocumentStatusResolver { }
+     * configureReaderTrustStore()
+     * ```
+     *
+     * @param block configuration block applied to the [EtsiTrustConfigBuilder]
+     * @return the [EudiWalletConfig] instance
+     * @see EtsiTrustConfigBuilder
+     */
+    fun configureEtsiTrust(
+        block: EtsiTrustConfigBuilder.() -> Unit,
+    ) = apply {
+        this.etsiTrustConfig = EtsiTrustConfigBuilder().apply(block).build()
     }
 
     companion object {
