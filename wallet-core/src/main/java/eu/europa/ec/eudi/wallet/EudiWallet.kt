@@ -375,7 +375,7 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
 
             // Resolve deferred issuer trust config
             config.issuerTrustConfig = config.issuerTrustBlock?.let { block ->
-                IssuerTrustConfigBuilder().apply(block).build(etsiSource, etsiClassifications)
+                IssuerTrustConfigBuilder().apply(block).build(etsiSource, etsiClassifications, loggerToUse)
             }
 
             // Resolve deferred status resolver config

@@ -25,6 +25,7 @@ import eu.europa.ec.eudi.openid4vci.IssuerTrust
 import eu.europa.ec.eudi.wallet.document.format.DocumentFormat
 import eu.europa.ec.eudi.wallet.document.format.MsoMdocFormat
 import eu.europa.ec.eudi.wallet.document.format.SdJwtVcFormat
+import eu.europa.ec.eudi.wallet.logging.Logger
 import java.security.cert.TrustAnchor
 import java.security.cert.X509Certificate
 import kotlin.reflect.KClass
@@ -190,6 +191,7 @@ class IssuerTrustConfigBuilder {
     internal fun build(
         defaultSource: IsChainTrustedForEUDIW<List<X509Certificate>, TrustAnchor>?,
         defaultClassifications: AttestationClassifications?,
+        logger: Logger? = null,
     ): IssuerTrustConfig {
         val effectiveEudiwSource = eudiwSource ?: defaultSource
         val effectiveClassifications = classifications ?: defaultClassifications
@@ -213,7 +215,7 @@ class IssuerTrustConfigBuilder {
         )
         val verifiers = defaultVerifiers + customVerifiers
 
-        val issuerMetadataPolicy = buildIssuerMetadataPolicy(effectiveEudiwSource)
+        val issuerMetadataPolicy = buildIssuerMetadataPolicy(effectiveEudiwSource, logger)
 
         return IssuerTrustConfig(
             isChainTrustedForAttestation = attestation,
@@ -226,6 +228,7 @@ class IssuerTrustConfigBuilder {
 
     private fun buildIssuerMetadataPolicy(
         effectiveSource: IsChainTrustedForEUDIW<List<X509Certificate>, TrustAnchor>? = eudiwSource,
+        logger: Logger? = null,
     ): IssuerMetadataPolicy =
         when (metadataPolicyMode) {
             MetadataPolicyMode.IGNORE -> IssuerMetadataPolicy.IgnoreSigned
@@ -236,7 +239,9 @@ class IssuerTrustConfigBuilder {
                         "Signed metadata verification requires an IsChainTrustedForEUDIW trust source. " +
                             "Call ignoreSignedMetadata() to opt out."
                     )
-                val issuerTrust = IssuerTrust.ByCertificateChain(EtsiCertificateChainTrust(source))
+                val issuerTrust = IssuerTrust.ByCertificateChain(
+                    EtsiCertificateChainTrust(source, logger)
+                )
                 if (metadataPolicyMode == MetadataPolicyMode.REQUIRE) {
                     IssuerMetadataPolicy.RequireSigned(issuerTrust)
                 } else {

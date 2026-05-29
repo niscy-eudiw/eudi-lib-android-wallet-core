@@ -35,6 +35,7 @@ import eu.europa.ec.eudi.wallet.trust.EtsiTrustConfig
 import eu.europa.ec.eudi.wallet.trust.EtsiTrustConfigBuilder
 import eu.europa.ec.eudi.wallet.trust.IssuerTrustConfig
 import eu.europa.ec.eudi.wallet.trust.IssuerTrustConfigBuilder
+import eu.europa.ec.eudi.wallet.trust.ReaderTrustConfigBuilder
 import eu.europa.ec.eudi.wallet.trust.StatusListTrustConfig
 import eu.europa.ec.eudi.wallet.trust.asReaderTrustStore
 import java.security.cert.TrustAnchor
@@ -334,8 +335,12 @@ class EudiWalletConfig {
         private set
 
     /**
-     * Configure the built-in [ReaderTrustStore]. This allows to set the reader trusted
-     * certificates for the reader trust store.
+     * Configure the built-in [ReaderTrustStore] with a list of trusted certificates.
+     *
+     * Example:
+     * ```
+     * configureReaderTrustStore(listOf(certificate1, certificate2))
+     * ```
      *
      * @param readerTrustedCertificates the reader trusted certificates
      * @return the [EudiWalletConfig] instance
@@ -345,8 +350,12 @@ class EudiWalletConfig {
     }
 
     /**
-     * Configure the built-in [ReaderTrustStore]. This allows to set the reader trusted
-     * certificates for the reader trust store.
+     * Configure the built-in [ReaderTrustStore] with trusted certificates.
+     *
+     * Example:
+     * ```
+     * configureReaderTrustStore(certificate1, certificate2)
+     * ```
      *
      * @param readerTrustedCertificates the reader trusted certificates
      * @return the [EudiWalletConfig] instance
@@ -356,9 +365,12 @@ class EudiWalletConfig {
     }
 
     /**
-     * Configure the built-in [ReaderTrustStore].
-     * This allows to set the reader trusted certificates for the reader trust store.
-     * The certificates are loaded from the raw resources.
+     * Configure the built-in [ReaderTrustStore] with certificates loaded from raw resources.
+     *
+     * Example:
+     * ```
+     * configureReaderTrustStore(context, R.raw.reader_cert_1, R.raw.reader_cert_2)
+     * ```
      *
      * @param context the context
      * @param certificateRes the reader trusted certificates raw resources
@@ -390,6 +402,12 @@ class EudiWalletConfig {
      * [VerificationContext.WalletRelyingPartyAccessCertificate][eu.europa.ec.eudi.etsi1196x2.consultation.VerificationContext.WalletRelyingPartyAccessCertificate]
      * verification context. This takes priority over certificate-based configuration.
      *
+     * Example:
+     * ```
+     * val composeChainTrust: IsChainTrustedForEUDIW<...> = // from ETSI library
+     * configureReaderTrustStore(composeChainTrust)
+     * ```
+     *
      * @param isChainTrusted the ETSI chain trust validator
      * @return the [EudiWalletConfig] instance
      */
@@ -409,11 +427,30 @@ class EudiWalletConfig {
      * reader certificate chain validation to the centrally configured ETSI trust source.
      * Requires [configureEtsiTrust] to be called.
      *
+     * Example with default policy ([ReaderAuthPolicy.EnforceIfPresent]):
+     * ```
+     * configureReaderTrustStore { }
+     * ```
+     *
+     * Example requiring reader authentication for all presentations:
+     * ```
+     * configureReaderTrustStore {
+     *     readerAuthPolicy(ReaderAuthPolicy.AlwaysRequire)
+     * }
+     * ```
+     *
+     * @param block configuration block applied to the [ReaderTrustConfigBuilder]
      * @return the [EudiWalletConfig] instance
      * @see configureEtsiTrust
+     * @see ReaderTrustConfigBuilder
+     * @see ReaderAuthPolicy
      */
-    fun configureReaderTrustStore() = apply {
+    fun configureReaderTrustStore(
+        block: ReaderTrustConfigBuilder.() -> Unit,
+    ) = apply {
         this.useEtsiReaderTrust = true
+        val builder = ReaderTrustConfigBuilder().apply(block)
+        builder.readerAuthPolicy?.let { this.readerAuthPolicy = it }
     }
 
     /**
@@ -580,6 +617,29 @@ class EudiWalletConfig {
      * When [configureEtsiTrust] is also called, `trustSource()` and `classifications()`
      * are optional — they default to the centrally configured ETSI trust source.
      * Explicit calls override the defaults.
+     *
+     * Example with [configureEtsiTrust] (trust source inherited):
+     * ```
+     * configureIssuerTrust {
+     *     policy {
+     *         default(TrustPolicy.Action.ENFORCE)
+     *     }
+     *     // requireSignedMetadata() is the default — verifies signed issuer metadata JWTs
+     *     // ignoreSignedMetadata() to skip metadata signature checks
+     * }
+     * ```
+     *
+     * Example with explicit trust source:
+     * ```
+     * configureIssuerTrust {
+     *     trustSource(myComposeChainTrust)
+     *     classifications(myClassifications)
+     *     policy {
+     *         default(TrustPolicy.Action.INFORM)
+     *         forContext(VerificationContext.PID, TrustPolicy.Action.ENFORCE)
+     *     }
+     * }
+     * ```
      *
      * @param block configuration block applied to the [IssuerTrustConfigBuilder]
      * @return the [EudiWalletConfig] instance

@@ -311,7 +311,7 @@ wallet-core library with custom SecureArea implementations.
 
 #### Reader Authentication Policy
 
-The `configureReaderAuthPolicy` method controls how reader authentication results affect document
+The reader authentication policy controls how reader authentication results affect document
 disclosure during proximity (BLE/NFC) and DCAPI presentations. This works in conjunction with the
 `ReaderTrustStore` configured via `configureReaderTrustStore`.
 
@@ -328,13 +328,31 @@ happens based on the verification result:
 Per ISO 18013-5, when all documents are excluded due to reader authentication failure, the wallet
 returns a DeviceResponse with status 10 (General Error) instead of an empty success response.
 
-**Example:**
+The reader auth policy can be set in two ways, for flexibility:
+
+**Inside the ETSI reader trust DSL** (when using `configureEtsiTrust`):
 
 ```kotlin
-val config = EudiWalletConfig()
-    .configureReaderTrustStore(listOf(trustedReaderCertificate))
-    .configureReaderAuthPolicy(ReaderAuthPolicy.EnforceIfPresent)
+val config = EudiWalletConfig {
+    configureEtsiTrust { /* ... */ }
+    configureReaderTrustStore {
+        readerAuthPolicy(ReaderAuthPolicy.AlwaysRequire)
+    }
+}
 ```
+
+**As a standalone call** (when using certificate-based or custom `ReaderTrustStore`):
+
+```kotlin
+val config = EudiWalletConfig {
+    configureReaderTrustStore(listOf(trustedReaderCertificate))
+    configureReaderAuthPolicy(ReaderAuthPolicy.EnforceIfPresent)
+}
+```
+
+The standalone `configureReaderAuthPolicy()` method remains available for users who use the
+certificate-based `configureReaderTrustStore(certificates)` overloads or a custom `ReaderTrustStore`,
+since those paths don't have a DSL block.
 
 > **Note:** If a verifier includes reader authentication in its request but its certificate is not in
 > the configured `ReaderTrustStore`, the document will be excluded from the response when using
@@ -610,38 +628,109 @@ status** (status list token signer trust), and **signed issuer metadata** verifi
 enables dynamic trust anchor resolution from LoTE (ETSI TS 119 602) instead of static
 certificate lists.
 
+The recommended approach is to use `configureEtsiTrust` to centralize the LoTE trust
+infrastructure in the core. This builds the entire trust pipeline internally — HTTP client,
+file cache, JWT signature verification, trust anchor provisioning, and caching — from a
+small set of high-level configuration knobs. Each trust area (`configureIssuerTrust`,
+`configureDocumentStatusResolver`, `configureReaderTrustStore`) inherits the shared trust
+source automatically and only needs area-specific settings (policies, clock skew, etc.).
+
 Each trust verification feature is independently configurable and opt-in. When not configured,
 the library behaves as before (credentials stored without trust checks, status resolved with
 standard signature verification, reader authentication via static certificate lists or
 disabled, unsigned metadata only).
 
-The design is **protocol-agnostic** — wallet-core defines integration contracts, and the developer
-composes trust validation using the
+For advanced use cases, the design remains **protocol-agnostic** — the per-area builders still
+accept explicit `trustSource()` calls, allowing developers to compose trust validation using the
 [eudi-lib-kmp-etsi1196x2](https://github.com/eu-digital-identity-wallet/eudi-lib-kmp-etsi-1196x2)
 library directly (or any other trust framework).
 
 #### Dependencies
 
-The core consultation module (`etsi-1196x2-consultation`) is already included transitively via
-wallet-core. For LoTE support, add the corresponding module to your app's dependencies:
+The `etsi-1196x2-consultation` module is exposed as an `api` dependency from wallet-core. The
+`etsi-119602-consultation` module is bundled as `implementation` (not transitive) — consumers
+that need its types (e.g., `Uri`, `VerifyJwtSignature`) must declare it explicitly:
+
+- `etsi-1196x2-consultation` — base consultation types (`SupportedLists`, `AttestationClassifications`, `IsChainTrustedForEUDIW`, etc.) — transitive via wallet-core
+- `etsi-119602-consultation` — LoTE loading infrastructure (`Uri`, `VerifyJwtSignature`, `LoadLoTEAndPointers.Constraints`) — **must be declared by consumer**
 
 ```groovy
 dependencies {
-    // wallet-core (already includes etsi-1196x2-consultation transitively)
     implementation "eu.europa.ec.eudi:eudi-lib-android-wallet-core:0.26.0-SNAPSHOT"
-
-    // For LoTE (List of Trusted Entities) support — ETSI TS 119 602
-    implementation "eu.europa.ec.eudi:etsi-119602-consultation:0.3.0-alpha.5-SNAPSHOT"
+    // Required for configureEtsiTrust DSL types (Uri, etc.)
+    implementation "eu.europa.ec.eudi:etsi-119602-consultation:0.3.0-alpha.5"
 }
 ```
 
-#### Setting Up Trust Anchor Resolution (LoTE)
+#### Centralized Trust Configuration (`configureEtsiTrust`)
 
-Set up trust anchor resolution from Lists of Trusted Entities (ETSI TS 119 602):
+The `configureEtsiTrust` DSL centralizes the entire LoTE pipeline setup into a few high-level
+knobs. The core builds the HTTP client, file cache, JWT signature verifier, trust anchor
+provisioner, and in-memory cache internally. Each trust area inherits the shared trust source
+and classifications automatically.
+
+```kotlin
+val config = EudiWalletConfig {
+    configureEtsiTrust {
+        // Required: LoTE download URLs
+        loteLocations(SupportedLists(
+            pidProviders = Uri("https://trust.example.eu/pid-providers.jwt"),
+            wrpacProviders = Uri("https://trust.example.eu/wrpac-providers.jwt"),
+            // pubEaaProviders = Uri("https://trust.example.eu/pub-eaa-providers.jwt"),
+        ))
+
+        // Required: map credential types to ETSI verification contexts
+        classifications(AttestationClassifications(
+            pids = AttestationIdentifierPredicate.any(setOf(
+                AttestationIdentifier.MDoc("eu.europa.ec.eudi.pid.1"),
+                AttestationIdentifier.SDJwtVc("urn:eudi:pid:1"),
+            )),
+            pubEAAs = AttestationIdentifierPredicate.equalsTo(
+                AttestationIdentifier.MDoc("org.iso.18013.5.1.mDL")
+            ),
+        ))
+
+        // Optional: all have sensible defaults
+        fileCacheExpiration(24.hours)    // how long LoTE files are cached on disk
+        cacheTtl(20.minutes)             // how long trust anchors are cached in memory
+        relaxCertificateProfiles()       // strip endEntityProfile constraints (DEV/testing)
+        relaxPkixRevocation()            // disable PKIX revocation checks (DEV/testing)
+        // jwtSignatureVerifier(custom)  // override built-in JWT verifier
+        // loteConstraints(...)          // control LoTE pointer following
+    }
+
+    // Each area inherits trust source + classifications from configureEtsiTrust.
+    // Only area-specific settings are needed:
+    configureIssuerTrust {
+        policy { default(TrustPolicy.Action.ENFORCE) }
+    }
+    configureDocumentStatusResolver {
+        clockSkew(5)
+    }
+    configureReaderTrustStore {
+        readerAuthPolicy(ReaderAuthPolicy.AlwaysRequire)
+    }
+}
+```
+
+> **JWT Signature Verification:** The core includes a built-in `VerifyJwtSignature`
+> implementation that extracts the `x5c` certificate chain from the LoTE JWT header and
+> verifies the signature using the leaf certificate's public key (EC and RSA supported).
+> To override this, pass a custom verifier via `jwtSignatureVerifier()`.
+>
+> **DEV/Testing knobs:** `relaxCertificateProfiles()` strips `endEntityProfile` constraints
+> from all provider types, useful when DEV certificates don't fully conform to ETSI profile
+> requirements. `relaxPkixRevocation()` disables CRL/OCSP revocation checks when endpoints
+> are not available in the test environment.
+
+#### Advanced: Manual Trust Anchor Resolution (LoTE)
+
+For advanced use cases where you need full control over the LoTE pipeline, you can build
+the trust source manually using the ETSI library directly and pass it to the per-area
+builders via `trustSource()`:
 
 ```kotlin
 // 1. Set up LoTE loading with file cache
-// HttpClient() auto-discovers the ktor-client-android engine at runtime
 val httpClient = HttpClient()
 val loadLoTE = LoadSingleLoTEWithFileCache(
     cacheDirectory = Path(context.cacheDir.path, "lote-cache"),
@@ -659,102 +748,37 @@ val loadLoTEAndPointers = LoadLoTEAndPointers(
 // 3. Build trust anchor provisioner with EU defaults
 val provisionTrustAnchors = ProvisionTrustAnchorsFromLoTEs.eudiwJvm(loadLoTEAndPointers)
 
-// 4. Configure LoTE URLs for the provider types you need
-val loteLocations = SupportedLists(
-    pidProviders = "https://trust.example.eu/pid-providers.jwt",
-    wrpacProviders = "https://trust.example.eu/wrpac-providers.jwt",
-    // pubEaaProviders = "https://trust.example.eu/pub-eaa-providers.jwt",
-    // qeaProviders = "https://trust.example.eu/qeaa-providers.jwt",
-)
-
-// 5. Create cached trust validator
-// DisposableContainer manages the lifecycle of cached trust anchors.
-// Create it at Application scope and call dispose() when no longer needed.
+// 4. Create cached trust validator
 val disposableScope = DisposableContainer()
 val isChainTrusted = provisionTrustAnchors.cached(disposableScope, loteLocations, ttl = 10.minutes)
 
-// Use isChainTrusted for issuer trust, metadata verification, status resolution, and reader auth (see below)
+// 5. Pass to each area explicitly
+val config = EudiWalletConfig {
+    configureIssuerTrust {
+        trustSource(isChainTrusted)
+        classifications(myClassifications)
+        policy { default(TrustPolicy.Action.ENFORCE) }
+    }
+    configureDocumentStatusResolver {
+        clockSkew(5)
+        configureTrust {
+            trustSource(isChainTrusted)
+            classifications(myClassifications)
+        }
+    }
+    configureReaderTrustStore(isChainTrusted)
+}
 
-// When shutting down (e.g. Application.onTerminate()):
+// On shutdown:
 // disposableScope.dispose()
 ```
 
-> **VerifyJwtSignature:** The ETSI library requires a `VerifyJwtSignature` implementation to
-> verify the cryptographic signature of downloaded LoTE JWT documents before trusting their
-> contents. The signing keys vary by deployment (EU production, national lists, acceptance
-> environments). The library provides only a `NotValidating` test stub — **do not use it in
-> production**.
-
-The following example shows how to implement `VerifyJwtSignature` using Nimbus JWT to verify
-the LoTE JWT signature against a list of trusted signing certificates:
-
-```kotlin
-// Trusted certificates for LoTE JWT signature verification
-// (e.g., EU Commission's LoTE signing certificate)
-val loteTrustedCertificates: List<X509Certificate> = listOf(/* your trusted certs */)
-
-val myJwtVerifier = VerifyJwtSignature { jwt ->
-    try {
-        val signedJwt = SignedJWT.parse(jwt)
-
-        // Extract x5c certificate chain from JWT header
-        val x5cChain = signedJwt.header.x509CertChain
-            ?: return@VerifyJwtSignature VerifyJwtSignature.Outcome.NotVerified(
-                IllegalStateException("Missing x5c in LoTE JWT header")
-            )
-        val chainCerts = x5cChain.mapNotNull { X509CertUtils.parse(it.decode()) }
-        if (chainCerts.isEmpty()) {
-            return@VerifyJwtSignature VerifyJwtSignature.Outcome.NotVerified(
-                IllegalStateException("No valid certificates in x5c")
-            )
-        }
-
-        // Verify JWT signature using the signing certificate's public key
-        val signingCert = chainCerts.first()
-        val verifier = when (val key = signingCert.publicKey) {
-            is ECPublicKey -> ECDSAVerifier(key)
-            is RSAPublicKey -> RSASSAVerifier(key)
-            else -> return@VerifyJwtSignature VerifyJwtSignature.Outcome.NotVerified(
-                IllegalStateException("Unsupported key type: ${key.javaClass.name}")
-            )
-        }
-        if (!signedJwt.verify(verifier)) {
-            return@VerifyJwtSignature VerifyJwtSignature.Outcome.NotVerified(
-                IllegalStateException("JWT signature verification failed")
-            )
-        }
-
-        // Validate signing certificate against trusted certificates
-        // Try direct trust first (subject DN + serial number match)
-        val directlyTrusted = loteTrustedCertificates.any { trusted ->
-            trusted.subjectX500Principal == signingCert.subjectX500Principal &&
-                trusted.serialNumber == signingCert.serialNumber
-        }
-        if (directlyTrusted) {
-            return@VerifyJwtSignature VerifyJwtSignature.Outcome.Verified(jwt)
-        }
-
-        // Fall back to PKIX chain validation
-        val certPath = CertificateFactory.getInstance("X.509").generateCertPath(chainCerts)
-        val trustAnchors = loteTrustedCertificates.map { TrustAnchor(it, null) }.toSet()
-        val params = PKIXParameters(trustAnchors).apply { isRevocationEnabled = false }
-        CertPathValidator.getInstance("PKIX").validate(certPath, params)
-
-        VerifyJwtSignature.Outcome.Verified(jwt)
-    } catch (e: Exception) {
-        VerifyJwtSignature.Outcome.NotVerified(e)
-    }
-}
-```
->
-> **Lifecycle:** `DisposableContainer` replaces `useResources` for Android. While `useResources`
-> is a scoping block that disposes resources when the block exits (suitable for short-lived
-> operations), Android apps need long-lived trust caches. Create a `DisposableContainer` at
-> Application scope and call `dispose()` during shutdown to release cached resources.
+> **Lifecycle:** When building the pipeline manually, `DisposableContainer` manages cached
+> resources. Create it at Application scope and call `dispose()` during shutdown. When using
+> `configureEtsiTrust`, the core manages the lifecycle internally.
 >
 > **HTTP Client:** `HttpClient()` with no explicit engine auto-discovers `ktor-client-android` at
-> runtime (already included as a `runtimeOnly` dependency by wallet-core). You can also pass a
-> custom `HttpClient` if you need specific configuration (logging, timeouts, etc.).
+> runtime (already included as a `runtimeOnly` dependency by wallet-core).
 
 #### Issuer Trust Verification
 
@@ -763,14 +787,16 @@ Built-in verifiers handle both MsoMdoc and SD-JWT VC formats, and custom verifie
 registered for additional formats. When issuer trust is not configured, verification is skipped
 entirely and credentials are stored as before.
 
-Enable issuer trust verification via the `configureIssuerTrust` DSL on `EudiWalletConfig`:
+Enable issuer trust verification via the `configureIssuerTrust` DSL on `EudiWalletConfig`.
+When `configureEtsiTrust` is also used, `trustSource()` and `classifications()` are inherited
+automatically — only policy and metadata settings are needed:
 
 ```kotlin
 val walletConfig = EudiWalletConfig {
-    // ... other configuration ...
+    configureEtsiTrust { /* ... */ }
+
     configureIssuerTrust {
-        trustSource(isChainTrusted) // from LoTE setup above
-        classifications(myClassifications) // AttestationClassifications from ETSI library
+        // trustSource() and classifications() inherited from configureEtsiTrust
         policy {
             default(TrustPolicy.Action.ENFORCE)
             forContext(VerificationContext.EAA("experimental"), TrustPolicy.Action.INFORM)
@@ -782,8 +808,19 @@ val walletConfig = EudiWalletConfig {
 }
 ```
 
+When not using `configureEtsiTrust`, provide the trust source explicitly:
+
+```kotlin
+configureIssuerTrust {
+    trustSource(isChainTrusted) // manually built IsChainTrustedForEUDIW
+    classifications(myClassifications) // AttestationClassifications from ETSI library
+    policy { default(TrustPolicy.Action.ENFORCE) }
+}
+```
+
 - **`trustSource`** -- sets the trust anchor source. Accepts a `ComposeChainTrust`,
   `IsChainTrustedForEUDIW`, or a pre-built `IsChainTrustedForAttestation`.
+  Optional when `configureEtsiTrust` is configured.
 - **`classifications`** -- required when using `ComposeChainTrust` or `IsChainTrustedForEUDIW`
   as the trust source. Maps credential types to verification contexts.
 - **`policy`** -- configures how the wallet acts on trust results (see below).
@@ -911,19 +948,36 @@ The document status resolver can optionally verify that the signer of status lis
 or CWT) is trusted according to ETSI trusted lists. This adds an additional layer of trust
 beyond the default cryptographic signature verification (x5c/COSE_X509).
 
-Configure status list trust within the `configureDocumentStatusResolver` DSL:
+Configure status list trust within the `configureDocumentStatusResolver` DSL. When
+`configureEtsiTrust` is used, the trust source and classifications are inherited — only
+clock skew and optional policy overrides are needed:
 
 ```kotlin
 val walletConfig = EudiWalletConfig {
+    configureEtsiTrust { /* ... */ }
+
     configureDocumentStatusResolver {
         clockSkew(5) // minutes
+        // Trust source and classifications inherited from configureEtsiTrust.
+        // Optionally override policy:
         configureTrust {
-            trustSource(isChainTrusted) // same LoTE trust source
-            classifications(myClassifications)
             policy {
                 default(TrustPolicy.Action.INFORM)
             }
         }
+    }
+}
+```
+
+When not using `configureEtsiTrust`, provide the trust source explicitly inside `configureTrust`:
+
+```kotlin
+configureDocumentStatusResolver {
+    clockSkew(5)
+    configureTrust {
+        trustSource(isChainTrusted) // manually built trust source
+        classifications(myClassifications)
+        policy { default(TrustPolicy.Action.INFORM) }
     }
 }
 ```
@@ -946,17 +1000,38 @@ signature verification without ETSI trust chain validation.
 reader certificate chain validation to the ETSI library's `IsChainTrustedForEUDIW`. It
 uses the `WalletRelyingPartyAccessCertificate` (WRPAC) verification context by default.
 
-Configure it via `configureReaderTrustStore` on `EudiWalletConfig`, alongside the other
-trust features:
+**Using centralized ETSI trust** (recommended): The DSL block inherits the trust source from
+`configureEtsiTrust` and allows setting the reader authentication policy in the same place:
+
+```kotlin
+val config = EudiWalletConfig {
+    configureEtsiTrust { /* ... */ }
+
+    configureReaderTrustStore {
+        readerAuthPolicy(ReaderAuthPolicy.AlwaysRequire)
+    }
+}
+```
+
+**Using a manually built trust source**: Pass `IsChainTrustedForEUDIW` directly. The reader
+auth policy is set separately via `configureReaderAuthPolicy()`:
 
 ```kotlin
 val config = EudiWalletConfig {
     configureReaderTrustStore(isChainTrusted)
+    configureReaderAuthPolicy(ReaderAuthPolicy.AlwaysRequire)
 }
 ```
 
-This takes priority over certificate-based configuration. The legacy overloads that accept
-raw `X509Certificate` lists remain available for static trust anchors.
+**Using static certificates**: The overloads that accept `X509Certificate` lists remain
+available. The reader auth policy is also set separately:
+
+```kotlin
+val config = EudiWalletConfig {
+    configureReaderTrustStore(listOf(trustedCert1, trustedCert2))
+    configureReaderAuthPolicy(ReaderAuthPolicy.EnforceIfPresent)
+}
+```
 
 For advanced use cases requiring a specific verification context, create an
 `EtsiReaderTrustStore` explicitly:
@@ -986,26 +1061,9 @@ wallet.setReaderTrustStore(EtsiReaderTrustStore(isChainTrusted))
 
 The following example shows a complete `EudiWallet` setup with issuer trust verification,
 signed metadata verification, revocation status trust, and reader authentication — all
-using the same ETSI trust source:
+using `configureEtsiTrust` to centralize the shared LoTE infrastructure:
 
 ```kotlin
-// Application-scoped — create once, dispose on shutdown
-val disposableScope = DisposableContainer()
-val isChainTrusted = provisionTrustAnchors.cached(disposableScope, loteLocations, ttl = 10.minutes)
-
-// Attestation classifications map credential types to ETSI verification contexts
-val classifications = AttestationClassifications(
-    pids = AttestationIdentifierPredicate.any(
-        setOf(
-            AttestationIdentifier.MDoc("eu.europa.ec.eudi.pid.1"),
-            AttestationIdentifier.SDJwtVc("urn:eudi:pid:1"),
-        )
-    ),
-    pubEAAs = AttestationIdentifierPredicate.equalsTo(
-        AttestationIdentifier.MDoc("org.iso.18013.5.1.mDL")
-    ),
-)
-
 val config = EudiWalletConfig {
     configureOpenId4Vci {
         withIssuerUrl("https://issuer.example.com")
@@ -1017,34 +1075,44 @@ val config = EudiWalletConfig {
         withSchemes("openid4vp", "eudi-openid4vp", "mdoc-openid4vp")
     }
 
-    // Issuer trust verification (credential issuance)
+    // Centralized ETSI trust — builds the full LoTE pipeline internally
+    configureEtsiTrust {
+        loteLocations(SupportedLists(
+            pidProviders = Uri("https://trust.example.eu/pid-providers.jwt"),
+            wrpacProviders = Uri("https://trust.example.eu/wrpac-providers.jwt"),
+        ))
+        classifications(AttestationClassifications(
+            pids = AttestationIdentifierPredicate.any(setOf(
+                AttestationIdentifier.MDoc("eu.europa.ec.eudi.pid.1"),
+                AttestationIdentifier.SDJwtVc("urn:eudi:pid:1"),
+            )),
+            pubEAAs = AttestationIdentifierPredicate.equalsTo(
+                AttestationIdentifier.MDoc("org.iso.18013.5.1.mDL")
+            ),
+        ))
+        // DEV/testing relaxations (omit in production):
+        // relaxCertificateProfiles()
+        // relaxPkixRevocation()
+    }
+
+    // Issuer trust — trust source + classifications inherited from configureEtsiTrust
     // Signed metadata verification defaults to RequireSigned
     configureIssuerTrust {
-        trustSource(isChainTrusted)
-        classifications(classifications)
         policy {
             default(TrustPolicy.Action.ENFORCE)
         }
     }
 
-    // Revocation status trust verification
+    // Revocation status trust — trust source + classifications inherited
     configureDocumentStatusResolver {
         clockSkew(5)
-        configureTrust {
-            trustSource(isChainTrusted)
-            classifications(classifications)
-            policy {
-                default(TrustPolicy.Action.INFORM)
-            }
-        }
     }
 
-    // Reader authentication with ETSI trusted lists (same trust source)
-    configureReaderTrustStore(isChainTrusted)
+    // Reader authentication — trust source inherited, policy set inline
+    configureReaderTrustStore {
+        readerAuthPolicy(ReaderAuthPolicy.EnforceIfPresent)
+    }
 }
-
-// On shutdown:
-// disposableScope.dispose()
 ```
 
 ### Issue document using OpenID4VCI
