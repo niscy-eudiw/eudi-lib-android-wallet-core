@@ -57,6 +57,7 @@ internal class EtsiTrustProvider(
     config: EtsiTrustConfig,
     context: Context,
     logger: Logger? = null,
+    ktorHttpClientFactory: (() -> HttpClient)? = null,
 ) {
     private val disposableContainer = DisposableContainer()
 
@@ -73,17 +74,17 @@ internal class EtsiTrustProvider(
             "relaxProfiles=${config.relaxCertificateProfiles}, " +
             "relaxPkixRevocation=${config.relaxPkixRevocation}")
 
-        // 1. HTTP client (auto-discovers ktor-client-android at runtime)
-        val httpClient = HttpClient()
+        // HTTP client (use injected factory or default)
+        val httpClient = ktorHttpClientFactory?.invoke() ?: HttpClient()
 
-        // 2. LoTE loader with file cache
+        // LoTE loader with file cache
         val loadLoTE = LoadSingleLoTEWithFileCache(
             cacheDirectory = Path(context.cacheDir.path, "lote-cache"),
             downloadSingleLoTE = DownloadSingleLoTE(httpClient),
             fileCacheExpiration = config.fileCacheExpiration,
         )
 
-        // 3. LoTE pointer loading + JWT verification
+        // LoTE pointer loading + JWT verification
         val jwtVerifier = config.customJwtSignatureVerifier
             ?: LoteJwtSignatureVerifier(logger)
         val loadLoTEAndPointers = LoadLoTEAndPointers(
@@ -92,7 +93,7 @@ internal class EtsiTrustProvider(
             loadLoTE = loadLoTE,
         )
 
-        // 4. Trust anchor provisioner
+        // Trust anchor provisioner
         val svcTypePerCtx = if (config.relaxCertificateProfiles) {
             relaxProfiles(SupportedLists.eu())
         } else {
@@ -113,7 +114,7 @@ internal class EtsiTrustProvider(
             )
         }
 
-        // 5. Cached chain trust validator
+        // Cached chain trust validator
         isChainTrusted = provisionTrustAnchors.cached(
             disposableContainer,
             config.loteLocations,

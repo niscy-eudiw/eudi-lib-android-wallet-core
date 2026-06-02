@@ -368,7 +368,12 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
 
             // Build ETSI trust provider if configured
             val etsiTrustProvider = config.etsiTrustConfig?.let {
-                EtsiTrustProvider(config = it, context = context, logger = loggerToUse)
+                EtsiTrustProvider(
+                    config = it,
+                    context = context,
+                    logger = loggerToUse,
+                    ktorHttpClientFactory = ktorHttpClientFactory,
+                )
             }
             val etsiSource = etsiTrustProvider?.isChainTrusted
             val etsiClassifications = config.etsiTrustConfig?.classifications
