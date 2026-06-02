@@ -69,8 +69,8 @@ data class EtsiTrustConfig(
  * ```
  * configureEtsiTrust {
  *     loteLocations(SupportedLists(
- *         pidProviders = Uri("https://trustedlist.../PIDProviders.jwt"),
- *         wrpacProviders = Uri("https://trustedlist.../WRPACProviders.jwt"),
+ *         pidProviders = "https://trustedlist.../PIDProviders.jwt",
+ *         wrpacProviders = "https://trustedlist.../WRPACProviders.jwt",
  *     ))
  *     classifications(AttestationClassifications(
  *         pids = AttestationIdentifierPredicate.any(setOf(
@@ -86,7 +86,7 @@ data class EtsiTrustConfig(
  */
 class EtsiTrustConfigBuilder {
 
-    private var loteLocations: SupportedLists<Uri>? = null
+    private var loteLocations: SupportedLists<String>? = null
     private var classifications: AttestationClassifications? = null
     private var fileCacheExpiration: Duration = EtsiTrustConfig.DEFAULT_FILE_CACHE_EXPIRATION
     private var cacheTtl: Duration = EtsiTrustConfig.DEFAULT_CACHE_TTL
@@ -97,11 +97,19 @@ class EtsiTrustConfigBuilder {
         LoadLoTEAndPointers.Constraints.DoNotLoadOtherPointers
 
     /**
-     * Sets the LoTE download locations.
+     * Sets the LoTE download locations as string URLs.
      *
-     * @param locations the supported lists with LoTE URLs
+     * Example:
+     * ```
+     * loteLocations(SupportedLists(
+     *     pidProviders = "https://trustedlist.../PIDProviders.jwt",
+     *     wrpacProviders = "https://trustedlist.../WRPACProviders.jwt",
+     * ))
+     * ```
+     *
+     * @param locations the supported lists with LoTE URL strings
      */
-    fun loteLocations(locations: SupportedLists<Uri>) {
+    fun loteLocations(locations: SupportedLists<String>) {
         this.loteLocations = locations
     }
 
@@ -189,7 +197,7 @@ class EtsiTrustConfigBuilder {
             "classifications must be provided via classifications()"
         }
         return EtsiTrustConfig(
-            loteLocations = locations,
+            loteLocations = locations.toUri(),
             classifications = cls,
             fileCacheExpiration = fileCacheExpiration,
             cacheTtl = cacheTtl,
@@ -197,6 +205,18 @@ class EtsiTrustConfigBuilder {
             relaxPkixRevocation = relaxPkixRevocation,
             customJwtSignatureVerifier = customJwtSignatureVerifier,
             loteConstraints = loteConstraints,
+        )
+    }
+
+    private companion object {
+        fun SupportedLists<String>.toUri() = SupportedLists(
+            pidProviders = pidProviders?.let(::Uri),
+            walletProviders = walletProviders?.let(::Uri),
+            wrpacProviders = wrpacProviders?.let(::Uri),
+            wrprcProviders = wrprcProviders?.let(::Uri),
+            pubEaaProviders = pubEaaProviders?.let(::Uri),
+            qeaProviders = qeaProviders?.let(::Uri),
+            eaaProviders = eaaProviders.mapValues { (_, v) -> Uri(v) },
         )
     }
 }

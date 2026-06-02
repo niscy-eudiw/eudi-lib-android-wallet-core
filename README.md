@@ -647,18 +647,17 @@ library directly (or any other trust framework).
 
 #### Dependencies
 
-The `etsi-1196x2-consultation` module is exposed as an `api` dependency from wallet-core. The
-`etsi-119602-consultation` module is bundled as `implementation` (not transitive) — consumers
-that need its types (e.g., `Uri`, `VerifyJwtSignature`) must declare it explicitly:
-
-- `etsi-1196x2-consultation` — base consultation types (`SupportedLists`, `AttestationClassifications`, `IsChainTrustedForEUDIW`, etc.) — transitive via wallet-core
-- `etsi-119602-consultation` — LoTE loading infrastructure (`Uri`, `VerifyJwtSignature`, `LoadLoTEAndPointers.Constraints`) — **must be declared by consumer**
+The `etsi-1196x2-consultation` module is exposed as an `api` dependency from wallet-core, so
+consumers can reference its types (e.g., `SupportedLists`, `AttestationClassifications`) directly.
+The `etsi-119602-consultation` module is bundled internally as `implementation` — consumers do
+**not** need to declare it. The `configureEtsiTrust` DSL accepts plain strings for LoTE URLs,
+avoiding any dependency on `etsi-119602` types in consumer code.
 
 ```groovy
 dependencies {
     implementation "eu.europa.ec.eudi:eudi-lib-android-wallet-core:0.26.0-SNAPSHOT"
-    // Required for configureEtsiTrust DSL types (Uri, etc.)
-    implementation "eu.europa.ec.eudi:etsi-119602-consultation:0.3.0-alpha.5"
+    // etsi-1196x2-consultation types (SupportedLists, AttestationClassifications, etc.)
+    // are available transitively — no additional ETSI dependency needed
 }
 ```
 
@@ -674,9 +673,9 @@ val config = EudiWalletConfig {
     configureEtsiTrust {
         // Required: LoTE download URLs
         loteLocations(SupportedLists(
-            pidProviders = Uri("https://trust.example.eu/pid-providers.jwt"),
-            wrpacProviders = Uri("https://trust.example.eu/wrpac-providers.jwt"),
-            // pubEaaProviders = Uri("https://trust.example.eu/pub-eaa-providers.jwt"),
+            pidProviders = "https://trust.example.eu/pid-providers.jwt",
+            wrpacProviders = "https://trust.example.eu/wrpac-providers.jwt",
+            // pubEaaProviders = "https://trust.example.eu/pub-eaa-providers.jwt",
         ))
 
         // Required: map credential types to ETSI verification contexts
@@ -1078,8 +1077,8 @@ val config = EudiWalletConfig {
     // Centralized ETSI trust — builds the full LoTE pipeline internally
     configureEtsiTrust {
         loteLocations(SupportedLists(
-            pidProviders = Uri("https://trust.example.eu/pid-providers.jwt"),
-            wrpacProviders = Uri("https://trust.example.eu/wrpac-providers.jwt"),
+            pidProviders = "https://trust.example.eu/pid-providers.jwt",
+            wrpacProviders = "https://trust.example.eu/wrpac-providers.jwt",
         ))
         classifications(AttestationClassifications(
             pids = AttestationIdentifierPredicate.any(setOf(
