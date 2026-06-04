@@ -22,7 +22,6 @@ import eu.europa.ec.eudi.iso18013.transfer.TransferManager
 import eu.europa.ec.eudi.iso18013.transfer.engagement.BleRetrievalMethod
 import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStore
 import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStoreImpl
-import eu.europa.ec.eudi.iso18013.transfer.response.ReaderAuthPolicy
 import eu.europa.ec.eudi.statium.Status
 import eu.europa.ec.eudi.wallet.dcapi.DCAPIManager
 import eu.europa.ec.eudi.wallet.dcapi.DCAPIRegistration
@@ -42,9 +41,12 @@ import eu.europa.ec.eudi.wallet.presentation.PresentationManagerImpl
 import eu.europa.ec.eudi.wallet.provider.WalletAttestationsProvider
 import eu.europa.ec.eudi.wallet.provider.WalletKeyManager
 import eu.europa.ec.eudi.wallet.statium.DocumentStatusResolver
+import eu.europa.ec.eudi.wallet.transactionLogging.DefaultTransactionLogManager
+import eu.europa.ec.eudi.wallet.transactionLogging.TransactionLogManager
 import eu.europa.ec.eudi.wallet.transactionLogging.TransactionLogger
+import eu.europa.ec.eudi.wallet.transactionLogging.producers.CredentialDeletionLogger
 import eu.europa.ec.eudi.wallet.trust.EtsiReaderTrustStore
-import eu.europa.ec.eudi.wallet.transactionLogging.presentation.TransactionsDecorator
+import eu.europa.ec.eudi.wallet.transactionLogging.producers.presentation.PresentationLogger
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.OpenId4VpManager
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.dcql.DcqlRequestProcessor
 import io.ktor.client.HttpClient
@@ -85,6 +87,13 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
 
     val walletProvider: WalletAttestationsProvider?
     val walletKeyManager: WalletKeyManager
+
+    /**
+     * The transaction-log funnel, if a [TransactionLogger] was configured via the builder.
+     * Host-app-triggered transactions (e.g. signing, data-protection actions) should be recorded
+     * through this manager so they share the same write path as core-produced entries.
+     */
+    val transactionLogManager: TransactionLogManager?
 
     /**
      * Sets the reader trust store with the given [ReaderTrustStore]. This method is useful when
@@ -396,26 +405,34 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
 
             val transferManager = getTransferManager(documentManagerToUse, readerTrustStoreToUse)
 
+            // Single funnel for all transaction-log entries, created from the configured storage SPI.
+            val transactionLogManagerToUse = transactionLogger?.let {
+                DefaultTransactionLogManager(storage = it)
+            }
+
             val presentationManagerToUse = presentationManager ?: getDefaultPresentationManager(
                 documentManager = documentManagerToUse,
                 transferManager = transferManager,
                 readerTrustStore = readerTrustStoreToUse,
                 loggerObj = loggerToUse
-            ).wrapWithTrasactionLogger(documentManagerToUse, loggerToUse)
+            ).wrapWithTrasactionLogger(documentManagerToUse, transactionLogManagerToUse, loggerToUse)
 
             val documentStatusResolverToUse = getDocumentStatusResolver(loggerToUse)
 
             return EudiWalletImpl(
                 context = context,
                 config = config,
-                documentManager = documentManagerToUse,
+                documentManager = documentManagerToUse.wrapWithDeletionLogger(
+                    transactionLogManagerToUse,
+                    loggerToUse
+                ),
                 presentationManager = presentationManagerToUse,
                 transferManager = transferManager,
                 walletProvider = walletProvider,
                 walletKeyManager = walletKeyManager ?: WalletKeyManager.getDefault(context),
                 logger = loggerToUse,
                 documentStatusResolver = documentStatusResolverToUse,
-                transactionLogger = transactionLogger,
+                transactionLogManager = transactionLogManagerToUse,
                 ktorHttpClientFactory = ktorHttpClientFactory,
                 issuanceMetadataStorage = issuanceMetadataStorage
             )
@@ -621,17 +638,40 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
          *
          * @receiver [PresentationManager]
          * @param documentManager the document manager
+         * @param transactionLogManager the transaction-log funnel, or null if logging is disabled
          * @return [PresentationManager] wrapped with a transaction logger
          */
         internal fun PresentationManager.wrapWithTrasactionLogger(
             documentManager: DocumentManager,
+            transactionLogManager: TransactionLogManager?,
             loggerObj: Logger,
         ): PresentationManager {
-            return transactionLogger?.let { tl ->
-                TransactionsDecorator(
+            return transactionLogManager?.let { manager ->
+                PresentationLogger(
                     delegate = this,
-                    documentManager = documentManager,
-                    transactionLogger = tl,
+                    transactionLogManager = manager,
+                    logger = loggerObj,
+                )
+            } ?: this
+        }
+
+        /**
+         * Wraps the [DocumentManager] with a decorator that logs credential-deletion transactions
+         * (TS10 §3.6). Returns the receiver unchanged when [transactionLogManager] is null
+         * (logging disabled).
+         *
+         * @param transactionLogManager the transaction-log funnel, or null if logging is disabled
+         * @param loggerObj the logger for internal diagnostics
+         * @return [DocumentManager] wrapped with a deletion logger
+         */
+        internal fun DocumentManager.wrapWithDeletionLogger(
+            transactionLogManager: TransactionLogManager?,
+            loggerObj: Logger,
+        ): DocumentManager {
+            return transactionLogManager?.let { manager ->
+                CredentialDeletionLogger(
+                    delegate = this,
+                    transactionLogManager = manager,
                     logger = loggerObj,
                 )
             } ?: this
