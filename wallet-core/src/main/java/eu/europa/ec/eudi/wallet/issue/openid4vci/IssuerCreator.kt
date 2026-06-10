@@ -201,6 +201,7 @@ internal class IssuerCreator(
             clientAuthentication = auth,
             authFlowRedirectionURI = URI.create(authFlowRedirectionURI),
             encryptionSupportConfig = responseEncryptionConfig,
+            supportedCredentialReusePolicies = supportedCredentialReusePolicies,
             dPoPSigner = if (existingDpopKeyAlias != null) {
                 // Re-issuance: reuse existing DPoP key bound to the access token
                 val resolvedConfig = when (val cfg = dpopConfig) {

@@ -81,13 +81,26 @@ sealed interface IssueEvent : OpenId4VciResult {
     /**
      * Issuing requires [CreateDocumentSettings] to create the document that will be issued
      * for the [offeredDocument].
+     *
+     * When [resolvedReusePolicy] is non-null, the issuer has advertised a credential reuse
+     * policy (ETSI TS 119 472-3) and the wallet has selected a supported option. The
+     * [resolvedReusePolicy] provides the [CreateDocumentSettings.CredentialPolicy] and
+     * `numberOfCredentials` that should be used. The caller should still provide key-related
+     * settings (secure area, authentication requirements).
+     *
+     * When [resolvedReusePolicy] is null, the issuer has no reuse policy and the caller
+     * is free to choose the credential policy and number of credentials.
+     *
      * @property offeredDocument the offered document
+     * @property resolvedReusePolicy the resolved reuse policy from issuer metadata, or null
+     *  if the issuer does not advertise a credential reuse policy
      * @property resume the callback to resume the issuance with the [CreateDocumentSettings]
      *  that will be used to create the document
      * @property cancel the callback to cancel the issuance with an optional reason
      */
     data class DocumentRequiresCreateSettings(
         val offeredDocument: Offer.OfferedDocument,
+        val resolvedReusePolicy: ResolvedReusePolicy?,
         val resume: (createDocumentSettings: CreateDocumentSettings) -> Unit,
         val cancel: (reason: String?) -> Unit,
     ) : IssueEvent

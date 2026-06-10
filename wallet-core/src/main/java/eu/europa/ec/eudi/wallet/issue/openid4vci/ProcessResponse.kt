@@ -112,6 +112,9 @@ internal class ProcessResponse(
     ) {
         when (outcome) {
             is SubmissionOutcome.Success -> runCatching {
+                outcome.selectedCredentialReusePolicy?.let { selectedPolicy ->
+                    logger?.d(TAG, "Issuer selected credential reuse policy: $selectedPolicy")
+                }
                 val credentials = outcome.credentials.map { it.credential }.zip(keyAliases)
 
                 val trustResult = evaluateIssuerTrust(
@@ -131,7 +134,12 @@ internal class ProcessResponse(
                 listener(IssueEvent.DocumentIssued(document, trustResult))
                 // Store issuance metadata in background coroutine
                 CoroutineScope(Dispatchers.IO).launch {
-                    storeIssuanceMetadata(document.id, unsignedDocument, keyAliases)
+                    storeIssuanceMetadata(
+                        document.id,
+                        unsignedDocument,
+                        keyAliases,
+                        (outcome as? SubmissionOutcome.Success)?.selectedCredentialReusePolicy,
+                    )
                 }
             }.onFailure { error ->
                 documentManager.deleteDocumentById(unsignedDocument.id)
@@ -188,6 +196,7 @@ internal class ProcessResponse(
         documentId: DocumentId,
         unsignedDocument: UnsignedDocument,
         keyAliases: List<String>,
+        selectedReusePolicy: eu.europa.ec.eudi.openid4vci.EudiReusePolicy? = null,
     ) {
 
         val refreshToken = authorizedRequest.refreshToken?.refreshToken
@@ -233,6 +242,9 @@ internal class ProcessResponse(
                     "pre-authorized_code"
                 } else {
                     "authorization_code"
+                },
+                selectedReusePolicyType = selectedReusePolicy?.let {
+                    it::class.simpleName
                 },
             )
 

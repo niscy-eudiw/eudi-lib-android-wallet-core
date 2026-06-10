@@ -23,6 +23,7 @@ import com.nimbusds.jose.jwk.Curve
 import eu.europa.ec.eudi.openid4vci.CredentialConfigurationIdentifier
 import eu.europa.ec.eudi.openid4vci.CredentialIssuerMetadata
 import eu.europa.ec.eudi.openid4vci.CredentialResponseEncryptionPolicy
+import eu.europa.ec.eudi.openid4vci.CredentialReusePolicies
 import eu.europa.ec.eudi.openid4vci.EcConfig
 import eu.europa.ec.eudi.openid4vci.EncryptionSupportConfig
 import eu.europa.ec.eudi.openid4vci.RsaConfig
@@ -466,6 +467,7 @@ interface OpenId4VciManager {
             ecConfig = EcConfig(ecKeyCurve = Curve.P_256),
             rsaConfig = RsaConfig(rcaKeySize = 2048),
         ),
+        val supportedCredentialReusePolicies: CredentialReusePolicies? = null,
     ) {
         /**
          * PAR usage for the OpenId4Vci issuer
@@ -585,6 +587,8 @@ interface OpenId4VciManager {
                 ecConfig = EcConfig(ecKeyCurve = Curve.P_256),
                 rsaConfig = RsaConfig(rcaKeySize = 2048),
             )
+
+            var supportedCredentialReusePolicies: CredentialReusePolicies? = null
 
             /**
              * Set the issuer url
@@ -756,6 +760,22 @@ interface OpenId4VciManager {
             }
 
             /**
+             * Sets the credential reuse policies supported by this wallet.
+             *
+             * When configured, the wallet will validate the issuer's `credential_reuse_policy`
+             * metadata against these supported policies during issuance, per ETSI TS 119 472-3.
+             *
+             * @param policies The [CredentialReusePolicies] supported by this wallet.
+             *        Use [CredentialReusePolicies.Supported] to declare supported policies,
+             *        or [CredentialReusePolicies.Required] to require at least one matching policy.
+             * @return This builder instance for method chaining
+             * @see CredentialReusePolicies
+             */
+            fun withSupportedCredentialReusePolicies(policies: CredentialReusePolicies) = apply {
+                this.supportedCredentialReusePolicies = policies
+            }
+
+            /**
              * Build the [Config]
              * @return the [Config]
              */
@@ -774,6 +794,7 @@ interface OpenId4VciManager {
                     parUsage = parUsage,
                     issuanceMetadataStorage = issuanceMetadataStorage,
                     responseEncryptionConfig = responseEncryptionConfig,
+                    supportedCredentialReusePolicies = supportedCredentialReusePolicies,
                 )
             }
         }

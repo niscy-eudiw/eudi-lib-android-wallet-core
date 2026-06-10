@@ -25,6 +25,7 @@ import org.multipaz.cbor.CborMap
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.crypto.EcPublicKey
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Extension property that converts an EcPublicKey to its CBOR-encoded representation.
@@ -67,14 +68,32 @@ internal val ByteArray.sdJwtVcString: String
  * Converts a CredentialPolicy to a CBOR DataItem for serialization.
  *
  * This function creates a CBOR map containing the Java class name of the CredentialPolicy
- * instance as the "type" field. This allows for proper deserialization of different
- * CredentialPolicy types.
+ * instance as the "type" field, plus any additional properties for ETSI reuse policy types.
+ * This allows for proper deserialization of different CredentialPolicy types.
  *
  * @return DataItem representing the CredentialPolicy as a CBOR map
  */
 internal fun CreateDocumentSettings.CredentialPolicy.toDataItem(): DataItem {
     return buildCborMap {
         put("type", this@toDataItem.javaClass.name)
+        when (val policy = this@toDataItem) {
+            is CreateDocumentSettings.CredentialPolicy.OnceOnly -> {
+                put("reissueTriggerUnused", policy.reissueTriggerUnused.toLong())
+            }
+            is CreateDocumentSettings.CredentialPolicy.LimitedTime -> {
+                put("reissueTriggerLifetimeLeft", policy.reissueTriggerLifetimeLeft.inWholeSeconds)
+            }
+            is CreateDocumentSettings.CredentialPolicy.RotatingBatch -> {
+                put("reissueTriggerLifetimeLeft", policy.reissueTriggerLifetimeLeft.inWholeSeconds)
+            }
+            is CreateDocumentSettings.CredentialPolicy.PerRelyingParty -> {
+                put("reissueTriggerLifetimeLeft", policy.reissueTriggerLifetimeLeft.inWholeSeconds)
+                put("reissueTriggerUnused", policy.reissueTriggerUnused.toLong())
+            }
+            // Existing data objects — no extra fields needed
+            CreateDocumentSettings.CredentialPolicy.OneTimeUse,
+            CreateDocumentSettings.CredentialPolicy.RotateUse -> {}
+        }
     }
 }
 
@@ -82,8 +101,8 @@ internal fun CreateDocumentSettings.CredentialPolicy.toDataItem(): DataItem {
  * Companion object extension function that reconstructs a CredentialPolicy from a CBOR DataItem.
  *
  * This function extracts the policy type from the CBOR map and instantiates the appropriate
- * CredentialPolicy based on the stored type information. It supports OneTimeUse and RotateUse
- * policy types.
+ * CredentialPolicy based on the stored type information. Supports both legacy types (OneTimeUse,
+ * RotateUse) and ETSI TS 119 472-3 types (OnceOnly, LimitedTime, RotatingBatch, PerRelyingParty).
  *
  * @param dataItem The CBOR DataItem containing the serialized CredentialPolicy
  * @return CredentialPolicy instance based on the type information in the DataItem
@@ -95,8 +114,27 @@ internal fun CreateDocumentSettings.CredentialPolicy.Companion.fromDataItem(data
     }
 
     return when (val type = dataItem["type"].asTstr) {
-        CreateDocumentSettings.CredentialPolicy.OneTimeUse::class.java.name -> CreateDocumentSettings.CredentialPolicy.OneTimeUse
-        CreateDocumentSettings.CredentialPolicy.RotateUse::class.java.name -> CreateDocumentSettings.CredentialPolicy.RotateUse
+        CreateDocumentSettings.CredentialPolicy.OneTimeUse::class.java.name ->
+            CreateDocumentSettings.CredentialPolicy.OneTimeUse
+        CreateDocumentSettings.CredentialPolicy.RotateUse::class.java.name ->
+            CreateDocumentSettings.CredentialPolicy.RotateUse
+        CreateDocumentSettings.CredentialPolicy.OnceOnly::class.java.name ->
+            CreateDocumentSettings.CredentialPolicy.OnceOnly(
+                reissueTriggerUnused = dataItem["reissueTriggerUnused"].asNumber.toInt(),
+            )
+        CreateDocumentSettings.CredentialPolicy.LimitedTime::class.java.name ->
+            CreateDocumentSettings.CredentialPolicy.LimitedTime(
+                reissueTriggerLifetimeLeft = dataItem["reissueTriggerLifetimeLeft"].asNumber.toLong().seconds,
+            )
+        CreateDocumentSettings.CredentialPolicy.RotatingBatch::class.java.name ->
+            CreateDocumentSettings.CredentialPolicy.RotatingBatch(
+                reissueTriggerLifetimeLeft = dataItem["reissueTriggerLifetimeLeft"].asNumber.toLong().seconds,
+            )
+        CreateDocumentSettings.CredentialPolicy.PerRelyingParty::class.java.name ->
+            CreateDocumentSettings.CredentialPolicy.PerRelyingParty(
+                reissueTriggerLifetimeLeft = dataItem["reissueTriggerLifetimeLeft"].asNumber.toLong().seconds,
+                reissueTriggerUnused = dataItem["reissueTriggerUnused"].asNumber.toInt(),
+            )
         else -> throw IllegalArgumentException("Unknown credential policy type: $type")
     }
 }
