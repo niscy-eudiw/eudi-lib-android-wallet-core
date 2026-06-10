@@ -19,6 +19,7 @@ package eu.europa.ec.eudi.wallet.issue.openid4vci
 import eu.europa.ec.eudi.openid4vci.CredentialConfigurationIdentifier
 import eu.europa.ec.eudi.openid4vci.CredentialIssuerId
 import eu.europa.ec.eudi.openid4vci.CredentialOffer
+import eu.europa.ec.eudi.openid4vci.CredentialReusePolicy
 import eu.europa.ec.eudi.openid4vci.MsoMdocCredential
 import eu.europa.ec.eudi.wallet.document.CreateDocumentSettings
 import eu.europa.ec.eudi.wallet.document.DocumentManager
@@ -66,6 +67,7 @@ class DocumentCreatorTest {
             }
             every { configurationIdentifier } returns configurationIdentifiers.first()
             every { configuration } returns credentialConfigurationMock
+            every { credentialReusePolicy } returns CredentialReusePolicy.None
             every { documentFormat } answers { callOriginal() }
         }
         val unsignedDocument = mockk<UnsignedDocument>(relaxed = true)

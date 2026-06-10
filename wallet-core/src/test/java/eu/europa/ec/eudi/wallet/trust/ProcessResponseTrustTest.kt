@@ -75,6 +75,7 @@ class ProcessResponseTrustTest {
     private fun createOutcome(): SubmissionOutcome.Success {
         return mockk<SubmissionOutcome.Success> {
             every { credentials } returns listOf(issuedCredential)
+            every { selectedCredentialReusePolicy } returns null
         }
     }
 

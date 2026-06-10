@@ -66,10 +66,12 @@ class OfferTest {
                 )
             )
             every { docType } returns "testDocType"
+            every { credentialMetadata } returns null
         }
 
         mockSdJwtVcCredential = mockk<SdJwtVcCredential>(relaxed = true) {
             every { type } returns "testType"
+            every { credentialMetadata } returns null
         }
 
         mockCredentialConfigurations = listOf(mockMsoMdocCredential, mockSdJwtVcCredential)
