@@ -98,6 +98,7 @@ The library supports the following features:
 |                            | Credential Formats                                                      | ✅ mso_mdoc format <br /> ✅ sd-jwt-vc format                                                                            |
 |                            | Credential issuance                                                     | ✅ Wallet initiated issuance  <br /> ✅ Via credential Offer                                                             |
 |                            | Credential batch issuing                                                | ✅                                                                                                                      |
+|                            | Credential reuse policies (ETSI TS 119 472-3)                           | ✅ once_only, limited_time, rotating_batch <br /> ⚠️ per_relying_party (partial — RP mapping planned)                     |
 |                            | Deferred issuing                                                        | ✅                                                                                                                      |
 |                            | Wallet Authentication                                                   | ✅ public client, <br/>✅ Attestation-Based Client Authentication (WIA)                                                  |
 |                            | Supported Proof Types                                                   | ✅ Attestation Proof Type, <br/> ✅ Proof Type without Attestation <br/> ✅ JWT Proof Type with Attestation               |
@@ -493,8 +494,8 @@ issuedDocument?.consumingCredential {
 
 The `findCredential()` method intelligently selects credentials based on:
 
-- Credential policy (e.g., OneTimeUse or RotateUse)
-- Usage count (selecting least-used credentials first in RotateUse policy)
+- Credential policy (e.g., `OneTimeUse`, `RotateUse`, or [ETSI reuse policies](#credential-reuse-policies-etsi-ts-119-472-3) such as `OnceOnly`, `LimitedTime`, `RotatingBatch`, `PerRelyingParty`)
+- Usage count (selecting least-used credentials first in rotation-based policies)
 - Validity period (ensuring the credential is currently valid)
 - Availability (excluding deleted or invalidated credentials)
 
@@ -1141,6 +1142,11 @@ val customConfig = OpenId4VciManager.Config.Builder()
     .withIssuerUrl("https://custom-issuer.com")
     .withClientAuthenticationType(OpenId4VciManager.ClientAuthenticationType.AttestationBased)
     .withAuthFlowRedirectionURI("eudi-openid4ci://custom-authorize")
+    .withSupportedCredentialReusePolicies(
+        CredentialReusePolicies.Supported(
+            setOf(EudiReusePolicyType.OnceOnly, EudiReusePolicyType.LimitedTime)
+        )
+    )
     .build()
 
 val openId4VciManagerWithCustomConfig = wallet.createOpenId4VciManager(customConfig)
@@ -1258,27 +1264,41 @@ val onIssueEvent = OnIssueEvent { event ->
         }
 
         is IssueEvent.DocumentRequiresCreateSettings -> {
-            // Need to provide settings for document creation
-            // Create document settings can be varied depending on the document type
+            // Need to provide settings for document creation.
+            //
+            // If the issuer advertises a credential reuse policy (ETSI TS 119 472-3),
+            // event.resolvedReusePolicy will be non-null and provides the resolved
+            // credentialPolicy and numberOfCredentials. Otherwise, the app chooses freely.
 
-            val isEuPid = when (val format = event.offeredDocument.documentFormat) {
-                is MsoMdocFormat -> format.docType == "eu.europa.ec.eudi.pid.1"
-                is SdJwtVcFormat -> format.vct == "urn:eudi:pid:1"
-                else -> false
-            }
-            val createDocumentSettings = when {
-                isEuPid -> eudiWallet.getDefaultCreateDocumentSettings(
+            val resolvedPolicy = event.resolvedReusePolicy
+
+            val createDocumentSettings = if (resolvedPolicy != null) {
+                // Issuer dictates credential policy and batch size via reuse policy.
+                // The app still provides key-related settings (secure area, authentication).
+                eudiWallet.getDefaultCreateDocumentSettings(
                     offeredDocument = event.offeredDocument,
-                    numberOfCredentials = 5,
-                    credentialPolicy = CreateDocumentSettings.CredentialPolicy.OneTimeUse
+                    numberOfCredentials = resolvedPolicy.numberOfCredentials,
+                    credentialPolicy = resolvedPolicy.credentialPolicy,
                 )
-
-
-                else -> eudiWallet.getDefaultCreateDocumentSettings(
-                    offeredDocument = event.offeredDocument,
-                    numberOfCredentials = 1,
-                    credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotateUse
-                )
+            } else {
+                // No reuse policy — app decides policy and batch size.
+                val isEuPid = when (val format = event.offeredDocument.documentFormat) {
+                    is MsoMdocFormat -> format.docType == "eu.europa.ec.eudi.pid.1"
+                    is SdJwtVcFormat -> format.vct == "urn:eudi:pid:1"
+                    else -> false
+                }
+                when {
+                    isEuPid -> eudiWallet.getDefaultCreateDocumentSettings(
+                        offeredDocument = event.offeredDocument,
+                        numberOfCredentials = 5,
+                        credentialPolicy = CreateDocumentSettings.CredentialPolicy.OneTimeUse
+                    )
+                    else -> eudiWallet.getDefaultCreateDocumentSettings(
+                        offeredDocument = event.offeredDocument,
+                        numberOfCredentials = 1,
+                        credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotateUse
+                    )
+                }
             }
             // Resume with settings
             event.resume(createDocumentSettings)
@@ -1771,6 +1791,120 @@ The available policies are:
   if the issuer does not support it.
 - `CredentialResponseEncryptionPolicy.SUPPORTED` -- encryption is used when the issuer advertises
   support for it, but issuance proceeds unencrypted otherwise.
+
+#### Credential Reuse Policies (ETSI TS 119 472-3)
+
+The library supports credential reuse policies as defined in ETSI TS 119 472-3 and the EU Digital
+Identity Wallet Architecture Reference Framework (ARF) Annex II. When an issuer advertises a
+`credential_reuse_policy` in its credential metadata, the library resolves it against the wallet's
+declared capabilities and provides the result to the application during issuance.
+
+##### How it works
+
+1. **Wallet declares supported policies** via `withSupportedCredentialReusePolicies()` on the
+   `OpenId4VciManager.Config.Builder`. This is a wallet-level capability declaration, not per-document.
+2. **During issuance**, the library reads the issuer's `credential_reuse_policy` from the credential
+   configuration metadata. It selects the first option from the issuer's prioritized list that the
+   wallet supports.
+3. **The resolved policy is delivered** to the application via
+   `IssueEvent.DocumentRequiresCreateSettings.resolvedReusePolicy`. When non-null, it provides the
+   `credentialPolicy` and `numberOfCredentials` that should be used. The application still provides
+   key-related settings (secure area, authentication).
+4. **If the issuer has no reuse policy**, `resolvedReusePolicy` is null and the application chooses
+   the credential policy and batch size freely (backward-compatible behavior).
+
+##### Supported reuse methods
+
+| Method | `CredentialPolicy` type | Behavior | Batch |
+|--------|------------------------|----------|-------|
+| **Once-only** (Method A) | `OnceOnly(reissueTriggerUnused)` | Each credential used once, then deleted | Yes |
+| **Limited-time** (Method B) | `LimitedTime(reissueTriggerLifetimeLeft)` | Single credential presented multiple times until expiry | No |
+| **Rotating-batch** (Method C) | `RotatingBatch(reissueTriggerLifetimeLeft)` | Batch of credentials, rotated per presentation | Yes |
+| **Per-Relying-Party** (Method D) | `PerRelyingParty(reissueTriggerLifetimeLeft, reissueTriggerUnused)` | Different credential per relying party, consistent for repeats (not yet fully supported — RP-to-credential mapping is planned for a future release) | Yes |
+
+Each policy type carries reissuance trigger thresholds from the issuer metadata. These can be used
+by the application to schedule credential re-issuance before credentials run out or expire.
+
+##### Configuration
+
+Declare the reuse policy types your wallet supports:
+
+```kotlin
+val config = EudiWalletConfig()
+    .configureOpenId4Vci {
+        withIssuerUrl("https://issuer.com")
+        withClientAuthenticationType(OpenId4VciManager.ClientAuthenticationType.AttestationBased)
+        withAuthFlowRedirectionURI("eudi-openid4ci://authorize")
+        withSupportedCredentialReusePolicies(
+            CredentialReusePolicies.Supported(
+                setOf(
+                    EudiReusePolicyType.OnceOnly,
+                    EudiReusePolicyType.LimitedTime,
+                )
+            )
+        )
+    }
+```
+
+If `withSupportedCredentialReusePolicies` is not called (default), the library will not match any
+issuer-advertised reuse policy options. For issuers that advertise a reuse policy, this will result
+in an error. For issuers that do not advertise a reuse policy, behavior is unchanged.
+
+##### Handling resolved reuse policies during issuance
+
+When handling `IssueEvent.DocumentRequiresCreateSettings`, check `resolvedReusePolicy`:
+
+```kotlin
+is IssueEvent.DocumentRequiresCreateSettings -> {
+    val resolvedPolicy = event.resolvedReusePolicy
+
+    val settings = if (resolvedPolicy != null) {
+        // Issuer dictates policy and batch size.
+        // Use resolvedPolicy.credentialPolicy and resolvedPolicy.numberOfCredentials.
+        // The app provides key-related settings (secure area, user authentication).
+        eudiWallet.getDefaultCreateDocumentSettings(
+            offeredDocument = event.offeredDocument,
+            numberOfCredentials = resolvedPolicy.numberOfCredentials,
+            credentialPolicy = resolvedPolicy.credentialPolicy,
+        )
+    } else {
+        // No reuse policy from issuer — app decides freely.
+        eudiWallet.getDefaultCreateDocumentSettings(
+            offeredDocument = event.offeredDocument,
+            numberOfCredentials = 5,
+            credentialPolicy = CreateDocumentSettings.CredentialPolicy.OneTimeUse,
+        )
+    }
+
+    event.resume(settings)
+}
+```
+
+The `ResolvedReusePolicy` object contains:
+
+| Property | Description |
+|----------|-------------|
+| `credentialPolicy` | The `CredentialPolicy` to use (e.g., `OnceOnly`, `LimitedTime`) |
+| `numberOfCredentials` | Batch size derived from the issuer's policy (`batchSize`, or 1 for `LimitedTime`) |
+| `selectedEudiReusePolicy` | The raw `EudiReusePolicy` option selected from the issuer's metadata |
+
+##### Current limitations
+
+- **Rotating-batch (Method C)**: Credentials are issued in a batch and their usage count is
+  incremented on use. Full random-order selection and reshuffle-after-all-presented semantics are
+  planned for a future release.
+- **Per-Relying-Party (Method D)**: Credentials are issued in a batch and their usage count is
+  incremented on use. RP-to-credential persistent mapping (assigning a specific credential to each
+  relying party for consistent repeat visits) is planned for a future release.
+
+##### Backward compatibility
+
+- The existing `CredentialPolicy.OneTimeUse` and `CredentialPolicy.RotateUse` types remain unchanged
+  and continue to work for issuers that do not advertise a `credential_reuse_policy`.
+- `IssueEvent.DocumentRequiresCreateSettings` gains the `resolvedReusePolicy` property (nullable).
+  Existing handlers that don't inspect this property continue to work unchanged.
+- The `withSupportedCredentialReusePolicies` configuration is optional. When omitted, behavior is
+  identical to previous versions for issuers without reuse policies.
 
 ### Transfer documents
 

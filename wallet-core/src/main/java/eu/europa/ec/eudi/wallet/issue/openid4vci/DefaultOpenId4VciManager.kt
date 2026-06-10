@@ -374,6 +374,7 @@ internal class DefaultOpenId4VciManager(
                 val documentCreator = DocumentCreator(
                     documentManager = documentManager,
                     listener = listener,
+                    supportedPolicies = config.supportedCredentialReusePolicies,
                     logger = logger
                 )
                 val requestMap = documentCreator.createDocuments(offer)
@@ -499,6 +500,7 @@ internal class DefaultOpenId4VciManager(
         val documentCreator = DocumentCreator(
             documentManager = documentManager,
             listener = listener,
+            supportedPolicies = config.supportedCredentialReusePolicies,
             logger = logger
         )
         val requestMap = documentCreator.createDocuments(offer)

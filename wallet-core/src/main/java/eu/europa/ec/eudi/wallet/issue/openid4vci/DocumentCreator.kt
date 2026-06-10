@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 European Commission
+ * Copyright (c) 2024-2026 European Commission
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package eu.europa.ec.eudi.wallet.issue.openid4vci
 
+import eu.europa.ec.eudi.openid4vci.CredentialReusePolicies
 import eu.europa.ec.eudi.wallet.document.CreateDocumentSettings
 import eu.europa.ec.eudi.wallet.document.DocumentManager
 import eu.europa.ec.eudi.wallet.document.UnsignedDocument
@@ -28,6 +29,7 @@ import kotlin.coroutines.resume
 internal class DocumentCreator(
     val documentManager: DocumentManager,
     val listener: OpenId4VciManager.OnResult<IssueEvent>,
+    val supportedPolicies: CredentialReusePolicies? = null,
     val logger: Logger? = null,
 ) {
 
@@ -35,6 +37,11 @@ internal class DocumentCreator(
         offer.offeredDocuments.associateBy { createDocument(it) }
 
     suspend fun createDocument(offeredDocument: Offer.OfferedDocument): UnsignedDocument {
+        val resolvedPolicy = resolveReusePolicy(
+            offeredDocument.credentialReusePolicy,
+            supportedPolicies,
+        )
+
         val createDocumentSettings =
             suspendCancellableCoroutine<CreateDocumentSettings> { continuation ->
                 continuation.invokeOnCancellation {
@@ -47,6 +54,7 @@ internal class DocumentCreator(
 
                 listener.onResult(IssueEvent.DocumentRequiresCreateSettings(
                     offeredDocument = offeredDocument,
+                    resolvedReusePolicy = resolvedPolicy,
                     resume = { createSettings ->
                         runBlocking {
                             continuation.resume(createSettings)

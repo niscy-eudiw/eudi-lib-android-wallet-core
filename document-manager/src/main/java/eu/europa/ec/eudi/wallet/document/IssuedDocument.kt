@@ -141,8 +141,12 @@ class IssuedDocument(
             .filter { it.domain == documentManagerId }
             .filter {
                 when (credentialPolicy) {
-                    CreateDocumentSettings.CredentialPolicy.RotateUse -> true
-                    CreateDocumentSettings.CredentialPolicy.OneTimeUse -> it.usageCount == 0
+                    CreateDocumentSettings.CredentialPolicy.RotateUse,
+                    is CreateDocumentSettings.CredentialPolicy.LimitedTime,
+                    is CreateDocumentSettings.CredentialPolicy.RotatingBatch,
+                    is CreateDocumentSettings.CredentialPolicy.PerRelyingParty -> true
+                    CreateDocumentSettings.CredentialPolicy.OneTimeUse,
+                    is CreateDocumentSettings.CredentialPolicy.OnceOnly -> it.usageCount == 0
                 }
             }
     }
