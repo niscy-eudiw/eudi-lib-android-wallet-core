@@ -100,8 +100,8 @@ class IssuedDocument(
      * The credential policy associated with this document.
      *
      * This property determines how credentials are managed after cryptographic operations:
-     * - [CreateDocumentSettings.CredentialPolicy.OneTimeUse]: The credential is deleted after use
-     * - [CreateDocumentSettings.CredentialPolicy.RotateUse]: The credential's usage count is incremented after use
+     * - [CreateDocumentSettings.CredentialPolicy.OnceOnly]: The credential is deleted after use
+     * - [CreateDocumentSettings.CredentialPolicy.RotatingBatch]: The credential's usage count is incremented after use
      *
      * @see CreateDocumentSettings.CredentialPolicy
      */
@@ -119,8 +119,8 @@ class IssuedDocument(
      * - Only certified credentials bound to a secure area
      * - Only credentials that are not invalidated
      * - Only credentials that belong to the current document manager
-     * - For OneTimeUse policy, only credentials that haven't been used (usageCount == 0)
-     * - For RotateUse policy, all credentials regardless of usage count
+     * - For OnceOnly policy, only credentials that haven't been used (usageCount == 0)
+     * - For RotatingBatch policy, all credentials regardless of usage count
      *
      * **Note:** This method does **not** filter by temporal validity (`validFrom`/`validUntil`).
      * The returned list may include credentials that are expired or not yet valid.
@@ -141,11 +141,9 @@ class IssuedDocument(
             .filter { it.domain == documentManagerId }
             .filter {
                 when (credentialPolicy) {
-                    CreateDocumentSettings.CredentialPolicy.RotateUse,
                     is CreateDocumentSettings.CredentialPolicy.LimitedTime,
                     is CreateDocumentSettings.CredentialPolicy.RotatingBatch,
                     is CreateDocumentSettings.CredentialPolicy.PerRelyingParty -> true
-                    CreateDocumentSettings.CredentialPolicy.OneTimeUse,
                     is CreateDocumentSettings.CredentialPolicy.OnceOnly -> it.usageCount == 0
                 }
             }
@@ -158,7 +156,7 @@ class IssuedDocument(
      * 1. The credential must be valid at the specified time (now by default)
      * 2. Among valid credentials, the one with the lowest usage count is selected
      *
-     * This approach ensures optimal credential rotation when using the RotateUse policy
+     * This approach ensures optimal credential rotation when using the RotatingBatch policy
      * and helps prevent unnecessary credential invalidation.
      *
      * @param now Optional timestamp for which to find a valid credential. If null, the current time is used.
@@ -252,7 +250,7 @@ class IssuedDocument(
      *
      * This method finds a valid credential, executes the provided block with it,
      * and then applies the appropriate credential policy (either incrementing usage count
-     * for RotateUse or deleting the credential for OneTimeUse).
+     * for RotatingBatch or deleting the credential for OnceOnly).
      *
      * @param T The return type of the operation
      * @param credentialContext The suspend function to execute with the credential as receiver
@@ -303,7 +301,7 @@ class IssuedDocument(
      * This method finds a valid credential, uses it to establish a shared secret with
      * the provided public key, and then applies the document's credential policy to the
      * used credential. This implementation follows the document's credential policy:
-     * for OneTimeUse, the credential is deleted after use, and for RotateUse, the credential's
+     * for OnceOnly, the credential is deleted after use, and for RotatingBatch, the credential's
      * usage count is incremented.
      *
      * @param otherPublicKey The public key of the other party as a byte array

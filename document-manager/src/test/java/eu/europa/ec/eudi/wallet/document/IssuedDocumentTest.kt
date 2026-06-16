@@ -94,7 +94,7 @@ class IssuedDocumentTest {
         documentManagerId: String = "test-document-manager-id",
         createdAt: Instant = Instant.now(),
         issuedAt: Instant = Instant.now(),
-        credentialPolicy: CreateDocumentSettings.CredentialPolicy = CreateDocumentSettings.CredentialPolicy.RotateUse,
+        credentialPolicy: CreateDocumentSettings.CredentialPolicy = CreateDocumentSettings.CredentialPolicy.RotatingBatch(),
         issuerMetaData: IssuerMetadata? = mockk(),
         initialCredentialsCount: Int = 1,
         certifiedCredentials: List<SecureAreaBoundCredential> = emptyList(),
@@ -192,7 +192,7 @@ class IssuedDocumentTest {
 
     @Test
     fun `test credentialPolicy returns expected policy`() {
-        val expectedPolicy = CreateDocumentSettings.CredentialPolicy.RotateUse
+        val expectedPolicy = CreateDocumentSettings.CredentialPolicy.RotatingBatch()
         val issuedDocument = createMockIssuedDocument(
             baseDocument = createMockBaseDocument(credentialPolicy = expectedPolicy)
         )
@@ -302,7 +302,7 @@ class IssuedDocumentTest {
     }
 
     @Test
-    fun `test findCredential with OneTimeUse policy only returns unused credentials`() = runTest {
+    fun `test findCredential with OnceOnly policy only returns unused credentials`() = runTest {
         val documentManagerId = "test-document-manager-id"
 
         val credential1 = createMockCredential(
@@ -320,7 +320,7 @@ class IssuedDocumentTest {
         val issuedDocument = createMockIssuedDocument(
             baseDocument = createMockBaseDocument(
                 documentManagerId = documentManagerId,
-                credentialPolicy = CreateDocumentSettings.CredentialPolicy.OneTimeUse,
+                credentialPolicy = CreateDocumentSettings.CredentialPolicy.OnceOnly(),
                 certifiedCredentials = listOf(credential1, credential2)
             )
         )
@@ -329,7 +329,7 @@ class IssuedDocumentTest {
     }
 
     @Test
-    fun `test findCredential with RotateUse policy returns credential with lowest usage count`() =
+    fun `test findCredential with RotatingBatch policy returns credential with lowest usage count`() =
         runTest {
             val documentManagerId = "test-document-manager-id"
 
@@ -348,7 +348,7 @@ class IssuedDocumentTest {
             val issuedDocument = createMockIssuedDocument(
                 baseDocument = createMockBaseDocument(
                     documentManagerId = documentManagerId,
-                    credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotateUse,
+                    credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotatingBatch(),
                     certifiedCredentials = listOf(credential1, credential2)
                 )
             )
@@ -463,10 +463,10 @@ class IssuedDocumentTest {
             usageCount = 0
         )
 
-        // Create the document with RotateUse policy to keep the credential after use
+        // Create the document with RotatingBatch policy to keep the credential after use
         val issuedDocument = createMockIssuedDocument(
             baseDocument = createMockBaseDocument(
-                credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotateUse,
+                credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotatingBatch(),
                 certifiedCredentials = listOf(credential)
             )
         )
@@ -503,7 +503,7 @@ class IssuedDocumentTest {
     }
 
     @Test
-    fun `test consumingCredential applies RotateUse policy correctly`() = runTest {
+    fun `test consumingCredential applies RotatingBatch policy correctly`() = runTest {
         // Setup - Create a mock credential and a helper to track interactions
         val credential = createMockCredential(
             alias = "rotate-credential",
@@ -512,7 +512,7 @@ class IssuedDocumentTest {
 
         // Create a mock document that can track credential updates
         val baseDocument = createMockBaseDocument(
-            credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotateUse,
+            credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotatingBatch(),
             certifiedCredentials = listOf(credential)
         )
 
@@ -533,7 +533,7 @@ class IssuedDocumentTest {
     }
 
     @Test
-    fun `test consumingCredential applies OneTimeUse policy correctly`() = runTest {
+    fun `test consumingCredential applies OnceOnly policy correctly`() = runTest {
         // Setup - Create a mock credential and a helper to track interactions
         val credential = createMockCredential(
             alias = "onetime-credential",
@@ -542,7 +542,7 @@ class IssuedDocumentTest {
 
         // Create a mock document that can track credential deletions
         val baseDocument = createMockBaseDocument(
-            credentialPolicy = CreateDocumentSettings.CredentialPolicy.OneTimeUse,
+            credentialPolicy = CreateDocumentSettings.CredentialPolicy.OnceOnly(),
             certifiedCredentials = listOf(credential)
         )
 
@@ -568,7 +568,7 @@ class IssuedDocumentTest {
         // Assert - The operation succeeded and policy was applied
         assert(result.isSuccess)
         assert(result.getOrNull() == "test-result")
-        assert(policyApplied) { "OneTimeUse policy wasn't applied" }
+        assert(policyApplied) { "OnceOnly policy wasn't applied" }
     }
 
     // Add additional tests for signConsumingCredential and keyAgreementConsumingCredential
@@ -598,7 +598,7 @@ class IssuedDocumentTest {
 
         val issuedDocument = createMockIssuedDocument(
             baseDocument = createMockBaseDocument(
-                credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotateUse,
+                credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotatingBatch(),
                 certifiedCredentials = listOf(credential)
             )
         )
@@ -735,7 +735,7 @@ class IssuedDocumentTest {
 
         val issuedDocument = createMockIssuedDocument(
             baseDocument = createMockBaseDocument(
-                credentialPolicy = CreateDocumentSettings.CredentialPolicy.OneTimeUse,
+                credentialPolicy = CreateDocumentSettings.CredentialPolicy.OnceOnly(),
                 certifiedCredentials = listOf(credential)
             )
         )
@@ -766,8 +766,8 @@ class IssuedDocumentTest {
             )
         }
 
-        // Verify OneTimeUse policy was applied
-        assert(policyApplied) { "OneTimeUse policy wasn't applied" }
+        // Verify OnceOnly policy was applied
+        assert(policyApplied) { "OnceOnly policy wasn't applied" }
 
         unmockkObject(Cbor, EcPublicKey.Companion)
     }

@@ -42,7 +42,7 @@ class CreateDocumentSettingsTest {
     @Test
     fun `test all parameters are properly set`() {
         val numberOfCredentials = 3
-        val credentialPolicy = CreateDocumentSettings.CredentialPolicy.OneTimeUse
+        val credentialPolicy = CreateDocumentSettings.CredentialPolicy.OnceOnly()
         val createDocumentSettings = CreateDocumentSettings(
             secureAreaIdentifier = secureAreaIdentifier,
             createKeySettings = createKeySettings,
@@ -68,9 +68,9 @@ class CreateDocumentSettingsTest {
             createDocumentSettings.numberOfCredentials,
             "Default numberOfCredentials should be 1"
         )
-        assertIs<CreateDocumentSettings.CredentialPolicy.RotateUse>(
+        assertIs<CreateDocumentSettings.CredentialPolicy.RotatingBatch>(
             createDocumentSettings.credentialPolicy,
-            "Default credentialPolicy should be RotateUse"
+            "Default credentialPolicy should be RotatingBatch"
         )
     }
 

@@ -67,7 +67,7 @@ interface CreateDocumentSettings {
          * @param numberOfCredentials The number of credentials to create for this document.
          * Must be greater than 0. Defaults to 1 if not specified.
          * @param credentialPolicy The policy determining how credentials are managed after use.
-         * Defaults to [CredentialPolicy.RotateUse] if not specified.
+         * Defaults to [CredentialPolicy.RotatingBatch] if not specified.
          * @return A new instance of [CreateDocumentSettings]
          * @throws IllegalArgumentException if numberOfCredentials is not greater than 0
          */
@@ -75,7 +75,7 @@ interface CreateDocumentSettings {
             secureAreaIdentifier: String,
             createKeySettings: CreateKeySettings,
             numberOfCredentials: Int = 1,
-            credentialPolicy: CredentialPolicy = CredentialPolicy.RotateUse
+            credentialPolicy: CredentialPolicy = CredentialPolicy.RotatingBatch()
         ): CreateDocumentSettings {
             require(numberOfCredentials > 0) {
                 "Number of credentials must be greater than 0"
@@ -90,55 +90,31 @@ interface CreateDocumentSettings {
     }
 
     sealed interface CredentialPolicy {
-        /**
-         * Policy that deletes the credential after a single use.
-         *
-         * This policy ensures credentials cannot be reused, providing enhanced security
-         * by minimizing the timeframe during which credentials are available in the system.
-         * It's particularly suitable for high-security scenarios.
-         *
-         * Used when the issuer does not advertise a `credential_reuse_policy`.
-         *
-         * @see RotateUse for an alternative policy that allows credential reuse
-         */
-        data object OneTimeUse : CredentialPolicy
 
         /**
-         * Policy that manages credential rotation by tracking usage count.
+         * Method A (Once-only / ETSI TS 119 472-3): Each credential instance is used exactly
+         * once, then deleted. Credentials are typically issued in batches (batch size is captured
+         * by [CreateDocumentSettings.numberOfCredentials]).
          *
-         * When a credential is used, its usage count is incremented, allowing the system
-         * to distribute load across multiple available credentials. This approach balances
-         * security with performance considerations by enabling credential reuse while
-         * maintaining usage patterns for auditing and optimization purposes.
+         * Consumption behavior: credential is deleted after a single use.
          *
-         * Used when the issuer does not advertise a `credential_reuse_policy`.
+         * When [reissueTriggerUnused] is non-null, the issuer has advertised a reuse policy and
+         * reissuance should be triggered when the number of remaining unused credential instances
+         * is at or below this threshold. When null, no issuer reuse policy is in effect and the
+         * application controls reissuance independently.
          *
-         * @see OneTimeUse for a stricter security policy
-         */
-        data object RotateUse : CredentialPolicy
-
-        // --- ETSI TS 119 472-3 / ARF Annex II reuse methods ---
-
-        /**
-         * Method A (Once-only): Each credential instance is used exactly once, then deleted.
-         * Credentials are issued in batches (batch size is captured by
-         * [CreateDocumentSettings.numberOfCredentials]).
-         *
-         * Consumption behavior: credential is deleted after a single use (same as [OneTimeUse]).
-         *
-         * @property reissueTriggerUnused reissuance should be triggered when the number of
-         *           remaining unused credential instances is at or below this threshold.
+         * @property reissueTriggerUnused reissuance threshold, or null if no issuer policy.
+         * @see RotatingBatch for a policy that allows credential reuse
          */
         data class OnceOnly(
-            val reissueTriggerUnused: Int,
+            val reissueTriggerUnused: Int? = null,
         ) : CredentialPolicy
 
         /**
-         * Method B (Limited-time): A single credential instance is presented multiple times
-         * until its validity period expires. No batch issuance.
+         * Method B (Limited-time / ETSI TS 119 472-3): A single credential instance is presented
+         * multiple times until its validity period expires. No batch issuance.
          *
-         * Consumption behavior: credential persists and its usage count is incremented
-         * (same as [RotateUse]).
+         * Consumption behavior: credential persists and its usage count is incremented.
          *
          * @property reissueTriggerLifetimeLeft reissuance should be triggered when the
          *           remaining credential lifetime is at or below this duration.
@@ -148,27 +124,32 @@ interface CreateDocumentSettings {
         ) : CredentialPolicy
 
         /**
-         * Method C (Rotating-batch): Credentials are issued in a batch and presented in
-         * random order per relying party. After all credentials in the batch have been
-         * presented once, they are reshuffled.
+         * Method C (Rotating-batch / ETSI TS 119 472-3): Credentials are issued in a batch and
+         * presented in random order per relying party. After all credentials in the batch have
+         * been presented once, they are reshuffled.
          *
-         * Consumption behavior (initial): credential usage count is incremented.
-         * Full random selection and reshuffle semantics are deferred to a later iteration.
+         * Consumption behavior: credential usage count is incremented.
+         * Full random selection and reshuffle semantics are planned for a future release.
          *
-         * @property reissueTriggerLifetimeLeft reissuance should be triggered when the
-         *           remaining credential lifetime is at or below this duration.
+         * When [reissueTriggerLifetimeLeft] is non-null, the issuer has advertised a reuse policy
+         * and reissuance should be triggered when the remaining credential lifetime is at or below
+         * this duration. When null, no issuer reuse policy is in effect and the application
+         * controls reissuance independently.
+         *
+         * @property reissueTriggerLifetimeLeft reissuance threshold, or null if no issuer policy.
+         * @see OnceOnly for a stricter policy that deletes credentials after use
          */
         data class RotatingBatch(
-            val reissueTriggerLifetimeLeft: kotlin.time.Duration,
+            val reissueTriggerLifetimeLeft: kotlin.time.Duration? = null,
         ) : CredentialPolicy
 
         /**
-         * Method D (Per-Relying-Party): Credentials are issued in a batch. A different
-         * credential instance is assigned to each relying party, and the same credential
-         * is consistently used for repeat visits to the same relying party.
+         * Method D (Per-Relying-Party / ETSI TS 119 472-3): Credentials are issued in a batch.
+         * A different credential instance is assigned to each relying party, and the same
+         * credential is consistently used for repeat visits to the same relying party.
          *
-         * Consumption behavior (initial): credential usage count is incremented.
-         * Full RP-to-credential mapping is deferred to a later iteration.
+         * Consumption behavior: credential usage count is incremented.
+         * Full RP-to-credential mapping is planned for a future release.
          *
          * @property reissueTriggerLifetimeLeft reissuance should be triggered when the
          *           remaining credential lifetime is at or below this duration.

@@ -36,7 +36,7 @@ import org.multipaz.securearea.CreateKeySettings
  *                              Must be greater than 0.
  * @property credentialPolicy Defines how credentials are managed after use. Controls whether credentials are
  *                           used once and deleted or rotated through multiple uses.
- *                           Defaults to [CredentialPolicy.RotateUse].
+ *                           Defaults to [CredentialPolicy.RotatingBatch].
  *
  * @see CreateDocumentSettings The interface this class implements
  * @see DocumentManager For usage in document creation operations
@@ -46,5 +46,5 @@ data class CreateDocumentSettingsImpl(
     override val secureAreaIdentifier: String,
     override val createKeySettings: CreateKeySettings,
     override val numberOfCredentials: Int = 1,
-    override val credentialPolicy: CredentialPolicy = CredentialPolicy.RotateUse,
+    override val credentialPolicy: CredentialPolicy = CredentialPolicy.RotatingBatch(),
 ) : CreateDocumentSettings

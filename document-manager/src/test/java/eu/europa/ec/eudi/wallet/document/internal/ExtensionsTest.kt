@@ -66,9 +66,9 @@ class ExtensionsTest {
     }
 
     @Test
-    fun `test CredentialPolicy toDataItem and fromDataItem for OneTimeUse`() {
-        // Create policy
-        val policy = CreateDocumentSettings.CredentialPolicy.OneTimeUse
+    fun `test CredentialPolicy toDataItem and fromDataItem for OnceOnly`() {
+        // Create policy without reissue trigger (legacy behavior)
+        val policy = CreateDocumentSettings.CredentialPolicy.OnceOnly()
 
         // Convert to DataItem
         val dataItem = policy.toDataItem()
@@ -76,7 +76,7 @@ class ExtensionsTest {
         // Ensure it's a map and has the expected type
         assertTrue(dataItem is CborMap)
         assertEquals(
-            CreateDocumentSettings.CredentialPolicy.OneTimeUse::class.java.name,
+            CreateDocumentSettings.CredentialPolicy.OnceOnly::class.java.name,
             (dataItem as CborMap)["type"].asTstr
         )
 
@@ -88,9 +88,9 @@ class ExtensionsTest {
     }
 
     @Test
-    fun `test CredentialPolicy toDataItem and fromDataItem for RotateUse`() {
-        // Create policy
-        val policy = CreateDocumentSettings.CredentialPolicy.RotateUse
+    fun `test CredentialPolicy toDataItem and fromDataItem for OnceOnly with reissueTriggerUnused`() {
+        // Create policy with reissue trigger
+        val policy = CreateDocumentSettings.CredentialPolicy.OnceOnly(reissueTriggerUnused = 3)
 
         // Convert to DataItem
         val dataItem = policy.toDataItem()
@@ -98,7 +98,31 @@ class ExtensionsTest {
         // Ensure it's a map and has the expected type
         assertTrue(dataItem is CborMap)
         assertEquals(
-            CreateDocumentSettings.CredentialPolicy.RotateUse::class.java.name,
+            CreateDocumentSettings.CredentialPolicy.OnceOnly::class.java.name,
+            (dataItem as CborMap)["type"].asTstr
+        )
+
+        // Reconstruct policy from DataItem
+        val reconstructedPolicy = CreateDocumentSettings.CredentialPolicy.fromDataItem(dataItem)
+
+        // Verify it matches the original
+        assertEquals(policy, reconstructedPolicy)
+        assertIs<CreateDocumentSettings.CredentialPolicy.OnceOnly>(reconstructedPolicy)
+        assertEquals(3, (reconstructedPolicy as CreateDocumentSettings.CredentialPolicy.OnceOnly).reissueTriggerUnused)
+    }
+
+    @Test
+    fun `test CredentialPolicy toDataItem and fromDataItem for RotatingBatch`() {
+        // Create policy without reissue trigger (legacy behavior)
+        val policy = CreateDocumentSettings.CredentialPolicy.RotatingBatch()
+
+        // Convert to DataItem
+        val dataItem = policy.toDataItem()
+
+        // Ensure it's a map and has the expected type
+        assertTrue(dataItem is CborMap)
+        assertEquals(
+            CreateDocumentSettings.CredentialPolicy.RotatingBatch::class.java.name,
             (dataItem as CborMap)["type"].asTstr
         )
 

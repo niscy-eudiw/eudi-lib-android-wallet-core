@@ -226,11 +226,11 @@ class DocumentExtensionsTest {
         val result = wallet.getDefaultCreateDocumentSettings(
             offeredDocument = offeredDocument,
             numberOfCredentials = 2,
-            credentialPolicy = CreateDocumentSettings.CredentialPolicy.OneTimeUse
+            credentialPolicy = CreateDocumentSettings.CredentialPolicy.OnceOnly()
         )
 
         assertEquals(2, result.numberOfCredentials)
-        assertEquals(CreateDocumentSettings.CredentialPolicy.OneTimeUse, result.credentialPolicy)
+        assertEquals(CreateDocumentSettings.CredentialPolicy.OnceOnly(), result.credentialPolicy)
     }
 
     @Test
