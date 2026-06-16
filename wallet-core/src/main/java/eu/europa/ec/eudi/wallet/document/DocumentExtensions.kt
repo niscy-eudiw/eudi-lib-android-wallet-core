@@ -18,8 +18,8 @@ package eu.europa.ec.eudi.wallet.document
 
 import eu.europa.ec.eudi.wallet.EudiWallet
 import eu.europa.ec.eudi.wallet.EudiWalletConfig
-import eu.europa.ec.eudi.wallet.document.CreateDocumentSettings.CredentialPolicy.OneTimeUse
-import eu.europa.ec.eudi.wallet.document.CreateDocumentSettings.CredentialPolicy.RotateUse
+import eu.europa.ec.eudi.wallet.document.CreateDocumentSettings.CredentialPolicy.OnceOnly
+import eu.europa.ec.eudi.wallet.document.CreateDocumentSettings.CredentialPolicy.RotatingBatch
 import eu.europa.ec.eudi.wallet.document.DocumentExtensions.getDefaultKeyUnlockData
 import eu.europa.ec.eudi.wallet.issue.openid4vci.Offer
 import kotlinx.coroutines.runBlocking
@@ -150,7 +150,7 @@ object DocumentExtensions {
      * @param attestationChallenge The attestation challenge to use when creating the keys. If `null`, a random challenge will be generated.
      * @param numberOfCredentials The number of credentials to pre-generate for the document.
      *                           Will be limited to not exceed [Offer.OfferedDocument.batchCredentialIssuanceSize]. Defaults to 1.
-     * @param credentialPolicy The policy for credential usage ([OneTimeUse] or [RotateUse]). Defaults to [RotateUse].
+     * @param credentialPolicy The policy for credential usage. Defaults to [RotatingBatch].
      * @param configure A lambda to further customize the [AndroidKeystoreCreateKeySettings].
      *                 If not provided, settings will use values from [EudiWalletConfig].
      * @return The default [CreateDocumentSettings] configured for the offered document.
@@ -168,7 +168,7 @@ object DocumentExtensions {
         offeredDocument: Offer.OfferedDocument,
         attestationChallenge: ByteArray? = null,
         numberOfCredentials: Int = 1,
-        credentialPolicy: CreateDocumentSettings.CredentialPolicy = RotateUse,
+        credentialPolicy: CreateDocumentSettings.CredentialPolicy = RotatingBatch(),
         configure: (AndroidKeystoreCreateKeySettings.Builder.() -> Unit)? = null,
     ): CreateDocumentSettings {
         // ensure the number of credentials is not greater than the batch size

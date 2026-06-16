@@ -250,7 +250,7 @@ val createSettings = CreateDocumentSettings(
 
 The library supports credential policies that determine how credentials are managed after use:
 
-#### OneTimeUse Policy
+#### OnceOnly Policy
 
 Credentials with this policy are automatically deleted after a single use:
 
@@ -259,11 +259,14 @@ val createSettings = CreateDocumentSettings(
     secureAreaIdentifier = secureArea.identifier,
     createKeySettings = SoftwareCreateKeySettings.Builder().build(),
     numberOfCredentials = 5,
-    credentialPolicy = CredentialPolicy.OneTimeUse
+    credentialPolicy = CredentialPolicy.OnceOnly()
 )
 ```
 
-#### RotateUse Policy (Default)
+When the issuer advertises a reuse policy, `OnceOnly(reissueTriggerUnused = N)` carries the
+reissuance trigger threshold from the issuer metadata.
+
+#### RotatingBatch Policy (Default)
 
 Credentials with this policy increment their usage count but remain available for reuse:
 
@@ -272,9 +275,12 @@ val createSettings = CreateDocumentSettings(
     secureAreaIdentifier = secureArea.identifier,
     createKeySettings = SoftwareCreateKeySettings.Builder().build(),
     numberOfCredentials = 3,
-    credentialPolicy = CredentialPolicy.RotateUse // This is the default
+    credentialPolicy = CredentialPolicy.RotatingBatch() // This is the default
 )
 ```
+
+When the issuer advertises a reuse policy, `RotatingBatch(reissueTriggerLifetimeLeft = duration)`
+carries the reissuance trigger threshold from the issuer metadata.
 
 ### Working with Credentials in Issued Documents
 
@@ -296,7 +302,7 @@ val credentials = issuedDocument.getCredentials()
 // Find an available credential (automatically selects the best one based on policy)
 val credential = issuedDocument?.findCredential()
 
-// Use a credential and apply the policy (e.g., delete if OneTimeUse, increment usage if RotateUse)
+// Use a credential and apply the policy (e.g., delete if OnceOnly, increment usage if RotatingBatch)
 issuedDocument?.consumingCredential {
     // Use the credential for presentation or other operations
     // The credential policy will be applied automatically after this block
@@ -306,8 +312,8 @@ issuedDocument?.consumingCredential {
 
 The `findCredential()` method intelligently selects credentials based on:
 
-- Credential policy (e.g., OneTimeUse or RotateUse)
-- Usage count (selecting least-used credentials first in RotateUse policy)
+- Credential policy (e.g., OnceOnly or RotatingBatch)
+- Usage count (selecting least-used credentials first in rotation-based policies)
 - Validity period (ensuring the credential is currently valid)
 - Availability (excluding deleted or invalidated credentials)
 
@@ -322,7 +328,7 @@ val createSettings = CreateDocumentSettings(
     secureAreaIdentifier = SoftwareSecureArea.IDENTIFIER,
     createKeySettings = SoftwareCreateKeySettings.Builder().build(),
     numberOfCredentials = 3, // Create 3 credentials
-    credentialPolicy = CredentialPolicy.OneTimeUse // Delete after single use
+    credentialPolicy = CredentialPolicy.OnceOnly() // Delete after single use
 )
 
 // Get or create metadata for the document

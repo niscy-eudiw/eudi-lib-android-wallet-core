@@ -484,7 +484,7 @@ val validCredentials = issuedDocument.getCredentials()
 // Find an available credential (automatically selects the best one based on policy)
 val credential = issuedDocument?.findCredential()
 
-// Use a credential and apply the policy (e.g., delete if OneTimeUse, increment usage if RotateUse)
+// Use a credential and apply the policy (e.g., delete if OnceOnly, increment usage if RotatingBatch)
 issuedDocument?.consumingCredential {
     // Use the credential for presentation or other operations
     // The credential policy will be applied automatically after this block
@@ -494,7 +494,7 @@ issuedDocument?.consumingCredential {
 
 The `findCredential()` method intelligently selects credentials based on:
 
-- Credential policy (e.g., `OneTimeUse`, `RotateUse`, or [ETSI reuse policies](#credential-reuse-policies-etsi-ts-119-472-3) such as `OnceOnly`, `LimitedTime`, `RotatingBatch`, `PerRelyingParty`)
+- Credential policy (e.g., `OnceOnly`, `RotatingBatch`, or [ETSI reuse policies](#credential-reuse-policies-etsi-ts-119-472-3) such as `LimitedTime`, `PerRelyingParty`)
 - Usage count (selecting least-used credentials first in rotation-based policies)
 - Validity period (ensuring the credential is currently valid)
 - Availability (excluding deleted or invalidated credentials)
@@ -1272,9 +1272,19 @@ val onIssueEvent = OnIssueEvent { event ->
 
             val resolvedPolicy = event.resolvedReusePolicy
 
+            // When the issuer advertises a credential reuse policy (ETSI TS 119 472-3),
+            // the core enforces the resolved policy's credentialPolicy and numberOfCredentials
+            // regardless of what the app passes here. The app's key-related settings
+            // (secure area, authentication) are always preserved.
+            //
+            // When there is no reuse policy (resolvedPolicy == null), the app's chosen
+            // credentialPolicy and numberOfCredentials are used as-is.
+
+            val resolvedPolicy = event.resolvedReusePolicy
+
             val createDocumentSettings = if (resolvedPolicy != null) {
                 // Issuer dictates credential policy and batch size via reuse policy.
-                // The app still provides key-related settings (secure area, authentication).
+                // Note: the core will enforce these values even if different ones are passed.
                 eudiWallet.getDefaultCreateDocumentSettings(
                     offeredDocument = event.offeredDocument,
                     numberOfCredentials = resolvedPolicy.numberOfCredentials,
@@ -1291,12 +1301,12 @@ val onIssueEvent = OnIssueEvent { event ->
                     isEuPid -> eudiWallet.getDefaultCreateDocumentSettings(
                         offeredDocument = event.offeredDocument,
                         numberOfCredentials = 5,
-                        credentialPolicy = CreateDocumentSettings.CredentialPolicy.OneTimeUse
+                        credentialPolicy = CreateDocumentSettings.CredentialPolicy.OnceOnly()
                     )
                     else -> eudiWallet.getDefaultCreateDocumentSettings(
                         offeredDocument = event.offeredDocument,
                         numberOfCredentials = 1,
-                        credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotateUse
+                        credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotatingBatch()
                     )
                 }
             }
@@ -1807,11 +1817,12 @@ declared capabilities and provides the result to the application during issuance
    configuration metadata. It selects the first option from the issuer's prioritized list that the
    wallet supports.
 3. **The resolved policy is delivered** to the application via
-   `IssueEvent.DocumentRequiresCreateSettings.resolvedReusePolicy`. When non-null, it provides the
-   `credentialPolicy` and `numberOfCredentials` that should be used. The application still provides
+   `IssueEvent.DocumentRequiresCreateSettings.resolvedReusePolicy`. When non-null, the **core
+   enforces** the resolved `credentialPolicy` and `numberOfCredentials` — these values override
+   whatever the application passes via `event.resume()`. The application still provides
    key-related settings (secure area, authentication).
 4. **If the issuer has no reuse policy**, `resolvedReusePolicy` is null and the application chooses
-   the credential policy and batch size freely (backward-compatible behavior).
+   the credential policy and batch size freely.
 
 ##### Supported reuse methods
 
@@ -1852,15 +1863,17 @@ in an error. For issuers that do not advertise a reuse policy, behavior is uncha
 
 ##### Handling resolved reuse policies during issuance
 
-When handling `IssueEvent.DocumentRequiresCreateSettings`, check `resolvedReusePolicy`:
+When handling `IssueEvent.DocumentRequiresCreateSettings`, check `resolvedReusePolicy`.
+When `resolvedReusePolicy` is non-null, the core will **enforce** the resolved policy's
+`credentialPolicy` and `numberOfCredentials` regardless of what the application passes.
+The application's key-related settings (secure area, user authentication) are always preserved.
 
 ```kotlin
 is IssueEvent.DocumentRequiresCreateSettings -> {
     val resolvedPolicy = event.resolvedReusePolicy
 
     val settings = if (resolvedPolicy != null) {
-        // Issuer dictates policy and batch size.
-        // Use resolvedPolicy.credentialPolicy and resolvedPolicy.numberOfCredentials.
+        // Issuer dictates policy and batch size — core enforces these.
         // The app provides key-related settings (secure area, user authentication).
         eudiWallet.getDefaultCreateDocumentSettings(
             offeredDocument = event.offeredDocument,
@@ -1872,7 +1885,7 @@ is IssueEvent.DocumentRequiresCreateSettings -> {
         eudiWallet.getDefaultCreateDocumentSettings(
             offeredDocument = event.offeredDocument,
             numberOfCredentials = 5,
-            credentialPolicy = CreateDocumentSettings.CredentialPolicy.OneTimeUse,
+            credentialPolicy = CreateDocumentSettings.CredentialPolicy.OnceOnly(),
         )
     }
 
@@ -1897,14 +1910,21 @@ The `ResolvedReusePolicy` object contains:
   incremented on use. RP-to-credential persistent mapping (assigning a specific credential to each
   relying party for consistent repeat visits) is planned for a future release.
 
-##### Backward compatibility
+##### Breaking changes
 
-- The existing `CredentialPolicy.OneTimeUse` and `CredentialPolicy.RotateUse` types remain unchanged
-  and continue to work for issuers that do not advertise a `credential_reuse_policy`.
-- `IssueEvent.DocumentRequiresCreateSettings` gains the `resolvedReusePolicy` property (nullable).
-  Existing handlers that don't inspect this property continue to work unchanged.
-- The `withSupportedCredentialReusePolicies` configuration is optional. When omitted, behavior is
-  identical to previous versions for issuers without reuse policies.
+- **`CredentialPolicy.OneTimeUse` and `CredentialPolicy.RotateUse` have been removed.** Use
+  `CredentialPolicy.OnceOnly()` and `CredentialPolicy.RotatingBatch()` respectively.
+  `OnceOnly()` with `reissueTriggerUnused = null` provides the same behavior as the old `OneTimeUse`.
+  `RotatingBatch()` with `reissueTriggerLifetimeLeft = null` provides the same behavior as the old `RotateUse`.
+- **Clean install required**: This is a breaking change for persisted document metadata. Applications
+  must be uninstalled and reinstalled.
+- **Core enforcement**: When an issuer advertises a reuse policy, the core now enforces the resolved
+  `credentialPolicy` and `numberOfCredentials`, overriding any values provided by the application.
+  The application's key-related settings (secure area, authentication) are always preserved.
+- `IssueEvent.DocumentRequiresCreateSettings` provides the `resolvedReusePolicy` property (nullable)
+  for informational purposes.
+- The `withSupportedCredentialReusePolicies` configuration is optional. When omitted, the library
+  will not match any issuer-advertised reuse policy options.
 
 ### Transfer documents
 

@@ -78,21 +78,18 @@ internal fun CreateDocumentSettings.CredentialPolicy.toDataItem(): DataItem {
         put("type", this@toDataItem.javaClass.name)
         when (val policy = this@toDataItem) {
             is CreateDocumentSettings.CredentialPolicy.OnceOnly -> {
-                put("reissueTriggerUnused", policy.reissueTriggerUnused.toLong())
+                policy.reissueTriggerUnused?.let { put("reissueTriggerUnused", it.toLong()) }
             }
             is CreateDocumentSettings.CredentialPolicy.LimitedTime -> {
                 put("reissueTriggerLifetimeLeft", policy.reissueTriggerLifetimeLeft.inWholeSeconds)
             }
             is CreateDocumentSettings.CredentialPolicy.RotatingBatch -> {
-                put("reissueTriggerLifetimeLeft", policy.reissueTriggerLifetimeLeft.inWholeSeconds)
+                policy.reissueTriggerLifetimeLeft?.let { put("reissueTriggerLifetimeLeft", it.inWholeSeconds) }
             }
             is CreateDocumentSettings.CredentialPolicy.PerRelyingParty -> {
                 put("reissueTriggerLifetimeLeft", policy.reissueTriggerLifetimeLeft.inWholeSeconds)
                 put("reissueTriggerUnused", policy.reissueTriggerUnused.toLong())
             }
-            // Existing data objects — no extra fields needed
-            CreateDocumentSettings.CredentialPolicy.OneTimeUse,
-            CreateDocumentSettings.CredentialPolicy.RotateUse -> {}
         }
     }
 }
@@ -101,8 +98,7 @@ internal fun CreateDocumentSettings.CredentialPolicy.toDataItem(): DataItem {
  * Companion object extension function that reconstructs a CredentialPolicy from a CBOR DataItem.
  *
  * This function extracts the policy type from the CBOR map and instantiates the appropriate
- * CredentialPolicy based on the stored type information. Supports both legacy types (OneTimeUse,
- * RotateUse) and ETSI TS 119 472-3 types (OnceOnly, LimitedTime, RotatingBatch, PerRelyingParty).
+ * CredentialPolicy based on the stored type information.
  *
  * @param dataItem The CBOR DataItem containing the serialized CredentialPolicy
  * @return CredentialPolicy instance based on the type information in the DataItem
@@ -114,13 +110,9 @@ internal fun CreateDocumentSettings.CredentialPolicy.Companion.fromDataItem(data
     }
 
     return when (val type = dataItem["type"].asTstr) {
-        CreateDocumentSettings.CredentialPolicy.OneTimeUse::class.java.name ->
-            CreateDocumentSettings.CredentialPolicy.OneTimeUse
-        CreateDocumentSettings.CredentialPolicy.RotateUse::class.java.name ->
-            CreateDocumentSettings.CredentialPolicy.RotateUse
         CreateDocumentSettings.CredentialPolicy.OnceOnly::class.java.name ->
             CreateDocumentSettings.CredentialPolicy.OnceOnly(
-                reissueTriggerUnused = dataItem["reissueTriggerUnused"].asNumber.toInt(),
+                reissueTriggerUnused = dataItem.getOrNull("reissueTriggerUnused")?.asNumber?.toInt(),
             )
         CreateDocumentSettings.CredentialPolicy.LimitedTime::class.java.name ->
             CreateDocumentSettings.CredentialPolicy.LimitedTime(
@@ -128,7 +120,7 @@ internal fun CreateDocumentSettings.CredentialPolicy.Companion.fromDataItem(data
             )
         CreateDocumentSettings.CredentialPolicy.RotatingBatch::class.java.name ->
             CreateDocumentSettings.CredentialPolicy.RotatingBatch(
-                reissueTriggerLifetimeLeft = dataItem["reissueTriggerLifetimeLeft"].asNumber.toLong().seconds,
+                reissueTriggerLifetimeLeft = dataItem.getOrNull("reissueTriggerLifetimeLeft")?.asNumber?.toLong()?.seconds,
             )
         CreateDocumentSettings.CredentialPolicy.PerRelyingParty::class.java.name ->
             CreateDocumentSettings.CredentialPolicy.PerRelyingParty(

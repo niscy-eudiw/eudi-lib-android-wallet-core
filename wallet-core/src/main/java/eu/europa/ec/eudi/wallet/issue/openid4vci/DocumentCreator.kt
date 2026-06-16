@@ -68,6 +68,20 @@ internal class DocumentCreator(
                 ))
             }
 
-        return documentManager.createDocument(offeredDocument, createDocumentSettings).getOrThrow()
+        // When the issuer advertises a reuse policy, enforce it by overriding the
+        // credentialPolicy and numberOfCredentials regardless of what the UI provided.
+        // The UI's key settings (secureArea, createKeySettings) are preserved.
+        val effectiveSettings = if (resolvedPolicy != null) {
+            CreateDocumentSettings(
+                secureAreaIdentifier = createDocumentSettings.secureAreaIdentifier,
+                createKeySettings = createDocumentSettings.createKeySettings,
+                numberOfCredentials = resolvedPolicy.numberOfCredentials,
+                credentialPolicy = resolvedPolicy.credentialPolicy,
+            )
+        } else {
+            createDocumentSettings
+        }
+
+        return documentManager.createDocument(offeredDocument, effectiveSettings).getOrThrow()
     }
 }

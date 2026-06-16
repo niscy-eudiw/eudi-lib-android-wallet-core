@@ -42,9 +42,7 @@ internal fun interface CredentialPolicyApplier {
          */
         fun from(policy: CreateDocumentSettings.CredentialPolicy): CredentialPolicyApplier {
             return when (policy) {
-                CreateDocumentSettings.CredentialPolicy.OneTimeUse -> OneTimeUsePolicyApplier
                 is CreateDocumentSettings.CredentialPolicy.OnceOnly -> OneTimeUsePolicyApplier
-                CreateDocumentSettings.CredentialPolicy.RotateUse -> RotateUsePolicyApplier
                 is CreateDocumentSettings.CredentialPolicy.LimitedTime -> RotateUsePolicyApplier
                 is CreateDocumentSettings.CredentialPolicy.RotatingBatch -> RotateUsePolicyApplier
                 is CreateDocumentSettings.CredentialPolicy.PerRelyingParty -> RotateUsePolicyApplier
