@@ -26,14 +26,13 @@ import eu.europa.ec.eudi.wallet.document.CreateDocumentSettings.CredentialPolicy
  * supported policies.
  *
  * @property credentialPolicy The [CredentialPolicy] that the document should be created with.
- * @property numberOfCredentials The number of credential instances to request (batch size),
- *           derived from the selected reuse policy's `batchSize` (or 1 for [EudiReusePolicy.LimitedTime]).
+ *           The number of credentials (batch size) is embedded in the policy itself via
+ *           [CredentialPolicy.numberOfCredentials].
  * @property selectedEudiReusePolicy The specific [EudiReusePolicy] option that was selected
  *           from the issuer's advertised options.
  */
 data class ResolvedReusePolicy(
     val credentialPolicy: CredentialPolicy,
-    val numberOfCredentials: Int,
     val selectedEudiReusePolicy: EudiReusePolicy,
 )
 
@@ -67,27 +66,29 @@ internal fun resolveReusePolicy(
             "Issuer's credential reuse policy has no option supported by this wallet"
         )
 
+    val numberOfCredentials = selected.batchSize ?: 1
+
     val policy = when (selected) {
         is EudiReusePolicy.OnceOnly -> CredentialPolicy.OnceOnly(
+            numberOfCredentials = numberOfCredentials,
             reissueTriggerUnused = selected.reissueTriggerUnused,
         )
         is EudiReusePolicy.LimitedTime -> CredentialPolicy.LimitedTime(
             reissueTriggerLifetimeLeft = selected.reissueTriggerLifetimeLeft,
         )
         is EudiReusePolicy.RotatingBatch -> CredentialPolicy.RotatingBatch(
+            numberOfCredentials = numberOfCredentials,
             reissueTriggerLifetimeLeft = selected.reissueTriggerLifetimeLeft,
         )
         is EudiReusePolicy.PerRelyingParty -> CredentialPolicy.PerRelyingParty(
+            numberOfCredentials = numberOfCredentials,
             reissueTriggerLifetimeLeft = selected.reissueTriggerLifetimeLeft,
             reissueTriggerUnused = selected.reissueTriggerUnused,
         )
     }
 
-    val numberOfCredentials = selected.batchSize ?: 1
-
     return ResolvedReusePolicy(
         credentialPolicy = policy,
-        numberOfCredentials = numberOfCredentials,
         selectedEudiReusePolicy = selected,
     )
 }

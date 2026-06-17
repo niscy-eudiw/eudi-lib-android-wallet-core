@@ -93,7 +93,7 @@ class MdocCredentialFactory(
         }
 
         return MdocCredential.createBatch(
-            numberOfCredentials = createDocumentSettings.numberOfCredentials,
+            numberOfCredentials = createDocumentSettings.credentialPolicy.numberOfCredentials,
             document = document,
             domain = domain,
             secureArea = secureArea,
@@ -131,7 +131,7 @@ class SdJwtVcCredentialFactory(val domain: String) :
         }
 
         return KeyBoundSdJwtVcCredential.createBatch(
-            numberOfCredentials = createDocumentSettings.numberOfCredentials,
+            numberOfCredentials = createDocumentSettings.credentialPolicy.numberOfCredentials,
             document = document,
             domain = domain,
             secureArea = secureArea,

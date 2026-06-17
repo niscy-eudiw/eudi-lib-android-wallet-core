@@ -369,8 +369,9 @@ internal class DefaultOpenId4VciManager(
                 val offer = Offer(issuer.credentialOffer)
 
                 //  Create a new UnsignedDocument (fresh keys) via DocumentCreator
-                //    This fires IssueEvent.DocumentRequiresCreateSettings so the app
-                //    can provide CreateDocumentSettings (secure area, number of credentials, etc.)
+                //    This fires IssueEvent.DocumentRequiresCreateSettings.MandatoryReusePolicy
+                //    or IssueEvent.DocumentRequiresCreateSettings.OptionalReusePolicy so the app
+                //    can provide the required settings (secure area, key settings, etc.)
                 val documentCreator = DocumentCreator(
                     documentManager = documentManager,
                     listener = listener,

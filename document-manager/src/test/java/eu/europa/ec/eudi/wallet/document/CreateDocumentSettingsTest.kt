@@ -34,25 +34,22 @@ class CreateDocumentSettingsTest {
         val createDocumentSettings = CreateDocumentSettings(
             secureAreaIdentifier = secureAreaIdentifier,
             createKeySettings = createKeySettings,
-            numberOfCredentials = 1
         )
         assertIs<CreateDocumentSettingsImpl>(createDocumentSettings)
     }
 
     @Test
     fun `test all parameters are properly set`() {
-        val numberOfCredentials = 3
-        val credentialPolicy = CreateDocumentSettings.CredentialPolicy.OnceOnly()
+        val credentialPolicy = CreateDocumentSettings.CredentialPolicy.OnceOnly(numberOfCredentials = 3)
         val createDocumentSettings = CreateDocumentSettings(
             secureAreaIdentifier = secureAreaIdentifier,
             createKeySettings = createKeySettings,
-            numberOfCredentials = numberOfCredentials,
             credentialPolicy = credentialPolicy
         )
 
         assertEquals(secureAreaIdentifier, createDocumentSettings.secureAreaIdentifier)
         assertSame(createKeySettings, createDocumentSettings.createKeySettings)
-        assertEquals(numberOfCredentials, createDocumentSettings.numberOfCredentials)
+        assertEquals(3, createDocumentSettings.credentialPolicy.numberOfCredentials)
         assertSame(credentialPolicy, createDocumentSettings.credentialPolicy)
     }
 
@@ -65,7 +62,7 @@ class CreateDocumentSettingsTest {
 
         assertEquals(
             1,
-            createDocumentSettings.numberOfCredentials,
+            createDocumentSettings.credentialPolicy.numberOfCredentials,
             "Default numberOfCredentials should be 1"
         )
         assertIs<CreateDocumentSettings.CredentialPolicy.RotatingBatch>(
@@ -75,29 +72,73 @@ class CreateDocumentSettingsTest {
     }
 
     @Test
+    fun `test CredentialPolicy numberOfCredentials is accessible on each variant`() {
+        assertEquals(1, CreateDocumentSettings.CredentialPolicy.OnceOnly().numberOfCredentials)
+        assertEquals(5, CreateDocumentSettings.CredentialPolicy.OnceOnly(numberOfCredentials = 5).numberOfCredentials)
+        assertEquals(1, CreateDocumentSettings.CredentialPolicy.RotatingBatch().numberOfCredentials)
+        assertEquals(3, CreateDocumentSettings.CredentialPolicy.RotatingBatch(numberOfCredentials = 3).numberOfCredentials)
+        assertEquals(1, CreateDocumentSettings.CredentialPolicy.LimitedTime(
+            reissueTriggerLifetimeLeft = kotlin.time.Duration.parse("90d")
+        ).numberOfCredentials)
+        assertEquals(1, CreateDocumentSettings.CredentialPolicy.PerRelyingParty(
+            reissueTriggerLifetimeLeft = kotlin.time.Duration.parse("90d"),
+            reissueTriggerUnused = 5
+        ).numberOfCredentials)
+    }
+
+    @Test
+    fun `test CredentialPolicy withNumberOfCredentials returns updated policy`() {
+        val policy = CreateDocumentSettings.CredentialPolicy.RotatingBatch(numberOfCredentials = 1)
+        val updated = policy.withNumberOfCredentials(5)
+        assertIs<CreateDocumentSettings.CredentialPolicy.RotatingBatch>(updated)
+        assertEquals(5, updated.numberOfCredentials)
+    }
+
+    @Test
+    fun `test LimitedTime withNumberOfCredentials rejects non-1 count`() {
+        val policy = CreateDocumentSettings.CredentialPolicy.LimitedTime(
+            reissueTriggerLifetimeLeft = kotlin.time.Duration.parse("90d")
+        )
+        assertFailsWith<IllegalArgumentException> {
+            policy.withNumberOfCredentials(2)
+        }
+        // count=1 should be fine
+        val same = policy.withNumberOfCredentials(1)
+        assertSame(policy, same)
+    }
+
+    @Test
     fun `test throws IllegalArgumentException when numberOfCredentials is zero`() {
-        val exception = assertFailsWith<IllegalArgumentException> {
-            CreateDocumentSettings(
-                secureAreaIdentifier = secureAreaIdentifier,
-                createKeySettings = createKeySettings,
-                numberOfCredentials = 0
+        assertFailsWith<IllegalArgumentException> {
+            CreateDocumentSettings.CredentialPolicy.OnceOnly(numberOfCredentials = 0)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            CreateDocumentSettings.CredentialPolicy.RotatingBatch(numberOfCredentials = 0)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            CreateDocumentSettings.CredentialPolicy.PerRelyingParty(
+                numberOfCredentials = 0,
+                reissueTriggerLifetimeLeft = kotlin.time.Duration.parse("90d"),
+                reissueTriggerUnused = 5
             )
         }
-
-        assertEquals("Number of credentials must be greater than 0", exception.message)
     }
 
     @Test
     fun `test throws IllegalArgumentException when numberOfCredentials is negative`() {
-        val exception = assertFailsWith<IllegalArgumentException> {
-            CreateDocumentSettings(
-                secureAreaIdentifier = secureAreaIdentifier,
-                createKeySettings = createKeySettings,
-                numberOfCredentials = -1
+        assertFailsWith<IllegalArgumentException> {
+            CreateDocumentSettings.CredentialPolicy.OnceOnly(numberOfCredentials = -1)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            CreateDocumentSettings.CredentialPolicy.RotatingBatch(numberOfCredentials = -1)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            CreateDocumentSettings.CredentialPolicy.PerRelyingParty(
+                numberOfCredentials = -1,
+                reissueTriggerLifetimeLeft = kotlin.time.Duration.parse("90d"),
+                reissueTriggerUnused = 5
             )
         }
-
-        assertEquals("Number of credentials must be greater than 0", exception.message)
     }
 }
 

@@ -22,6 +22,7 @@ import eu.europa.ec.eudi.wallet.document.DocumentId
 import eu.europa.ec.eudi.wallet.document.IssuedDocument
 import eu.europa.ec.eudi.wallet.document.UnsignedDocument
 import org.multipaz.crypto.Algorithm
+import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.securearea.SecureArea
 import java.security.cert.TrustAnchor
@@ -79,31 +80,52 @@ sealed interface IssueEvent : OpenId4VciResult {
         OpenId4VciResult.Erroneous
 
     /**
-     * Issuing requires [CreateDocumentSettings] to create the document that will be issued
+     * Issuing requires configuration to create the document that will be issued
      * for the [offeredDocument].
      *
-     * When [resolvedReusePolicy] is non-null, the issuer has advertised a credential reuse
-     * policy (ETSI TS 119 472-3) and the wallet has selected a supported option. The
-     * [resolvedReusePolicy] provides the [CreateDocumentSettings.CredentialPolicy] and
-     * `numberOfCredentials` that should be used. The caller should still provide key-related
-     * settings (secure area, authentication requirements).
-     *
-     * When [resolvedReusePolicy] is null, the issuer has no reuse policy and the caller
-     * is free to choose the credential policy and number of credentials.
+     * This is a sealed interface with two variants:
+     * - [MandatoryReusePolicy]: The issuer advertises a credential reuse policy (ETSI TS 119 472-3).
+     *   The credential policy and number of credentials are determined by the resolved policy.
+     *   The wallet only needs to provide key-related settings (secure area identifier and key settings).
+     * - [OptionalReusePolicy]: No issuer reuse policy. The wallet has full control over
+     *   [CreateDocumentSettings], including credential policy and number of credentials.
      *
      * @property offeredDocument the offered document
-     * @property resolvedReusePolicy the resolved reuse policy from issuer metadata, or null
-     *  if the issuer does not advertise a credential reuse policy
-     * @property resume the callback to resume the issuance with the [CreateDocumentSettings]
-     *  that will be used to create the document
-     * @property cancel the callback to cancel the issuance with an optional reason
      */
-    data class DocumentRequiresCreateSettings(
-        val offeredDocument: Offer.OfferedDocument,
-        val resolvedReusePolicy: ResolvedReusePolicy?,
-        val resume: (createDocumentSettings: CreateDocumentSettings) -> Unit,
-        val cancel: (reason: String?) -> Unit,
-    ) : IssueEvent
+    sealed interface DocumentRequiresCreateSettings : IssueEvent {
+        val offeredDocument: Offer.OfferedDocument
+
+        /**
+         * The issuer advertises a mandatory credential reuse policy (ETSI TS 119 472-3).
+         * Only key settings are needed — the credential policy is determined by the [resolvedReusePolicy].
+         *
+         * @property offeredDocument the offered document
+         * @property resolvedReusePolicy the resolved reuse policy from issuer metadata
+         * @property resume the callback to resume the issuance with the secure area identifier
+         *  and key creation settings
+         * @property cancel the callback to cancel the issuance with an optional reason
+         */
+        data class MandatoryReusePolicy(
+            override val offeredDocument: Offer.OfferedDocument,
+            val resolvedReusePolicy: ResolvedReusePolicy,
+            val resume: (secureAreaIdentifier: String, createKeySettings: CreateKeySettings) -> Unit,
+            val cancel: (reason: String?) -> Unit,
+        ) : DocumentRequiresCreateSettings
+
+        /**
+         * No issuer reuse policy. The caller has full control over [CreateDocumentSettings].
+         *
+         * @property offeredDocument the offered document
+         * @property resume the callback to resume the issuance with the [CreateDocumentSettings]
+         *  that will be used to create the document
+         * @property cancel the callback to cancel the issuance with an optional reason
+         */
+        data class OptionalReusePolicy(
+            override val offeredDocument: Offer.OfferedDocument,
+            val resume: (createDocumentSettings: CreateDocumentSettings) -> Unit,
+            val cancel: (reason: String?) -> Unit,
+        ) : DocumentRequiresCreateSettings
+    }
 
     /**
      * Document requires user authentication to unlock the key for signing the proof of possession.

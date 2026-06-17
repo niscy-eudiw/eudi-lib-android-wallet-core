@@ -42,7 +42,7 @@ internal class DocumentCreator(
             supportedPolicies,
         )
 
-        val createDocumentSettings =
+        val createDocumentSettings = if (resolvedPolicy != null) {
             suspendCancellableCoroutine<CreateDocumentSettings> { continuation ->
                 continuation.invokeOnCancellation {
                     listener(
@@ -52,36 +52,57 @@ internal class DocumentCreator(
                     )
                 }
 
-                listener.onResult(IssueEvent.DocumentRequiresCreateSettings(
-                    offeredDocument = offeredDocument,
-                    resolvedReusePolicy = resolvedPolicy,
-                    resume = { createSettings ->
-                        runBlocking {
-                            continuation.resume(createSettings)
+                listener.onResult(
+                    IssueEvent.DocumentRequiresCreateSettings.MandatoryReusePolicy(
+                        offeredDocument = offeredDocument,
+                        resolvedReusePolicy = resolvedPolicy,
+                        resume = { secureAreaIdentifier, createKeySettings ->
+                            runBlocking {
+                                continuation.resume(
+                                    CreateDocumentSettings(
+                                        secureAreaIdentifier = secureAreaIdentifier,
+                                        createKeySettings = createKeySettings,
+                                        credentialPolicy = resolvedPolicy.credentialPolicy,
+                                    )
+                                )
+                            }
+                        },
+                        cancel = { reason ->
+                            runBlocking {
+                                continuation.cancel(reason?.let { CancellationException(it) })
+                            }
                         }
-                    },
-                    cancel = { reason ->
-                        runBlocking {
-                            continuation.cancel(reason?.let { CancellationException(it) })
-                        }
-                    }
-                ))
+                    )
+                )
             }
-
-        // When the issuer advertises a reuse policy, enforce it by overriding the
-        // credentialPolicy and numberOfCredentials regardless of what the UI provided.
-        // The UI's key settings (secureArea, createKeySettings) are preserved.
-        val effectiveSettings = if (resolvedPolicy != null) {
-            CreateDocumentSettings(
-                secureAreaIdentifier = createDocumentSettings.secureAreaIdentifier,
-                createKeySettings = createDocumentSettings.createKeySettings,
-                numberOfCredentials = resolvedPolicy.numberOfCredentials,
-                credentialPolicy = resolvedPolicy.credentialPolicy,
-            )
         } else {
-            createDocumentSettings
+            suspendCancellableCoroutine<CreateDocumentSettings> { continuation ->
+                continuation.invokeOnCancellation {
+                    listener(
+                        IssueEvent.Failure(
+                            RuntimeException("Document creation was cancelled")
+                        )
+                    )
+                }
+
+                listener.onResult(
+                    IssueEvent.DocumentRequiresCreateSettings.OptionalReusePolicy(
+                        offeredDocument = offeredDocument,
+                        resume = { createSettings ->
+                            runBlocking {
+                                continuation.resume(createSettings)
+                            }
+                        },
+                        cancel = { reason ->
+                            runBlocking {
+                                continuation.cancel(reason?.let { CancellationException(it) })
+                            }
+                        }
+                    )
+                )
+            }
         }
 
-        return documentManager.createDocument(offeredDocument, effectiveSettings).getOrThrow()
+        return documentManager.createDocument(offeredDocument, createDocumentSettings).getOrThrow()
     }
 }

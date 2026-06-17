@@ -69,7 +69,7 @@ class CredentialFactoryTest {
         val createKeySettings = mockk<CreateKeySettings>()
         val createDocumentSettings = mockk<CreateDocumentSettings> {
             every { this@mockk.createKeySettings } returns createKeySettings
-            every { this@mockk.numberOfCredentials } returns 2
+            every { this@mockk.credentialPolicy } returns CreateDocumentSettings.CredentialPolicy.RotatingBatch(numberOfCredentials = 2)
         }
 
         // Mock SecureArea to return key info
@@ -125,7 +125,7 @@ class CredentialFactoryTest {
         val createKeySettings = mockk<CreateKeySettings>()
         val createDocumentSettings = mockk<CreateDocumentSettings> {
             every { this@mockk.createKeySettings } returns createKeySettings
-            every { this@mockk.numberOfCredentials } returns 2
+            every { this@mockk.credentialPolicy } returns CreateDocumentSettings.CredentialPolicy.RotatingBatch(numberOfCredentials = 2)
         }
 
         // Mock SecureArea to return key info

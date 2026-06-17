@@ -184,7 +184,6 @@ class DocumentManagerImpl(
                         documentManagerId = identifier,
                         format = format,
                         issuerMetadata = issuerMetadata,
-                        initialCredentialsCount = createSettings.numberOfCredentials,
                         credentialPolicy = createSettings.credentialPolicy,
                     )
                 )

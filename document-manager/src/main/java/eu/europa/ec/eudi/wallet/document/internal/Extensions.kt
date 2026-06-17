@@ -78,15 +78,18 @@ internal fun CreateDocumentSettings.CredentialPolicy.toDataItem(): DataItem {
         put("type", this@toDataItem.javaClass.name)
         when (val policy = this@toDataItem) {
             is CreateDocumentSettings.CredentialPolicy.OnceOnly -> {
+                put("numberOfCredentials", policy.numberOfCredentials.toLong())
                 policy.reissueTriggerUnused?.let { put("reissueTriggerUnused", it.toLong()) }
             }
             is CreateDocumentSettings.CredentialPolicy.LimitedTime -> {
                 put("reissueTriggerLifetimeLeft", policy.reissueTriggerLifetimeLeft.inWholeSeconds)
             }
             is CreateDocumentSettings.CredentialPolicy.RotatingBatch -> {
+                put("numberOfCredentials", policy.numberOfCredentials.toLong())
                 policy.reissueTriggerLifetimeLeft?.let { put("reissueTriggerLifetimeLeft", it.inWholeSeconds) }
             }
             is CreateDocumentSettings.CredentialPolicy.PerRelyingParty -> {
+                put("numberOfCredentials", policy.numberOfCredentials.toLong())
                 put("reissueTriggerLifetimeLeft", policy.reissueTriggerLifetimeLeft.inWholeSeconds)
                 put("reissueTriggerUnused", policy.reissueTriggerUnused.toLong())
             }
@@ -112,6 +115,7 @@ internal fun CreateDocumentSettings.CredentialPolicy.Companion.fromDataItem(data
     return when (val type = dataItem["type"].asTstr) {
         CreateDocumentSettings.CredentialPolicy.OnceOnly::class.java.name ->
             CreateDocumentSettings.CredentialPolicy.OnceOnly(
+                numberOfCredentials = dataItem["numberOfCredentials"].asNumber.toInt(),
                 reissueTriggerUnused = dataItem.getOrNull("reissueTriggerUnused")?.asNumber?.toInt(),
             )
         CreateDocumentSettings.CredentialPolicy.LimitedTime::class.java.name ->
@@ -120,10 +124,12 @@ internal fun CreateDocumentSettings.CredentialPolicy.Companion.fromDataItem(data
             )
         CreateDocumentSettings.CredentialPolicy.RotatingBatch::class.java.name ->
             CreateDocumentSettings.CredentialPolicy.RotatingBatch(
+                numberOfCredentials = dataItem["numberOfCredentials"].asNumber.toInt(),
                 reissueTriggerLifetimeLeft = dataItem.getOrNull("reissueTriggerLifetimeLeft")?.asNumber?.toLong()?.seconds,
             )
         CreateDocumentSettings.CredentialPolicy.PerRelyingParty::class.java.name ->
             CreateDocumentSettings.CredentialPolicy.PerRelyingParty(
+                numberOfCredentials = dataItem["numberOfCredentials"].asNumber.toInt(),
                 reissueTriggerLifetimeLeft = dataItem["reissueTriggerLifetimeLeft"].asNumber.toLong().seconds,
                 reissueTriggerUnused = dataItem["reissueTriggerUnused"].asNumber.toInt(),
             )

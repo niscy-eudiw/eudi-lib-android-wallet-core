@@ -64,7 +64,6 @@ class UnsignedDocumentTest {
             createSettings = CreateDocumentSettings(
                 secureAreaIdentifier = secureArea.identifier,
                 createKeySettings = createKeySettings,
-                numberOfCredentials = 1
             ),
             issuerMetadata = null
         )
