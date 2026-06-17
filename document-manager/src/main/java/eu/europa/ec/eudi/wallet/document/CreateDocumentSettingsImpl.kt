@@ -31,11 +31,9 @@ import org.multipaz.securearea.CreateKeySettings
  * @property createKeySettings The configuration settings for key creation within the specified secure area.
  *                            These settings control properties such as key algorithms, sizes, and other
  *                            security parameters required by the secure area implementation.
- * @property numberOfCredentials The number of credentials to create for this document. Multiple credentials
- *                              can be used for load balancing or redundancy. Defaults to 1 if not specified.
- *                              Must be greater than 0.
  * @property credentialPolicy Defines how credentials are managed after use. Controls whether credentials are
- *                           used once and deleted or rotated through multiple uses.
+ *                           used once and deleted or rotated through multiple uses. The number of credentials
+ *                           to create is determined by the policy's [CredentialPolicy.numberOfCredentials].
  *                           Defaults to [CredentialPolicy.RotatingBatch].
  *
  * @see CreateDocumentSettings The interface this class implements
@@ -45,6 +43,5 @@ import org.multipaz.securearea.CreateKeySettings
 data class CreateDocumentSettingsImpl(
     override val secureAreaIdentifier: String,
     override val createKeySettings: CreateKeySettings,
-    override val numberOfCredentials: Int = 1,
     override val credentialPolicy: CredentialPolicy = CredentialPolicy.RotatingBatch(),
 ) : CreateDocumentSettings

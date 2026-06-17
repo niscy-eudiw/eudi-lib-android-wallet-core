@@ -41,15 +41,9 @@ interface CreateDocumentSettings {
     val createKeySettings: CreateKeySettings
 
     /**
-     * Specifies the number of credentials to create for this document.
-     * Multiple credentials can be used for load balancing or redundancy purposes.
-     * Must be greater than 0.
-     */
-    val numberOfCredentials: Int
-
-    /**
      * Defines the policy for credential usage and lifecycle management.
      * Controls whether credentials are used once and deleted or rotated through multiple uses.
+     * The number of credentials to create is determined by the policy's [CredentialPolicy.numberOfCredentials].
      *
      * @see CredentialPolicy
      */
@@ -64,26 +58,19 @@ interface CreateDocumentSettings {
          * where the document's keys should be stored
          * @param createKeySettings The [CreateKeySettings] implementation that accompanies the provided
          * [org.multipaz.securearea.SecureArea]
-         * @param numberOfCredentials The number of credentials to create for this document.
-         * Must be greater than 0. Defaults to 1 if not specified.
          * @param credentialPolicy The policy determining how credentials are managed after use.
-         * Defaults to [CredentialPolicy.RotatingBatch] if not specified.
+         * Defaults to [CredentialPolicy.RotatingBatch] if not specified. The number of credentials
+         * to create is determined by the policy's [CredentialPolicy.numberOfCredentials].
          * @return A new instance of [CreateDocumentSettings]
-         * @throws IllegalArgumentException if numberOfCredentials is not greater than 0
          */
         operator fun invoke(
             secureAreaIdentifier: String,
             createKeySettings: CreateKeySettings,
-            numberOfCredentials: Int = 1,
             credentialPolicy: CredentialPolicy = CredentialPolicy.RotatingBatch()
         ): CreateDocumentSettings {
-            require(numberOfCredentials > 0) {
-                "Number of credentials must be greater than 0"
-            }
             return CreateDocumentSettingsImpl(
                 secureAreaIdentifier = secureAreaIdentifier,
                 createKeySettings = createKeySettings,
-                numberOfCredentials = numberOfCredentials,
                 credentialPolicy = credentialPolicy,
             )
         }
@@ -92,9 +79,24 @@ interface CreateDocumentSettings {
     sealed interface CredentialPolicy {
 
         /**
+         * The number of credentials to create for this policy.
+         * Must be greater than 0.
+         */
+        val numberOfCredentials: Int
+
+        /**
+         * Returns a copy of this policy with the specified [count] as [numberOfCredentials].
+         * Useful for capping the number of credentials to a maximum (e.g., batch issuance size).
+         *
+         * @param count The desired number of credentials. Must be greater than 0.
+         * @return A new [CredentialPolicy] with the specified number of credentials.
+         * @throws IllegalArgumentException if [count] is not valid for this policy type.
+         */
+        fun withNumberOfCredentials(count: Int): CredentialPolicy
+
+        /**
          * Method A (Once-only / ETSI TS 119 472-3): Each credential instance is used exactly
-         * once, then deleted. Credentials are typically issued in batches (batch size is captured
-         * by [CreateDocumentSettings.numberOfCredentials]).
+         * once, then deleted. Credentials are typically issued in batches.
          *
          * Consumption behavior: credential is deleted after a single use.
          *
@@ -103,16 +105,25 @@ interface CreateDocumentSettings {
          * is at or below this threshold. When null, no issuer reuse policy is in effect and the
          * application controls reissuance independently.
          *
+         * @property numberOfCredentials The number of credentials to issue. Defaults to 1.
          * @property reissueTriggerUnused reissuance threshold, or null if no issuer policy.
          * @see RotatingBatch for a policy that allows credential reuse
          */
         data class OnceOnly(
+            override val numberOfCredentials: Int = 1,
             val reissueTriggerUnused: Int? = null,
-        ) : CredentialPolicy
+        ) : CredentialPolicy {
+            init {
+                require(numberOfCredentials > 0) { "Number of credentials must be greater than 0" }
+            }
+
+            override fun withNumberOfCredentials(count: Int) = copy(numberOfCredentials = count)
+        }
 
         /**
          * Method B (Limited-time / ETSI TS 119 472-3): A single credential instance is presented
-         * multiple times until its validity period expires. No batch issuance.
+         * multiple times until its validity period expires. No batch issuance — always exactly
+         * 1 credential.
          *
          * Consumption behavior: credential persists and its usage count is incremented.
          *
@@ -121,7 +132,14 @@ interface CreateDocumentSettings {
          */
         data class LimitedTime(
             val reissueTriggerLifetimeLeft: kotlin.time.Duration,
-        ) : CredentialPolicy
+        ) : CredentialPolicy {
+            override val numberOfCredentials: Int get() = 1
+
+            override fun withNumberOfCredentials(count: Int): CredentialPolicy {
+                require(count == 1) { "LimitedTime policy always uses exactly 1 credential" }
+                return this
+            }
+        }
 
         /**
          * Method C (Rotating-batch / ETSI TS 119 472-3): Credentials are issued in a batch and
@@ -136,12 +154,20 @@ interface CreateDocumentSettings {
          * this duration. When null, no issuer reuse policy is in effect and the application
          * controls reissuance independently.
          *
+         * @property numberOfCredentials The number of credentials to issue. Defaults to 1.
          * @property reissueTriggerLifetimeLeft reissuance threshold, or null if no issuer policy.
          * @see OnceOnly for a stricter policy that deletes credentials after use
          */
         data class RotatingBatch(
+            override val numberOfCredentials: Int = 1,
             val reissueTriggerLifetimeLeft: kotlin.time.Duration? = null,
-        ) : CredentialPolicy
+        ) : CredentialPolicy {
+            init {
+                require(numberOfCredentials > 0) { "Number of credentials must be greater than 0" }
+            }
+
+            override fun withNumberOfCredentials(count: Int) = copy(numberOfCredentials = count)
+        }
 
         /**
          * Method D (Per-Relying-Party / ETSI TS 119 472-3): Credentials are issued in a batch.
@@ -151,15 +177,23 @@ interface CreateDocumentSettings {
          * Consumption behavior: credential usage count is incremented.
          * Full RP-to-credential mapping is planned for a future release.
          *
+         * @property numberOfCredentials The number of credentials to issue. Defaults to 1.
          * @property reissueTriggerLifetimeLeft reissuance should be triggered when the
          *           remaining credential lifetime is at or below this duration.
          * @property reissueTriggerUnused reissuance should be triggered when the number of
          *           remaining unassigned credential instances is at or below this threshold.
          */
         data class PerRelyingParty(
+            override val numberOfCredentials: Int = 1,
             val reissueTriggerLifetimeLeft: kotlin.time.Duration,
             val reissueTriggerUnused: Int,
-        ) : CredentialPolicy
+        ) : CredentialPolicy {
+            init {
+                require(numberOfCredentials > 0) { "Number of credentials must be greater than 0" }
+            }
+
+            override fun withNumberOfCredentials(count: Int) = copy(numberOfCredentials = count)
+        }
 
         companion object
     }

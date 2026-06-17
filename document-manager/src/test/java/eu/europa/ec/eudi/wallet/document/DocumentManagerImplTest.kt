@@ -103,7 +103,7 @@ class DocumentManagerImplTest {
         val createDocumentSettings = CreateDocumentSettings(
             secureAreaIdentifier = secureArea.identifier,
             createKeySettings = createKeySettings,
-            numberOfCredentials = 1
+
         )
         val createDocumentResult = documentManager.createDocument(
             format = MsoMdocFormat(docType = "eu.europa.ec.eudi.pid.1"),
@@ -150,7 +150,7 @@ class DocumentManagerImplTest {
         val createSettings = CreateDocumentSettings(
             secureAreaIdentifier = secureArea.identifier,
             createKeySettings = createKeySettings,
-            numberOfCredentials = 1
+
         )
         val result = documentManager.createDocument(
             format = MsoMdocFormat(docType = "eu.europa.ec.eudi.pid.1"),
@@ -172,8 +172,7 @@ class DocumentManagerImplTest {
         val createKeySettings = SoftwareCreateKeySettings.Builder().build()
         val createDocumentSettings = CreateDocumentSettings(
             secureAreaIdentifier = secureArea.identifier,
-            createKeySettings = createKeySettings,
-            numberOfCredentials = 1,
+            createKeySettings = createKeySettings
         )
         val createDocumentResult = documentManager.createDocument(
             format = MsoMdocFormat(docType = "eu.europa.ec.eudi.pid.1"),

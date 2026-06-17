@@ -92,7 +92,7 @@ class SampleDocumentManagerImplTest {
                 createSettings = CreateDocumentSettings(
                     secureAreaIdentifier = secureArea.identifier,
                     createKeySettings = createKeySettings,
-                    numberOfCredentials = 1
+
                 ),
                 documentNamesMap = mapOf(
                     "eu.europa.ec.eudi.pid.1" to "EU PID",
@@ -152,8 +152,7 @@ class SampleDocumentManagerImplTest {
             sampleData = sampleDocuments,
             createSettings = CreateDocumentSettings(
                 secureAreaIdentifier = secureArea.identifier,
-                createKeySettings = createKeySettings,
-                numberOfCredentials = 1
+                createKeySettings = createKeySettings
             ),
             documentNamesMap = mapOf(
                 "eu.europa.ec.eudi.pid.1" to "EU PID",

@@ -1263,54 +1263,43 @@ val onIssueEvent = OnIssueEvent { event ->
             val numberOfDocumentsToBeIssued = event.total
         }
 
-        is IssueEvent.DocumentRequiresCreateSettings -> {
-            // Need to provide settings for document creation.
-            //
-            // If the issuer advertises a credential reuse policy (ETSI TS 119 472-3),
-            // event.resolvedReusePolicy will be non-null and provides the resolved
-            // credentialPolicy and numberOfCredentials. Otherwise, the app chooses freely.
+        is IssueEvent.DocumentRequiresCreateSettings.MandatoryReusePolicy -> {
+            // Issuer advertises a mandatory credential reuse policy (ETSI TS 119 472-3).
+            // The credential policy and batch size are determined by the resolved policy.
+            // The wallet only needs to provide key-related settings (secure area, authentication).
 
             val resolvedPolicy = event.resolvedReusePolicy
 
-            // When the issuer advertises a credential reuse policy (ETSI TS 119 472-3),
-            // the core enforces the resolved policy's credentialPolicy and numberOfCredentials
-            // regardless of what the app passes here. The app's key-related settings
-            // (secure area, authentication) are always preserved.
-            //
-            // When there is no reuse policy (resolvedPolicy == null), the app's chosen
-            // credentialPolicy and numberOfCredentials are used as-is.
+            // Resume with secure area identifier and key settings only
+            val (secureAreaId, keySettings) = eudiWallet.getDefaultCreateKeySettings()
+            event.resume(secureAreaId, keySettings)
 
-            val resolvedPolicy = event.resolvedReusePolicy
+            // Or cancel
+            // event.cancel("User cancelled")
+        }
 
-            val createDocumentSettings = if (resolvedPolicy != null) {
-                // Issuer dictates credential policy and batch size via reuse policy.
-                // Note: the core will enforce these values even if different ones are passed.
-                eudiWallet.getDefaultCreateDocumentSettings(
-                    offeredDocument = event.offeredDocument,
-                    numberOfCredentials = resolvedPolicy.numberOfCredentials,
-                    credentialPolicy = resolvedPolicy.credentialPolicy,
-                )
-            } else {
-                // No reuse policy — app decides policy and batch size.
-                val isEuPid = when (val format = event.offeredDocument.documentFormat) {
-                    is MsoMdocFormat -> format.docType == "eu.europa.ec.eudi.pid.1"
-                    is SdJwtVcFormat -> format.vct == "urn:eudi:pid:1"
-                    else -> false
-                }
-                when {
-                    isEuPid -> eudiWallet.getDefaultCreateDocumentSettings(
-                        offeredDocument = event.offeredDocument,
-                        numberOfCredentials = 5,
-                        credentialPolicy = CreateDocumentSettings.CredentialPolicy.OnceOnly()
-                    )
-                    else -> eudiWallet.getDefaultCreateDocumentSettings(
-                        offeredDocument = event.offeredDocument,
-                        numberOfCredentials = 1,
-                        credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotatingBatch()
-                    )
-                }
+        is IssueEvent.DocumentRequiresCreateSettings.OptionalReusePolicy -> {
+            // No issuer reuse policy — the wallet has full control over CreateDocumentSettings,
+            // including credential policy and number of credentials.
+
+            val isEuPid = when (val format = event.offeredDocument.documentFormat) {
+                is MsoMdocFormat -> format.docType == "eu.europa.ec.eudi.pid.1"
+                is SdJwtVcFormat -> format.vct == "urn:eudi:pid:1"
+                else -> false
             }
-            // Resume with settings
+
+            val createDocumentSettings = when {
+                isEuPid -> eudiWallet.getDefaultCreateDocumentSettings(
+                    offeredDocument = event.offeredDocument,
+                    credentialPolicy = CreateDocumentSettings.CredentialPolicy.OnceOnly(numberOfCredentials = 5)
+                )
+                else -> eudiWallet.getDefaultCreateDocumentSettings(
+                    offeredDocument = event.offeredDocument,
+                    credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotatingBatch()
+                )
+            }
+
+            // Resume with full settings
             event.resume(createDocumentSettings)
 
             // Or cancel
@@ -1816,13 +1805,13 @@ declared capabilities and provides the result to the application during issuance
 2. **During issuance**, the library reads the issuer's `credential_reuse_policy` from the credential
    configuration metadata. It selects the first option from the issuer's prioritized list that the
    wallet supports.
-3. **The resolved policy is delivered** to the application via
-   `IssueEvent.DocumentRequiresCreateSettings.resolvedReusePolicy`. When non-null, the **core
-   enforces** the resolved `credentialPolicy` and `numberOfCredentials` — these values override
-   whatever the application passes via `event.resume()`. The application still provides
-   key-related settings (secure area, authentication).
-4. **If the issuer has no reuse policy**, `resolvedReusePolicy` is null and the application chooses
-   the credential policy and batch size freely.
+3. **The resolved policy is delivered** to the wallet via one of two event variants:
+   - `IssueEvent.DocumentRequiresCreateSettings.MandatoryReusePolicy` — the issuer mandates a
+     reuse policy. The credential policy (including batch size) is determined by the resolved policy.
+     The wallet only provides key-related settings (secure area identifier and key settings).
+   - `IssueEvent.DocumentRequiresCreateSettings.OptionalReusePolicy` — no issuer reuse policy.
+     The wallet has full control over `CreateDocumentSettings`, including credential policy
+     and number of credentials.
 
 ##### Supported reuse methods
 
@@ -1863,42 +1852,40 @@ in an error. For issuers that do not advertise a reuse policy, behavior is uncha
 
 ##### Handling resolved reuse policies during issuance
 
-When handling `IssueEvent.DocumentRequiresCreateSettings`, check `resolvedReusePolicy`.
-When `resolvedReusePolicy` is non-null, the core will **enforce** the resolved policy's
-`credentialPolicy` and `numberOfCredentials` regardless of what the application passes.
-The application's key-related settings (secure area, user authentication) are always preserved.
+`IssueEvent.DocumentRequiresCreateSettings` is a sealed interface with two variants:
+
+- **`MandatoryReusePolicy`**: The issuer advertises a credential reuse policy. The credential policy
+  and batch size are determined by the resolved policy. The wallet only provides key-related
+  settings via `event.resume(secureAreaIdentifier, createKeySettings)`.
+- **`OptionalReusePolicy`**: No issuer reuse policy. The wallet has full control and provides
+  complete `CreateDocumentSettings` via `event.resume(createDocumentSettings)`.
 
 ```kotlin
-is IssueEvent.DocumentRequiresCreateSettings -> {
+is IssueEvent.DocumentRequiresCreateSettings.MandatoryReusePolicy -> {
+    // Issuer dictates credential policy and batch size.
+    // The wallet only provides key-related settings.
     val resolvedPolicy = event.resolvedReusePolicy
 
-    val settings = if (resolvedPolicy != null) {
-        // Issuer dictates policy and batch size — core enforces these.
-        // The app provides key-related settings (secure area, user authentication).
-        eudiWallet.getDefaultCreateDocumentSettings(
-            offeredDocument = event.offeredDocument,
-            numberOfCredentials = resolvedPolicy.numberOfCredentials,
-            credentialPolicy = resolvedPolicy.credentialPolicy,
-        )
-    } else {
-        // No reuse policy from issuer — app decides freely.
-        eudiWallet.getDefaultCreateDocumentSettings(
-            offeredDocument = event.offeredDocument,
-            numberOfCredentials = 5,
-            credentialPolicy = CreateDocumentSettings.CredentialPolicy.OnceOnly(),
-        )
-    }
+    val (secureAreaId, keySettings) = eudiWallet.getDefaultCreateKeySettings()
+    event.resume(secureAreaId, keySettings)
+}
+
+is IssueEvent.DocumentRequiresCreateSettings.OptionalReusePolicy -> {
+    // No issuer reuse policy — wallet decides freely.
+    val settings = eudiWallet.getDefaultCreateDocumentSettings(
+        offeredDocument = event.offeredDocument,
+        credentialPolicy = CreateDocumentSettings.CredentialPolicy.OnceOnly(numberOfCredentials = 5),
+    )
 
     event.resume(settings)
 }
 ```
 
-The `ResolvedReusePolicy` object contains:
+The `ResolvedReusePolicy` object (available on `MandatoryReusePolicy`) contains:
 
 | Property | Description |
 |----------|-------------|
-| `credentialPolicy` | The `CredentialPolicy` to use (e.g., `OnceOnly`, `LimitedTime`) |
-| `numberOfCredentials` | Batch size derived from the issuer's policy (`batchSize`, or 1 for `LimitedTime`) |
+| `credentialPolicy` | The `CredentialPolicy` to use (e.g., `OnceOnly`, `LimitedTime`). The batch size is embedded in the policy via `numberOfCredentials`. |
 | `selectedEudiReusePolicy` | The raw `EudiReusePolicy` option selected from the issuer's metadata |
 
 ##### Current limitations
@@ -1916,13 +1903,19 @@ The `ResolvedReusePolicy` object contains:
   `CredentialPolicy.OnceOnly()` and `CredentialPolicy.RotatingBatch()` respectively.
   `OnceOnly()` with `reissueTriggerUnused = null` provides the same behavior as the old `OneTimeUse`.
   `RotatingBatch()` with `reissueTriggerLifetimeLeft = null` provides the same behavior as the old `RotateUse`.
+- **`numberOfCredentials` moved from `CreateDocumentSettings` to `CredentialPolicy`.**
+  Instead of `CreateDocumentSettings(numberOfCredentials = 5, credentialPolicy = OnceOnly())`,
+  use `CreateDocumentSettings(credentialPolicy = OnceOnly(numberOfCredentials = 5))`.
+- **`IssueEvent.DocumentRequiresCreateSettings` is now a sealed interface** with two variants:
+  `MandatoryReusePolicy` (issuer-mandated, wallet provides key settings only) and
+  `OptionalReusePolicy` (no issuer reuse policy, wallet provides full `CreateDocumentSettings`).
+- **`ResolvedReusePolicy.numberOfCredentials` removed.** The batch size is now embedded in the
+  `credentialPolicy` itself via `CredentialPolicy.numberOfCredentials`.
+- **`getDefaultCreateDocumentSettings` no longer accepts a `numberOfCredentials` parameter.**
+  Set it on the `credentialPolicy` instead, e.g.,
+  `credentialPolicy = RotatingBatch(numberOfCredentials = 3)`.
 - **Clean install required**: This is a breaking change for persisted document metadata. Applications
   must be uninstalled and reinstalled.
-- **Core enforcement**: When an issuer advertises a reuse policy, the core now enforces the resolved
-  `credentialPolicy` and `numberOfCredentials`, overriding any values provided by the application.
-  The application's key-related settings (secure area, authentication) are always preserved.
-- `IssueEvent.DocumentRequiresCreateSettings` provides the `resolvedReusePolicy` property (nullable)
-  for informational purposes.
 - The `withSupportedCredentialReusePolicies` configuration is optional. When omitted, the library
   will not match any issuer-advertised reuse policy options.
 

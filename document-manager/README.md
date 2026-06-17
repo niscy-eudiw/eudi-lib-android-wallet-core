@@ -229,19 +229,20 @@ it in the DocumentManager using the storeIssuedDocument method.
 Library supports creating multiple credentials per document. This feature allows for enhanced
 privacy and security by enabling credential rotation and managing credential policies.
 
-The `CreateDocumentSettings` now includes a `numberOfCredentials` parameter:
+The number of credentials is specified on the `CredentialPolicy`:
 
 ```kotlin
 val createSettings = CreateDocumentSettings(
     secureAreaIdentifier = secureArea.identifier,
     createKeySettings = SoftwareCreateKeySettings.Builder().build(),
-    numberOfCredentials = 3 // Create 3 credentials for this document (default is 1)
+    credentialPolicy = CredentialPolicy.RotatingBatch(numberOfCredentials = 3)
 )
 ```
 
 **Important Notes:**
 
-- The `numberOfCredentials` parameter must be greater than 0
+- The `numberOfCredentials` on the policy must be greater than 0
+- `LimitedTime` policy always uses exactly 1 credential
 - Each credential within a document shares the same document data but has its own unique key pair
 - Multiple credentials enable advanced privacy features by allowing credential rotation or
   single-use policies
@@ -258,8 +259,7 @@ Credentials with this policy are automatically deleted after a single use:
 val createSettings = CreateDocumentSettings(
     secureAreaIdentifier = secureArea.identifier,
     createKeySettings = SoftwareCreateKeySettings.Builder().build(),
-    numberOfCredentials = 5,
-    credentialPolicy = CredentialPolicy.OnceOnly()
+    credentialPolicy = CredentialPolicy.OnceOnly(numberOfCredentials = 5)
 )
 ```
 
@@ -274,8 +274,7 @@ Credentials with this policy increment their usage count but remain available fo
 val createSettings = CreateDocumentSettings(
     secureAreaIdentifier = secureArea.identifier,
     createKeySettings = SoftwareCreateKeySettings.Builder().build(),
-    numberOfCredentials = 3,
-    credentialPolicy = CredentialPolicy.RotatingBatch() // This is the default
+    credentialPolicy = CredentialPolicy.RotatingBatch(numberOfCredentials = 3)
 )
 ```
 
@@ -327,8 +326,7 @@ multiple credentials:
 val createSettings = CreateDocumentSettings(
     secureAreaIdentifier = SoftwareSecureArea.IDENTIFIER,
     createKeySettings = SoftwareCreateKeySettings.Builder().build(),
-    numberOfCredentials = 3, // Create 3 credentials
-    credentialPolicy = CredentialPolicy.OnceOnly() // Delete after single use
+    credentialPolicy = CredentialPolicy.OnceOnly(numberOfCredentials = 3) // 3 credentials, delete after single use
 )
 
 // Get or create metadata for the document

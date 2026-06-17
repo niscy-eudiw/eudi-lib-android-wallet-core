@@ -80,7 +80,7 @@ class DocumentCreatorTest {
         val listener = OpenId4VciManager.OnResult<IssueEvent> { event ->
             CoroutineScope(Dispatchers.Default).launch {
                 when (event) {
-                    is IssueEvent.DocumentRequiresCreateSettings -> {
+                    is IssueEvent.DocumentRequiresCreateSettings.OptionalReusePolicy -> {
                         event.resume(createSettings)
                     }
 

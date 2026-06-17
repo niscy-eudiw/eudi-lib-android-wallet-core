@@ -56,16 +56,16 @@ internal interface ApplicationMetadata : AbstractDocumentMetadata {
     val format: DocumentFormat
 
     /**
-     * The initial number of credentials in the document.
-     * @throws IllegalStateException if the initial credentials count is not set
-     */
-    val initialCredentialsCount: Int
-
-    /**
      * The policy that determines how credentials are handled for this document.
      * @throws IllegalStateException if the credential policy is not set
      */
     val credentialPolicy: CreateDocumentSettings.CredentialPolicy
+
+    /**
+     * The initial number of credentials for this document.
+     * Derived from [credentialPolicy]'s [CreateDocumentSettings.CredentialPolicy.numberOfCredentials].
+     */
+    val initialCredentialsCount: Int get() = credentialPolicy.numberOfCredentials
 
     /**
      * Optional key attestation data in JSON format.
@@ -159,10 +159,6 @@ internal class ApplicationMetadataImpl private constructor(
         get() = data.documentManagerId ?: throw IllegalStateException("Document manager ID not set")
     override val format: DocumentFormat
         get() = data.format ?: throw IllegalStateException("Document format not set")
-    override val initialCredentialsCount: Int
-        get() = data.initialCredentialsCount.also {
-            check(it != 0) { "Initial credentials count not set" }
-        }
     override val credentialPolicy: CreateDocumentSettings.CredentialPolicy
         get() = data.credentialPolicy ?: throw IllegalStateException("Credential policy not set")
     override val keyAttestation: String?
@@ -180,7 +176,6 @@ internal class ApplicationMetadataImpl private constructor(
     internal data class Data(
         val documentManagerId: String? = null,
         val format: DocumentFormat? = null,
-        val initialCredentialsCount: Int = 0,
         val credentialPolicy: CreateDocumentSettings.CredentialPolicy? = null,
         val keyAttestation: String? = null,
         val issuerMetadata: IssuerMetadata? = null,
@@ -199,10 +194,6 @@ internal class ApplicationMetadataImpl private constructor(
 
             builder.putIfNotNull("documentManagerId", documentManagerId) { Tstr(it) }
             builder.putIfNotNull("format", format) { it.toDataItem() }
-            builder.putIfNotNull(
-                "initialCredentialsCount",
-                initialCredentialsCount
-            ) { it.toDataItem() }
             builder.putIfNotNull("credentialPolicy", credentialPolicy) { it.toDataItem() }
             builder.putIfNotNull("keyAttestation", keyAttestation) { Tstr(it) }
             builder.putIfNotNull("issuerMetadata", issuerMetadata) { Tstr(it.toJson()) }
@@ -233,7 +224,6 @@ internal class ApplicationMetadataImpl private constructor(
                 return Data(
                     format = DocumentFormat.fromDataItem(dataItem["format"]),
                     documentManagerId = dataItem["documentManagerId"].asTstr,
-                    initialCredentialsCount = dataItem["initialCredentialsCount"].asNumber.toInt(),
                     credentialPolicy = CreateDocumentSettings.CredentialPolicy.fromDataItem(dataItem["credentialPolicy"]),
                     keyAttestation = dataItem.getValue("keyAttestation") { it.asTstr },
                     issuerMetadata = dataItem.getValue("issuerMetadata") {
@@ -300,7 +290,6 @@ internal class ApplicationMetadataImpl private constructor(
         fun create(
             documentManagerId: String,
             format: DocumentFormat,
-            initialCredentialsCount: Int,
             credentialPolicy: CreateDocumentSettings.CredentialPolicy,
             issuerMetadata: IssuerMetadata? = null,
             keyAttestation: String? = null,
@@ -309,7 +298,6 @@ internal class ApplicationMetadataImpl private constructor(
                 data = Data(
                     documentManagerId = documentManagerId,
                     format = format,
-                    initialCredentialsCount = initialCredentialsCount,
                     credentialPolicy = credentialPolicy,
                     issuerMetadata = issuerMetadata,
                     keyAttestation = keyAttestation,

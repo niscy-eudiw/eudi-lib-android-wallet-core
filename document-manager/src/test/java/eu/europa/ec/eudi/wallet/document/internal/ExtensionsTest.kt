@@ -29,6 +29,7 @@ import org.multipaz.cbor.buildCborMap
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKeyDoubleCoordinate
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 
 class ExtensionsTest {
 

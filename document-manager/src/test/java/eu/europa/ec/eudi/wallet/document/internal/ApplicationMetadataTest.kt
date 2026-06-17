@@ -107,7 +107,6 @@ class ApplicationMetadataTest {
         val metadata = ApplicationMetadataImpl.create(
             documentManagerId = testDocumentManagerId,
             format = testFormat,
-            initialCredentialsCount = 2,
             credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotatingBatch(),
             issuerMetadata = issuerMetadata,
             keyAttestation = testKeyAttestation,
@@ -116,7 +115,6 @@ class ApplicationMetadataTest {
         assertEquals(testFormat, metadata.format)
         assertEquals(testDocumentManagerId, metadata.documentManagerId)
         assertEquals(issuerMetadata, metadata.issuerMetadata)
-        assertEquals(2, metadata.initialCredentialsCount)
         assertEquals(CreateDocumentSettings.CredentialPolicy.RotatingBatch(), metadata.credentialPolicy)
         assertEquals(testKeyAttestation, metadata.keyAttestation)
     }
@@ -126,7 +124,6 @@ class ApplicationMetadataTest {
         val metadata = ApplicationMetadataImpl.create(
             documentManagerId = testDocumentManagerId,
             format = testSdJwtVcFormat,
-            initialCredentialsCount = 1,
             credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotatingBatch(),
         )
 
@@ -139,7 +136,6 @@ class ApplicationMetadataTest {
         val metadata = ApplicationMetadataImpl.create(
             documentManagerId = testDocumentManagerId,
             format = testFormat,
-            initialCredentialsCount = 1,
             credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotatingBatch(),
         )
 
@@ -156,7 +152,6 @@ class ApplicationMetadataTest {
         val metadata = ApplicationMetadataImpl.create(
             documentManagerId = testDocumentManagerId,
             format = testFormat,
-            initialCredentialsCount = 1,
             credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotatingBatch(),
         )
 
@@ -173,7 +168,6 @@ class ApplicationMetadataTest {
         val metadata = ApplicationMetadataImpl.create(
             documentManagerId = testDocumentManagerId,
             format = testFormat,
-            initialCredentialsCount = 1,
             credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotatingBatch(),
         )
 
@@ -189,7 +183,6 @@ class ApplicationMetadataTest {
         val metadata = ApplicationMetadataImpl.create(
             documentManagerId = testDocumentManagerId,
             format = testFormat,
-            initialCredentialsCount = 1,
             credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotatingBatch(),
         )
 
@@ -207,7 +200,6 @@ class ApplicationMetadataTest {
         val metadata = ApplicationMetadataImpl.create(
             documentManagerId = testDocumentManagerId,
             format = testFormat,
-            initialCredentialsCount = 1,
             credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotatingBatch(),
         )
 
@@ -221,7 +213,6 @@ class ApplicationMetadataTest {
         val metadata = ApplicationMetadataImpl.create(
             documentManagerId = testDocumentManagerId,
             format = testFormat,
-            initialCredentialsCount = 2,
             credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotatingBatch(),
             keyAttestation = testKeyAttestation,
         )
@@ -238,7 +229,6 @@ class ApplicationMetadataTest {
 
         assertEquals(testFormat, restored.format)
         assertEquals(testDocumentManagerId, restored.documentManagerId)
-        assertEquals(2, restored.initialCredentialsCount)
         assertEquals(CreateDocumentSettings.CredentialPolicy.RotatingBatch(), restored.credentialPolicy)
         assertEquals(testKeyAttestation, restored.keyAttestation)
         assertNotNull(restored.issuerProvidedData)
