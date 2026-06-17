@@ -45,7 +45,6 @@ internal fun interface CredentialPolicyApplier {
                 is CreateDocumentSettings.CredentialPolicy.OnceOnly -> OneTimeUsePolicyApplier
                 is CreateDocumentSettings.CredentialPolicy.LimitedTime -> RotateUsePolicyApplier
                 is CreateDocumentSettings.CredentialPolicy.RotatingBatch -> RotateUsePolicyApplier
-                is CreateDocumentSettings.CredentialPolicy.PerRelyingParty -> RotateUsePolicyApplier
             }
         }
     }

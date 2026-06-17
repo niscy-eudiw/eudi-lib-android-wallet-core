@@ -60,11 +60,12 @@ internal fun resolveReusePolicy(
     val eudiPolicy = credentialReusePolicy as CredentialReusePolicy.EUDI
 
     // Select the first supported option (per spec: "order reflects issuer prioritization,
-    // wallet must select the first supported option from the list")
-    val selected = eudiPolicy.options.firstOrNull { it.isSupported(supportedPolicies) }
-        ?: throw IllegalStateException(
-            "Issuer's credential reuse policy has no option supported by this wallet"
-        )
+    // wallet must select the first supported option from the list").
+    // PerRelyingParty is excluded because it is not yet supported by this wallet.
+    val selected = eudiPolicy.options
+        .filterNot { it is EudiReusePolicy.PerRelyingParty }
+        .firstOrNull { it.isSupported(supportedPolicies) }
+        ?: return null
 
     val numberOfCredentials = selected.batchSize ?: 1
 
@@ -80,11 +81,7 @@ internal fun resolveReusePolicy(
             numberOfCredentials = numberOfCredentials,
             reissueTriggerLifetimeLeft = selected.reissueTriggerLifetimeLeft,
         )
-        is EudiReusePolicy.PerRelyingParty -> CredentialPolicy.PerRelyingParty(
-            numberOfCredentials = numberOfCredentials,
-            reissueTriggerLifetimeLeft = selected.reissueTriggerLifetimeLeft,
-            reissueTriggerUnused = selected.reissueTriggerUnused,
-        )
+        is EudiReusePolicy.PerRelyingParty -> error("Unreachable: PerRelyingParty filtered above")
     }
 
     return ResolvedReusePolicy(

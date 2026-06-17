@@ -142,8 +142,7 @@ class IssuedDocument(
             .filter {
                 when (credentialPolicy) {
                     is CreateDocumentSettings.CredentialPolicy.LimitedTime,
-                    is CreateDocumentSettings.CredentialPolicy.RotatingBatch,
-                    is CreateDocumentSettings.CredentialPolicy.PerRelyingParty -> true
+                    is CreateDocumentSettings.CredentialPolicy.RotatingBatch -> true
                     is CreateDocumentSettings.CredentialPolicy.OnceOnly -> it.usageCount == 0
                 }
             }
