@@ -169,32 +169,6 @@ interface CreateDocumentSettings {
             override fun withNumberOfCredentials(count: Int) = copy(numberOfCredentials = count)
         }
 
-        /**
-         * Method D (Per-Relying-Party / ETSI TS 119 472-3): Credentials are issued in a batch.
-         * A different credential instance is assigned to each relying party, and the same
-         * credential is consistently used for repeat visits to the same relying party.
-         *
-         * Consumption behavior: credential usage count is incremented.
-         * Full RP-to-credential mapping is planned for a future release.
-         *
-         * @property numberOfCredentials The number of credentials to issue. Defaults to 1.
-         * @property reissueTriggerLifetimeLeft reissuance should be triggered when the
-         *           remaining credential lifetime is at or below this duration.
-         * @property reissueTriggerUnused reissuance should be triggered when the number of
-         *           remaining unassigned credential instances is at or below this threshold.
-         */
-        data class PerRelyingParty(
-            override val numberOfCredentials: Int = 1,
-            val reissueTriggerLifetimeLeft: kotlin.time.Duration,
-            val reissueTriggerUnused: Int,
-        ) : CredentialPolicy {
-            init {
-                require(numberOfCredentials > 0) { "Number of credentials must be greater than 0" }
-            }
-
-            override fun withNumberOfCredentials(count: Int) = copy(numberOfCredentials = count)
-        }
-
         companion object
     }
 }

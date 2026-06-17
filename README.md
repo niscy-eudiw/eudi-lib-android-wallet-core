@@ -494,7 +494,7 @@ issuedDocument?.consumingCredential {
 
 The `findCredential()` method intelligently selects credentials based on:
 
-- Credential policy (e.g., `OnceOnly`, `RotatingBatch`, or [ETSI reuse policies](#credential-reuse-policies-etsi-ts-119-472-3) such as `LimitedTime`, `PerRelyingParty`)
+- Credential policy (e.g., [ETSI reuse policies](#credential-reuse-policies-etsi-ts-119-472-3) such as `OnceOnly`, `LimitedTime`, `RotatingBatch`)
 - Usage count (selecting least-used credentials first in rotation-based policies)
 - Validity period (ensuring the credential is currently valid)
 - Availability (excluding deleted or invalidated credentials)
@@ -1820,7 +1820,7 @@ declared capabilities and provides the result to the application during issuance
 | **Once-only** (Method A) | `OnceOnly(reissueTriggerUnused)` | Each credential used once, then deleted | Yes |
 | **Limited-time** (Method B) | `LimitedTime(reissueTriggerLifetimeLeft)` | Single credential presented multiple times until expiry | No |
 | **Rotating-batch** (Method C) | `RotatingBatch(reissueTriggerLifetimeLeft)` | Batch of credentials, rotated per presentation | Yes |
-| **Per-Relying-Party** (Method D) | `PerRelyingParty(reissueTriggerLifetimeLeft, reissueTriggerUnused)` | Different credential per relying party, consistent for repeats (not yet fully supported — RP-to-credential mapping is planned for a future release) | Yes |
+| **Per-Relying-Party** (Method D) | — | Different credential per relying party, consistent for repeats. **Not yet supported** — planned for a future release. | — |
 
 Each policy type carries reissuance trigger thresholds from the issuer metadata. These can be used
 by the application to schedule credential re-issuance before credentials run out or expire.

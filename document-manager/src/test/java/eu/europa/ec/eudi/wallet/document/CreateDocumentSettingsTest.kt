@@ -80,10 +80,6 @@ class CreateDocumentSettingsTest {
         assertEquals(1, CreateDocumentSettings.CredentialPolicy.LimitedTime(
             reissueTriggerLifetimeLeft = kotlin.time.Duration.parse("90d")
         ).numberOfCredentials)
-        assertEquals(1, CreateDocumentSettings.CredentialPolicy.PerRelyingParty(
-            reissueTriggerLifetimeLeft = kotlin.time.Duration.parse("90d"),
-            reissueTriggerUnused = 5
-        ).numberOfCredentials)
     }
 
     @Test
@@ -115,13 +111,6 @@ class CreateDocumentSettingsTest {
         assertFailsWith<IllegalArgumentException> {
             CreateDocumentSettings.CredentialPolicy.RotatingBatch(numberOfCredentials = 0)
         }
-        assertFailsWith<IllegalArgumentException> {
-            CreateDocumentSettings.CredentialPolicy.PerRelyingParty(
-                numberOfCredentials = 0,
-                reissueTriggerLifetimeLeft = kotlin.time.Duration.parse("90d"),
-                reissueTriggerUnused = 5
-            )
-        }
     }
 
     @Test
@@ -131,13 +120,6 @@ class CreateDocumentSettingsTest {
         }
         assertFailsWith<IllegalArgumentException> {
             CreateDocumentSettings.CredentialPolicy.RotatingBatch(numberOfCredentials = -1)
-        }
-        assertFailsWith<IllegalArgumentException> {
-            CreateDocumentSettings.CredentialPolicy.PerRelyingParty(
-                numberOfCredentials = -1,
-                reissueTriggerLifetimeLeft = kotlin.time.Duration.parse("90d"),
-                reissueTriggerUnused = 5
-            )
         }
     }
 }

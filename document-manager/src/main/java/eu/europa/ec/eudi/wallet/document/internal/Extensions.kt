@@ -88,11 +88,6 @@ internal fun CreateDocumentSettings.CredentialPolicy.toDataItem(): DataItem {
                 put("numberOfCredentials", policy.numberOfCredentials.toLong())
                 policy.reissueTriggerLifetimeLeft?.let { put("reissueTriggerLifetimeLeft", it.inWholeSeconds) }
             }
-            is CreateDocumentSettings.CredentialPolicy.PerRelyingParty -> {
-                put("numberOfCredentials", policy.numberOfCredentials.toLong())
-                put("reissueTriggerLifetimeLeft", policy.reissueTriggerLifetimeLeft.inWholeSeconds)
-                put("reissueTriggerUnused", policy.reissueTriggerUnused.toLong())
-            }
         }
     }
 }
@@ -126,12 +121,6 @@ internal fun CreateDocumentSettings.CredentialPolicy.Companion.fromDataItem(data
             CreateDocumentSettings.CredentialPolicy.RotatingBatch(
                 numberOfCredentials = dataItem["numberOfCredentials"].asNumber.toInt(),
                 reissueTriggerLifetimeLeft = dataItem.getOrNull("reissueTriggerLifetimeLeft")?.asNumber?.toLong()?.seconds,
-            )
-        CreateDocumentSettings.CredentialPolicy.PerRelyingParty::class.java.name ->
-            CreateDocumentSettings.CredentialPolicy.PerRelyingParty(
-                numberOfCredentials = dataItem["numberOfCredentials"].asNumber.toInt(),
-                reissueTriggerLifetimeLeft = dataItem["reissueTriggerLifetimeLeft"].asNumber.toLong().seconds,
-                reissueTriggerUnused = dataItem["reissueTriggerUnused"].asNumber.toInt(),
             )
         else -> throw IllegalArgumentException("Unknown credential policy type: $type")
     }
