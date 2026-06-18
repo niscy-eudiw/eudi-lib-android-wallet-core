@@ -82,7 +82,7 @@ internal fun CreateDocumentSettings.CredentialPolicy.toDataItem(): DataItem {
                 policy.reissueTriggerUnused?.let { put("reissueTriggerUnused", it.toLong()) }
             }
             is CreateDocumentSettings.CredentialPolicy.LimitedTime -> {
-                put("reissueTriggerLifetimeLeft", policy.reissueTriggerLifetimeLeft.inWholeSeconds)
+                policy.reissueTriggerLifetimeLeft?.let { put("reissueTriggerLifetimeLeft", it.inWholeSeconds) }
             }
             is CreateDocumentSettings.CredentialPolicy.RotatingBatch -> {
                 put("numberOfCredentials", policy.numberOfCredentials.toLong())
@@ -115,7 +115,7 @@ internal fun CreateDocumentSettings.CredentialPolicy.Companion.fromDataItem(data
             )
         CreateDocumentSettings.CredentialPolicy.LimitedTime::class.java.name ->
             CreateDocumentSettings.CredentialPolicy.LimitedTime(
-                reissueTriggerLifetimeLeft = dataItem["reissueTriggerLifetimeLeft"].asNumber.toLong().seconds,
+                reissueTriggerLifetimeLeft = dataItem.getOrNull("reissueTriggerLifetimeLeft")?.asNumber?.toLong()?.seconds,
             )
         CreateDocumentSettings.CredentialPolicy.RotatingBatch::class.java.name ->
             CreateDocumentSettings.CredentialPolicy.RotatingBatch(

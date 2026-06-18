@@ -156,7 +156,7 @@ class DocumentExtensionsTest {
     }
 
     @Test
-    fun `EudiWallet getDefaultCreateDocumentSettings should use offeredDocument batchCredentialIssuanceSize`() {
+    fun `EudiWallet getDefaultCreateDocumentSettings should pass through credentialPolicy and apply config`() {
         val secureArea: AndroidKeystoreSecureArea = mockk {
             every { identifier } returns AndroidKeystoreSecureArea.IDENTIFIER
         }
@@ -177,19 +177,16 @@ class DocumentExtensionsTest {
             }
         }
 
-        // Mock Offer.OfferedDocument - specify batchCredentialIssuanceSize
-        val offeredDocument = mockk<Offer.OfferedDocument> {
-            every { batchCredentialIssuanceSize } returns 3
-        }
+        val offeredDocument = mockk<Offer.OfferedDocument>()
 
-        // Test with a policy whose numberOfCredentials matches the batchCredentialIssuanceSize
         val result = wallet.getDefaultCreateDocumentSettings(
             offeredDocument = offeredDocument,
             credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotatingBatch(numberOfCredentials = 3)
         )
 
         assertEquals(secureArea.identifier, result.secureAreaIdentifier)
-        assertEquals(3, result.credentialPolicy.numberOfCredentials)  // Should match the batchCredentialIssuanceSize
+        assertEquals(3, result.credentialPolicy.numberOfCredentials)
+        assertIs<CreateDocumentSettings.CredentialPolicy.RotatingBatch>(result.credentialPolicy)
         val createKeySettings = result.createKeySettings
         assertIs<AndroidKeystoreCreateKeySettings>(createKeySettings)
         assertEquals(
@@ -201,66 +198,6 @@ class DocumentExtensionsTest {
             eudiWalletConfig.userAuthenticationTimeout,
             createKeySettings.userAuthenticationTimeout
         )
-    }
-
-    @Test
-    fun `EudiWallet getDefaultCreateDocumentSettings should respect policy numberOfCredentials if less than batchCredentialIssuanceSize`() {
-        val secureArea: AndroidKeystoreSecureArea = mockk {
-            every { identifier } returns AndroidKeystoreSecureArea.IDENTIFIER
-        }
-
-        val wallet: EudiWallet = mockk {
-            every { config } returns EudiWalletConfig()
-            every { secureAreaRepository } returns mockk {
-                coEvery {
-                    getImplementation(AndroidKeystoreSecureArea.IDENTIFIER)
-                } returns secureArea
-            }
-        }
-
-        // Mock Offer.OfferedDocument with batchCredentialIssuanceSize of 5
-        val offeredDocument = mockk<Offer.OfferedDocument> {
-            every { batchCredentialIssuanceSize } returns 5
-        }
-
-        // Test with policy numberOfCredentials = 2 (less than batchCredentialIssuanceSize)
-        val result = wallet.getDefaultCreateDocumentSettings(
-            offeredDocument = offeredDocument,
-            credentialPolicy = CreateDocumentSettings.CredentialPolicy.OnceOnly(numberOfCredentials = 2)
-        )
-
-        assertEquals(2, result.credentialPolicy.numberOfCredentials)
-        assertIs<CreateDocumentSettings.CredentialPolicy.OnceOnly>(result.credentialPolicy)
-    }
-
-    @Test
-    fun `EudiWallet getDefaultCreateDocumentSettings should cap policy numberOfCredentials to batchCredentialIssuanceSize if greater`() {
-        val secureArea: AndroidKeystoreSecureArea = mockk {
-            every { identifier } returns AndroidKeystoreSecureArea.IDENTIFIER
-        }
-
-        val wallet: EudiWallet = mockk {
-            every { config } returns EudiWalletConfig()
-            every { secureAreaRepository } returns mockk {
-                coEvery {
-                    getImplementation(AndroidKeystoreSecureArea.IDENTIFIER)
-                } returns secureArea
-            }
-        }
-
-        // Mock Offer.OfferedDocument with batchCredentialIssuanceSize of 2
-        val offeredDocument = mockk<Offer.OfferedDocument> {
-            every { batchCredentialIssuanceSize } returns 2
-        }
-
-        // Test with policy numberOfCredentials = 5 (greater than batchCredentialIssuanceSize)
-        val result = wallet.getDefaultCreateDocumentSettings(
-            offeredDocument = offeredDocument,
-            credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotatingBatch(numberOfCredentials = 5)
-        )
-
-        // Should be capped to the batchCredentialIssuanceSize
-        assertEquals(2, result.credentialPolicy.numberOfCredentials)
     }
 
     @Test
@@ -278,9 +215,7 @@ class DocumentExtensionsTest {
             }
         }
 
-        val offeredDocument = mockk<Offer.OfferedDocument> {
-            every { batchCredentialIssuanceSize } returns 1
-        }
+        val offeredDocument = mockk<Offer.OfferedDocument>()
 
         val attestationChallenge = byteArrayOf(1, 2, 3)
         val result = wallet.getDefaultCreateDocumentSettings(

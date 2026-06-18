@@ -77,30 +77,10 @@ class CreateDocumentSettingsTest {
         assertEquals(5, CreateDocumentSettings.CredentialPolicy.OnceOnly(numberOfCredentials = 5).numberOfCredentials)
         assertEquals(1, CreateDocumentSettings.CredentialPolicy.RotatingBatch().numberOfCredentials)
         assertEquals(3, CreateDocumentSettings.CredentialPolicy.RotatingBatch(numberOfCredentials = 3).numberOfCredentials)
+        assertEquals(1, CreateDocumentSettings.CredentialPolicy.LimitedTime().numberOfCredentials)
         assertEquals(1, CreateDocumentSettings.CredentialPolicy.LimitedTime(
             reissueTriggerLifetimeLeft = kotlin.time.Duration.parse("90d")
         ).numberOfCredentials)
-    }
-
-    @Test
-    fun `test CredentialPolicy withNumberOfCredentials returns updated policy`() {
-        val policy = CreateDocumentSettings.CredentialPolicy.RotatingBatch(numberOfCredentials = 1)
-        val updated = policy.withNumberOfCredentials(5)
-        assertIs<CreateDocumentSettings.CredentialPolicy.RotatingBatch>(updated)
-        assertEquals(5, updated.numberOfCredentials)
-    }
-
-    @Test
-    fun `test LimitedTime withNumberOfCredentials rejects non-1 count`() {
-        val policy = CreateDocumentSettings.CredentialPolicy.LimitedTime(
-            reissueTriggerLifetimeLeft = kotlin.time.Duration.parse("90d")
-        )
-        assertFailsWith<IllegalArgumentException> {
-            policy.withNumberOfCredentials(2)
-        }
-        // count=1 should be fine
-        val same = policy.withNumberOfCredentials(1)
-        assertSame(policy, same)
     }
 
     @Test

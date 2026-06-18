@@ -1281,23 +1281,18 @@ val onIssueEvent = OnIssueEvent { event ->
         is IssueEvent.DocumentRequiresCreateSettings.OptionalReusePolicy -> {
             // No issuer reuse policy — the wallet has full control over CreateDocumentSettings,
             // including credential policy and number of credentials.
+            //
+            // Important: For OnceOnly and RotatingBatch policies, numberOfCredentials must not
+            // exceed event.offeredDocument.batchCredentialIssuanceSize (the issuer's upper limit
+            // for batch issuance).
 
-            val isEuPid = when (val format = event.offeredDocument.documentFormat) {
-                is MsoMdocFormat -> format.docType == "eu.europa.ec.eudi.pid.1"
-                is SdJwtVcFormat -> format.vct == "urn:eudi:pid:1"
-                else -> false
-            }
-
-            val createDocumentSettings = when {
-                isEuPid -> eudiWallet.getDefaultCreateDocumentSettings(
-                    offeredDocument = event.offeredDocument,
-                    credentialPolicy = CreateDocumentSettings.CredentialPolicy.OnceOnly(numberOfCredentials = 5)
+            val maxBatchSize = event.offeredDocument.batchCredentialIssuanceSize
+            val createDocumentSettings = eudiWallet.getDefaultCreateDocumentSettings(
+                offeredDocument = event.offeredDocument,
+                credentialPolicy = CreateDocumentSettings.CredentialPolicy.OnceOnly(
+                    numberOfCredentials = minOf(5, maxBatchSize)
                 )
-                else -> eudiWallet.getDefaultCreateDocumentSettings(
-                    offeredDocument = event.offeredDocument,
-                    credentialPolicy = CreateDocumentSettings.CredentialPolicy.RotatingBatch()
-                )
-            }
+            )
 
             // Resume with full settings
             event.resume(createDocumentSettings)
@@ -1872,9 +1867,14 @@ is IssueEvent.DocumentRequiresCreateSettings.MandatoryReusePolicy -> {
 
 is IssueEvent.DocumentRequiresCreateSettings.OptionalReusePolicy -> {
     // No issuer reuse policy — wallet decides freely.
+    // For OnceOnly/RotatingBatch, numberOfCredentials must not exceed
+    // event.offeredDocument.batchCredentialIssuanceSize.
+    val maxBatchSize = event.offeredDocument.batchCredentialIssuanceSize
     val settings = eudiWallet.getDefaultCreateDocumentSettings(
         offeredDocument = event.offeredDocument,
-        credentialPolicy = CreateDocumentSettings.CredentialPolicy.OnceOnly(numberOfCredentials = 5),
+        credentialPolicy = CreateDocumentSettings.CredentialPolicy.OnceOnly(
+            numberOfCredentials = minOf(5, maxBatchSize)
+        ),
     )
 
     event.resume(settings)
@@ -1893,9 +1893,9 @@ The `ResolvedReusePolicy` object (available on `MandatoryReusePolicy`) contains:
 - **Rotating-batch (Method C)**: Credentials are issued in a batch and their usage count is
   incremented on use. Full random-order selection and reshuffle-after-all-presented semantics are
   planned for a future release.
-- **Per-Relying-Party (Method D)**: Credentials are issued in a batch and their usage count is
-  incremented on use. RP-to-credential persistent mapping (assigning a specific credential to each
-  relying party for consistent repeat visits) is planned for a future release.
+- **Per-Relying-Party (Method D)**: Not yet supported. If an issuer advertises only PerRelyingParty
+  options, they are silently skipped and the `OptionalReusePolicy` event is emitted instead, giving the
+  wallet full control. Support is planned for a future release.
 
 ##### Breaking changes
 

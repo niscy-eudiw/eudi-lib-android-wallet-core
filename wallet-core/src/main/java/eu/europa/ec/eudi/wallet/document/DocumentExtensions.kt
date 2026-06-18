@@ -30,7 +30,6 @@ import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.UserAuthenticationType
 import java.security.SecureRandom
-import kotlin.math.min
 
 /**
  * Provides extension functions for [Document] and [EudiWallet] related to document management.
@@ -188,20 +187,13 @@ object DocumentExtensions {
      * The default settings are based on the [EudiWalletConfig] and the presence of an available
      * [AndroidKeystoreSecureArea] implementation.
      *
-     * The number of credentials in the provided [credentialPolicy] is capped to the
-     * [Offer.OfferedDocument.batchCredentialIssuanceSize], ensuring compatibility with issuer capabilities.
-     *
      * This is useful when handling [IssueEvent.DocumentRequiresCreateSettings.OptionalReusePolicy],
      * where the wallet has full control over [CreateDocumentSettings].
      *
      * @receiver The [EudiWallet] instance.
      * @param offeredDocument The [Offer.OfferedDocument] for which to create the default settings.
-     *                        Used to determine the maximum number of credentials allowed.
      * @param attestationChallenge The attestation challenge to use when creating the keys. If `null`, a random challenge will be generated.
-     * @param credentialPolicy The policy for credential usage. The policy's
-     *                        [CreateDocumentSettings.CredentialPolicy.numberOfCredentials] will be capped
-     *                        to not exceed [Offer.OfferedDocument.batchCredentialIssuanceSize].
-     *                        Defaults to [RotatingBatch].
+     * @param credentialPolicy The policy for credential usage. Defaults to [RotatingBatch].
      * @param configure A lambda to further customize the [AndroidKeystoreCreateKeySettings].
      *                 If not provided, settings will use values from [EudiWalletConfig].
      * @return The default [CreateDocumentSettings] configured for the offered document.
@@ -221,9 +213,6 @@ object DocumentExtensions {
         credentialPolicy: CreateDocumentSettings.CredentialPolicy = RotatingBatch(),
         configure: (AndroidKeystoreCreateKeySettings.Builder.() -> Unit)? = null,
     ): CreateDocumentSettings {
-        val cappedPolicy = credentialPolicy.withNumberOfCredentials(
-            min(credentialPolicy.numberOfCredentials, offeredDocument.batchCredentialIssuanceSize)
-        )
         val (secureAreaIdentifier, createKeySettings) = getDefaultCreateKeySettings(
             attestationChallenge = attestationChallenge,
             configure = configure,
@@ -232,7 +221,7 @@ object DocumentExtensions {
         return CreateDocumentSettings(
             secureAreaIdentifier = secureAreaIdentifier,
             createKeySettings = createKeySettings,
-            credentialPolicy = cappedPolicy,
+            credentialPolicy = credentialPolicy,
         )
     }
 }

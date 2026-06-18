@@ -85,16 +85,6 @@ interface CreateDocumentSettings {
         val numberOfCredentials: Int
 
         /**
-         * Returns a copy of this policy with the specified [count] as [numberOfCredentials].
-         * Useful for capping the number of credentials to a maximum (e.g., batch issuance size).
-         *
-         * @param count The desired number of credentials. Must be greater than 0.
-         * @return A new [CredentialPolicy] with the specified number of credentials.
-         * @throws IllegalArgumentException if [count] is not valid for this policy type.
-         */
-        fun withNumberOfCredentials(count: Int): CredentialPolicy
-
-        /**
          * Method A (Once-only / ETSI TS 119 472-3): Each credential instance is used exactly
          * once, then deleted. Credentials are typically issued in batches.
          *
@@ -103,7 +93,7 @@ interface CreateDocumentSettings {
          * When [reissueTriggerUnused] is non-null, the issuer has advertised a reuse policy and
          * reissuance should be triggered when the number of remaining unused credential instances
          * is at or below this threshold. When null, no issuer reuse policy is in effect and the
-         * application controls reissuance independently.
+         * wallet controls reissuance independently.
          *
          * @property numberOfCredentials The number of credentials to issue. Defaults to 1.
          * @property reissueTriggerUnused reissuance threshold, or null if no issuer policy.
@@ -116,8 +106,6 @@ interface CreateDocumentSettings {
             init {
                 require(numberOfCredentials > 0) { "Number of credentials must be greater than 0" }
             }
-
-            override fun withNumberOfCredentials(count: Int) = copy(numberOfCredentials = count)
         }
 
         /**
@@ -127,18 +115,17 @@ interface CreateDocumentSettings {
          *
          * Consumption behavior: credential persists and its usage count is incremented.
          *
-         * @property reissueTriggerLifetimeLeft reissuance should be triggered when the
-         *           remaining credential lifetime is at or below this duration.
+         * When [reissueTriggerLifetimeLeft] is non-null, the issuer has advertised a reuse policy
+         * and reissuance should be triggered when the remaining credential lifetime is at or below
+         * this duration. When null, no issuer reuse policy is in effect and the wallet controls
+         * reissuance independently.
+         *
+         * @property reissueTriggerLifetimeLeft reissuance threshold, or null if no issuer policy.
          */
         data class LimitedTime(
-            val reissueTriggerLifetimeLeft: kotlin.time.Duration,
+            val reissueTriggerLifetimeLeft: kotlin.time.Duration? = null,
         ) : CredentialPolicy {
             override val numberOfCredentials: Int get() = 1
-
-            override fun withNumberOfCredentials(count: Int): CredentialPolicy {
-                require(count == 1) { "LimitedTime policy always uses exactly 1 credential" }
-                return this
-            }
         }
 
         /**
@@ -151,8 +138,8 @@ interface CreateDocumentSettings {
          *
          * When [reissueTriggerLifetimeLeft] is non-null, the issuer has advertised a reuse policy
          * and reissuance should be triggered when the remaining credential lifetime is at or below
-         * this duration. When null, no issuer reuse policy is in effect and the application
-         * controls reissuance independently.
+         * this duration. When null, no issuer reuse policy is in effect and the wallet controls
+         * reissuance independently.
          *
          * @property numberOfCredentials The number of credentials to issue. Defaults to 1.
          * @property reissueTriggerLifetimeLeft reissuance threshold, or null if no issuer policy.
@@ -165,8 +152,6 @@ interface CreateDocumentSettings {
             init {
                 require(numberOfCredentials > 0) { "Number of credentials must be greater than 0" }
             }
-
-            override fun withNumberOfCredentials(count: Int) = copy(numberOfCredentials = count)
         }
 
         companion object
