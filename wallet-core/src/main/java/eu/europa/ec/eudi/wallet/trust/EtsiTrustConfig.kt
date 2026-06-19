@@ -15,7 +15,7 @@
  */
 package eu.europa.ec.eudi.wallet.trust
 
-import eu.europa.ec.eudi.etsi119602.Uri
+import eu.europa.ec.eudi.etsi119602.datamodel.Uri
 import eu.europa.ec.eudi.etsi119602.consultation.LoadLoTEAndPointers
 import eu.europa.ec.eudi.etsi119602.consultation.LotEMeta
 import eu.europa.ec.eudi.etsi119602.consultation.VerifyJwtSignature
@@ -69,8 +69,8 @@ data class EtsiTrustConfig(
  * ```
  * configureEtsiTrust {
  *     loteLocations(SupportedLists(
- *         pidProviders = "https://trustedlist.../PIDProviders.jwt",
- *         wrpacProviders = "https://trustedlist.../WRPACProviders.jwt",
+ *         pidProviders = Uri("https://trustedlist.../PIDProviders.jwt"),
+ *         wrpacProviders = Uri("https://trustedlist.../WRPACProviders.jwt"),
  *     ))
  *     classifications(AttestationClassifications(
  *         pids = AttestationIdentifierPredicate.any(setOf(
@@ -86,7 +86,7 @@ data class EtsiTrustConfig(
  */
 class EtsiTrustConfigBuilder {
 
-    private var loteLocations: SupportedLists<String>? = null
+    private var loteLocations: SupportedLists<Uri>? = null
     private var classifications: AttestationClassifications? = null
     private var fileCacheExpiration: Duration = EtsiTrustConfig.DEFAULT_FILE_CACHE_EXPIRATION
     private var cacheTtl: Duration = EtsiTrustConfig.DEFAULT_CACHE_TTL
@@ -97,19 +97,19 @@ class EtsiTrustConfigBuilder {
         LoadLoTEAndPointers.Constraints.DoNotLoadOtherPointers
 
     /**
-     * Sets the LoTE download locations as string URLs.
+     * Sets the LoTE download locations.
      *
      * Example:
      * ```
      * loteLocations(SupportedLists(
-     *     pidProviders = "https://trustedlist.../PIDProviders.jwt",
-     *     wrpacProviders = "https://trustedlist.../WRPACProviders.jwt",
+     *     pidProviders = Uri("https://trustedlist.../PIDProviders.jwt"),
+     *     wrpacProviders = Uri("https://trustedlist.../WRPACProviders.jwt"),
      * ))
      * ```
      *
-     * @param locations the supported lists with LoTE URL strings
+     * @param locations the supported lists with LoTE URLs
      */
-    fun loteLocations(locations: SupportedLists<String>) {
+    fun loteLocations(locations: SupportedLists<Uri>) {
         this.loteLocations = locations
     }
 
@@ -197,7 +197,7 @@ class EtsiTrustConfigBuilder {
             "classifications must be provided via classifications()"
         }
         return EtsiTrustConfig(
-            loteLocations = locations.toUri(),
+            loteLocations = locations,
             classifications = cls,
             fileCacheExpiration = fileCacheExpiration,
             cacheTtl = cacheTtl,
@@ -205,18 +205,6 @@ class EtsiTrustConfigBuilder {
             relaxPkixRevocation = relaxPkixRevocation,
             customJwtSignatureVerifier = customJwtSignatureVerifier,
             loteConstraints = loteConstraints,
-        )
-    }
-
-    private companion object {
-        fun SupportedLists<String>.toUri() = SupportedLists(
-            pidProviders = pidProviders?.let(::Uri),
-            walletProviders = walletProviders?.let(::Uri),
-            wrpacProviders = wrpacProviders?.let(::Uri),
-            wrprcProviders = wrprcProviders?.let(::Uri),
-            pubEaaProviders = pubEaaProviders?.let(::Uri),
-            qeaProviders = qeaProviders?.let(::Uri),
-            eaaProviders = eaaProviders.mapValues { (_, v) -> Uri(v) },
         )
     }
 }

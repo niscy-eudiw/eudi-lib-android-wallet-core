@@ -672,8 +672,8 @@ class EudiWalletConfig {
      * ```
      * configureEtsiTrust {
      *     loteLocations(SupportedLists(
-     *         pidProviders = "https://trustedlist.../PIDProviders.jwt",
-     *         wrpacProviders = "https://trustedlist.../WRPACProviders.jwt",
+     *         pidProviders = Uri("https://trustedlist.../PIDProviders.jwt"),
+     *         wrpacProviders = Uri("https://trustedlist.../WRPACProviders.jwt"),
      *     ))
      *     classifications(AttestationClassifications(
      *         pids = AttestationIdentifierPredicate.any(setOf(
