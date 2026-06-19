@@ -647,17 +647,16 @@ library directly (or any other trust framework).
 
 #### Dependencies
 
-The `etsi-1196x2-consultation` module is exposed as an `api` dependency from wallet-core, so
-consumers can reference its types (e.g., `SupportedLists`, `AttestationClassifications`) directly.
-The `etsi-119602-consultation` module is bundled internally as `implementation` — consumers do
-**not** need to declare it. The `configureEtsiTrust` DSL accepts plain strings for LoTE URLs,
-avoiding any dependency on `etsi-119602` types in consumer code.
+Both ETSI consultation modules are exposed as `api` dependencies from wallet-core, so
+consumers can reference their types directly:
+
+- `etsi-1196x2-consultation` — base consultation types (`SupportedLists`, `AttestationClassifications`, `IsChainTrustedForEUDIW`, etc.)
+- `etsi-119602-consultation` — `Uri` type used in `configureEtsiTrust` DSL
 
 ```groovy
 dependencies {
     implementation "eu.europa.ec.eudi:eudi-lib-android-wallet-core:0.26.0-SNAPSHOT"
-    // etsi-1196x2-consultation types (SupportedLists, AttestationClassifications, etc.)
-    // are available transitively — no additional ETSI dependency needed
+    // Both ETSI modules are available transitively — no additional dependency needed
 }
 ```
 
@@ -673,9 +672,9 @@ val config = EudiWalletConfig {
     configureEtsiTrust {
         // Required: LoTE download URLs
         loteLocations(SupportedLists(
-            pidProviders = "https://trust.example.eu/pid-providers.jwt",
-            wrpacProviders = "https://trust.example.eu/wrpac-providers.jwt",
-            // pubEaaProviders = "https://trust.example.eu/pub-eaa-providers.jwt",
+            pidProviders = Uri("https://trust.example.eu/pid-providers.jwt"),
+            wrpacProviders = Uri("https://trust.example.eu/wrpac-providers.jwt"),
+            pubEaaProviders = Uri("https://trust.example.eu/pub-eaa-providers.jwt")
         ))
 
         // Required: map credential types to ETSI verification contexts
@@ -1077,8 +1076,8 @@ val config = EudiWalletConfig {
     // Centralized ETSI trust — builds the full LoTE pipeline internally
     configureEtsiTrust {
         loteLocations(SupportedLists(
-            pidProviders = "https://trust.example.eu/pid-providers.jwt",
-            wrpacProviders = "https://trust.example.eu/wrpac-providers.jwt",
+            pidProviders = Uri("https://trust.example.eu/pid-providers.jwt"),
+            wrpacProviders = Uri("https://trust.example.eu/wrpac-providers.jwt"),
         ))
         classifications(AttestationClassifications(
             pids = AttestationIdentifierPredicate.any(setOf(
