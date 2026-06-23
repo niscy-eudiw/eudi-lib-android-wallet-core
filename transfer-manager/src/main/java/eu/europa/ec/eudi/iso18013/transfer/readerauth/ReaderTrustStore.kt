@@ -59,13 +59,14 @@ interface ReaderTrustStore {
     companion object {
         /**
          * Returns a default trust store that uses the given list of trusted certificates.
-         * Revocation checking is disabled (NoCheck) for backwards compatibility.
+         * Revocation checking defaults to HardFail — validation fails if a certificate
+         * is revoked or the revocation status cannot be determined.
          *
          * @param trustedCertificates the trusted certificates
          */
         @JvmStatic
         fun getDefault(trustedCertificates: List<X509Certificate>): ReaderTrustStore {
-            return ReaderTrustStoreImpl(trustedCertificates, DEFAULT, revocationPolicy = RevocationPolicy.NoCheck)
+            return ReaderTrustStoreImpl(trustedCertificates, DEFAULT)
         }
 
         /**

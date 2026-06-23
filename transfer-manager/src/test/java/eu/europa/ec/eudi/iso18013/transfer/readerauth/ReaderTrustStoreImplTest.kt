@@ -139,24 +139,24 @@ class ReaderTrustStoreImplTest {
     }
 
     @Test
-    fun testDefaultRevocationPolicyIsNoCheck() {
+    fun testDefaultRevocationPolicyIsHardFail() {
         val certificateChain = listOf(leafCertificate, rootCertificate)
 
         val profileValidation = mockk<ProfileValidation>()
         every { profileValidation.validate(any(), any()) } returns true
 
-        // Use constructor without explicit revocationPolicy — should default to NoCheck
+        // Use constructor without explicit revocationPolicy — should default to HardFail
         val trustStore = ReaderTrustStoreImpl(
             trustedCertificates = listOf(rootCertificate),
             profileValidation = profileValidation,
             errorLogger = { _, _, _ -> }
         )
 
-        // With NoCheck, validation should succeed even though the leaf cert has
+        // With HardFail, validation should fail because the leaf cert has
         // a CRL distribution point (https://example.com/crl.pem) that is unreachable
         val result = trustStore.validateCertificationTrustPath(certificateChain)
 
-        assertTrue(result, "Default policy (NoCheck) should not perform revocation checking")
+        assertFalse(result, "Default policy (HardFail) should fail when CRL is unreachable")
     }
 
     @Test

@@ -20,10 +20,10 @@ package eu.europa.ec.eudi.iso18013.transfer.readerauth
  * reader authentication trust path validation.
  */
 sealed interface RevocationPolicy {
-    /** No revocation checking is performed. This is the default for backwards compatibility. */
+    /** No revocation checking is performed. */
     data object NoCheck : RevocationPolicy
 
-    /** Validation fails if a certificate is revoked OR if the CRL cannot be retrieved. */
+    /** Validation fails if a certificate is revoked OR if the CRL cannot be retrieved (default). */
     data object HardFail : RevocationPolicy
 
     /** Validation fails if a certificate is revoked, but tolerates CRL unavailability. */
