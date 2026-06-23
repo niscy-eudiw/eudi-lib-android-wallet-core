@@ -74,7 +74,7 @@ class DeviceRequestProcessor(
     override var readerTrustStore: ReaderTrustStore? = null,
     private val readerAuthPolicy: ReaderAuthPolicy = ReaderAuthPolicy.EnforceIfPresent,
     private var zkSystemRepository: ZkSystemRepository? = null,
-    internal val zkResponsePolicy: ZkResponsePolicy = ZkResponsePolicy.FallbackToFullDisclosure,
+    internal val zkResponsePolicy: ZkResponsePolicy = ZkResponsePolicy.Strict,
 ) : RequestProcessor, ReaderTrustStoreAware {
 
     /**

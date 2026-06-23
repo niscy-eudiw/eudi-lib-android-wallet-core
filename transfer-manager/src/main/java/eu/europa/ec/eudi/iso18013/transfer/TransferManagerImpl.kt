@@ -335,7 +335,7 @@ class TransferManagerImpl @JvmOverloads constructor(
         var readerAuthPolicy: ReaderAuthPolicy = ReaderAuthPolicy.EnforceIfPresent
         var retrievalMethods: List<DeviceRetrievalMethod>? = null
         var zkSystemRepository: ZkSystemRepository? = null
-        var zkResponsePolicy: ZkResponsePolicy = ZkResponsePolicy.FallbackToFullDisclosure
+        var zkResponsePolicy: ZkResponsePolicy = ZkResponsePolicy.Strict
 
         /**
          * Document manager instance that will be used to retrieve the requested documents
@@ -379,8 +379,7 @@ class TransferManagerImpl @JvmOverloads constructor(
 
         /**
          * ZK response policy that determines behavior when ZK proof generation fails.
-         * Defaults to [ZkResponsePolicy.FallbackToFullDisclosure] for backwards compatibility.
-         * Consider using [ZkResponsePolicy.Strict] for production to prevent unintended full disclosure.
+         * Defaults to [ZkResponsePolicy.Strict] to prevent unintended full disclosure.
          * @param zkResponsePolicy
          */
         fun zkResponsePolicy(zkResponsePolicy: ZkResponsePolicy) = apply {

@@ -95,8 +95,7 @@ interface TransferManager : TransferEvent.Listenable {
          * @param retrievalMethods
          * @param zkSystemRepository
          * @param zkResponsePolicy the ZK response policy to use when ZK proof generation fails.
-         * Defaults to [ZkResponsePolicy.FallbackToFullDisclosure] for backwards compatibility.
-         * Consider using [ZkResponsePolicy.Strict] for production to prevent unintended full disclosure.
+         * Defaults to [ZkResponsePolicy.Strict] to prevent unintended full disclosure.
          * @return a [TransferManagerImpl]
          */
         @JvmStatic
@@ -107,7 +106,7 @@ interface TransferManager : TransferEvent.Listenable {
             readerAuthPolicy: ReaderAuthPolicy = ReaderAuthPolicy.EnforceIfPresent,
             retrievalMethods: List<DeviceRetrievalMethod>? = null,
             zkSystemRepository: ZkSystemRepository? = null,
-            zkResponsePolicy: ZkResponsePolicy = ZkResponsePolicy.FallbackToFullDisclosure
+            zkResponsePolicy: ZkResponsePolicy = ZkResponsePolicy.Strict
         ): TransferManager = TransferManagerImpl(context) {
             documentManager(documentManager)
             readerTrustStore?.let { readerTrustStore(it) }

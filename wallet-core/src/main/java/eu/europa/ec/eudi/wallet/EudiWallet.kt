@@ -491,6 +491,7 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
                         readerAuthPolicy = config.readerAuthPolicy,
                         privilegedAllowlist = privilegedAllowlist,
                         zkSystemRepository = config.zkSystemRepository,
+                        zkResponsePolicy = config.zkResponsePolicy,
                         logger = loggerObj
                     ),
                     logger = loggerObj
@@ -582,7 +583,8 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
                     clearBleCache = config.clearBleCache
                 )
             ),
-            zkSystemRepository = config.zkSystemRepository
+            zkSystemRepository = config.zkSystemRepository,
+            zkResponsePolicy = config.zkResponsePolicy
         )
 
         /**

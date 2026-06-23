@@ -28,6 +28,7 @@ import eu.europa.ec.eudi.iso18013.transfer.response.RequestProcessor
 import eu.europa.ec.eudi.iso18013.transfer.response.device.DeviceRequest
 import eu.europa.ec.eudi.iso18013.transfer.response.device.DeviceRequestProcessor
 import eu.europa.ec.eudi.iso18013.transfer.response.device.ProcessedDeviceRequest
+import eu.europa.ec.eudi.iso18013.transfer.zkp.ZkResponsePolicy
 import eu.europa.ec.eudi.wallet.document.DocumentManager
 import eu.europa.ec.eudi.wallet.internal.d
 import eu.europa.ec.eudi.wallet.internal.e
@@ -59,6 +60,7 @@ internal class DCAPIRequestProcessor(
     private val readerAuthPolicy: ReaderAuthPolicy = ReaderAuthPolicy.EnforceIfPresent,
     private val privilegedAllowlist: String,
     private var zkSystemRepository: ZkSystemRepository?,
+    private val zkResponsePolicy: ZkResponsePolicy = ZkResponsePolicy.Strict,
     private var logger: Logger? = null,
 ) : RequestProcessor, ReaderTrustStoreAware {
 
@@ -72,7 +74,8 @@ internal class DCAPIRequestProcessor(
             documentManager = documentManager,
             readerTrustStore = readerTrustStore,
             readerAuthPolicy = readerAuthPolicy,
-            zkSystemRepository = zkSystemRepository
+            zkSystemRepository = zkSystemRepository,
+            zkResponsePolicy = zkResponsePolicy
         ).process(deviceRequest) as? ProcessedDeviceRequest
             ?: return RequestProcessor.ProcessedRequest.Failure(
                 DCAPIException("DeviceRequestProcessor failed to produce a ProcessedDeviceRequest"),

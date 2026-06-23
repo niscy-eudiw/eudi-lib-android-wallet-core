@@ -86,7 +86,7 @@ class TransferManagerImplBuilderTest {
         assertNotNull(transferManager)
         assertIs<DeviceRequestProcessor>(transferManager.requestProcessor)
         assertEquals(
-            ZkResponsePolicy.FallbackToFullDisclosure,
+            ZkResponsePolicy.Strict,
             (transferManager.requestProcessor as DeviceRequestProcessor).zkResponsePolicy
         )
     }
