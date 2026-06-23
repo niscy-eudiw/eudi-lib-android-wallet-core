@@ -40,7 +40,7 @@ class ReaderTrustStoreImpl(
     private var errorLogger: ((tag: String, message: String, cause: Throwable) -> Unit) = { tag, message, cause ->
         Log.d(tag, message, cause)
     },
-    private val revocationPolicy: RevocationPolicy = RevocationPolicy.NoCheck,
+    private val revocationPolicy: RevocationPolicy = RevocationPolicy.HardFail,
 ) : ReaderTrustStore {
 
     private val trustedCertMap: Map<X500Name, X509Certificate> by lazy {

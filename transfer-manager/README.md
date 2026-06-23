@@ -27,8 +27,8 @@ Reader authentication is accomplished by verifying the following:
   trusted root certificate
 - Certificate's **profile validation**: Examines the attributes and constraints defined in the
   certificate profile to ensure that they meet the predefined criteria for a trusted certificate
-- **Revocation checking**: Optional certificate revocation checking via CRL, configurable through
-  `RevocationPolicy` (disabled by default for backwards compatibility).
+- **Revocation checking**: Certificate revocation checking via CRL, configurable through
+  `RevocationPolicy` (defaults to strict `HardFail`).
 - **Signature verification**: Verifying the signature by generating the `ReaderAuthentication` structure and validating it 
   against the certificate.
 
@@ -500,11 +500,11 @@ The library performs three key verification steps:
    - Common Name verification
    - Signature algorithm verification
 
-3. **Certificate Revocation Checking**: When enabled via `RevocationPolicy`, the library checks if certificates in the chain have been revoked using CRL distribution points. Revocation checking uses Java's `PKIXRevocationChecker` which verifies CRL signatures, rejects expired CRLs, and checks all certificates in the chain (not just the leaf). Revocation checking is disabled by default for backwards compatibility.
+3. **Certificate Revocation Checking**: The library checks if certificates in the chain have been revoked using CRL distribution points. Revocation checking uses Java's `PKIXRevocationChecker` which verifies CRL signatures, rejects expired CRLs, and checks all certificates in the chain (not just the leaf). The default policy is strict `HardFail`, which rejects certificates when they are revoked or when the revocation status cannot be determined. This can be configured via `RevocationPolicy`.
 
 #### Default Implementation
 
-By default, the library provides a standard implementation of the `ReaderTrustStore` interface through `ReaderTrustStoreImpl`, which performs certificate path and profile validation. Revocation checking is disabled by default:
+By default, the library provides a standard implementation of the `ReaderTrustStore` interface through `ReaderTrustStoreImpl`, which performs certificate path and profile validation. Revocation checking defaults to `HardFail` unless explicitly configured:
 
 ```kotlin
 // Create a default ReaderTrustStore with your trusted certificates
@@ -525,13 +525,13 @@ transferManager = TransferManager.getDefault(
 )
 ```
 
-To enable revocation checking, pass a `RevocationPolicy`:
+To override the default revocation policy, pass a `RevocationPolicy`:
 
 ```kotlin
-// HardFail: reject if certificate is revoked OR CRL is unavailable
+// NoCheck: skip revocation checking entirely
 val readerTrustStore = ReaderTrustStore.getDefault(
     trustedCertificates = trustedCertificates,
-    revocationPolicy = RevocationPolicy.HardFail
+    revocationPolicy = RevocationPolicy.NoCheck
 )
 
 // SoftFail: reject if certificate is revoked, but tolerate CRL unavailability
