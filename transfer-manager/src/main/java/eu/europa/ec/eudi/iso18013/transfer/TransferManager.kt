@@ -58,9 +58,11 @@ interface TransferManager : TransferEvent.Listenable {
     /**
      * Sends response bytes to the connected reader and terminates the session.
      *
-     * **Note:** Currently, only a single request-response cycle per session is supported.
-     * Calling this method sends the response along with a session termination signal,
-     * ending the presentation session. To perform another exchange, a new session must be started.
+     * **Note:** Each session supports a single request-response cycle.
+     * Sending a response terminates the presentation session;
+     * start a new session to perform another exchange. This is conformant
+     * with ISO/IEC 18013-5:2021 §9.1.1.4, which makes additional
+     * exchanges optional, not required.
      *
      * To generate the response, use the [RequestProcessor.ProcessedRequest.Success.generateResponse]
      * method.
