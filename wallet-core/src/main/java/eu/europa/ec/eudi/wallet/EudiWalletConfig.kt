@@ -23,6 +23,7 @@ import eu.europa.ec.eudi.iso18013.transfer.engagement.NfcEngagementService
 import eu.europa.ec.eudi.etsi1196x2.consultation.IsChainTrustedForEUDIW
 import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStore
 import eu.europa.ec.eudi.iso18013.transfer.response.ReaderAuthPolicy
+import eu.europa.ec.eudi.iso18013.transfer.zkp.ZkResponsePolicy
 import eu.europa.ec.eudi.wallet.EudiWalletConfig.Companion.DEFAULT_DOCUMENT_MANAGER_IDENTIFIER
 import eu.europa.ec.eudi.wallet.dcapi.DCAPIConfig
 import eu.europa.ec.eudi.wallet.document.DocumentExtensions.getDefaultCreateDocumentSettings
@@ -601,6 +602,34 @@ class EudiWalletConfig {
         zkSystemRepository: ZkSystemRepository
     ) = apply {
         this.zkSystemRepository = zkSystemRepository
+    }
+
+    /**
+     * The policy that determines behavior when ZK proof generation fails during
+     * response generation.
+     *
+     * The available policies are:
+     * - [ZkResponsePolicy.Strict]: Aborts disclosure for the document when ZK proof
+     *   generation fails, preventing unintended full document disclosure (default).
+     * - [ZkResponsePolicy.FallbackToFullDisclosure]: Falls back to sending the full
+     *   document when ZK proof generation fails.
+     *
+     * The default is [ZkResponsePolicy.Strict].
+     *
+     * @see ZkResponsePolicy
+     * @see configureZkp
+     */
+    var zkResponsePolicy: ZkResponsePolicy = ZkResponsePolicy.Strict
+        private set
+
+    /**
+     * Configure the [ZkResponsePolicy] for Zero-Knowledge Proof response generation.
+     *
+     * @param zkResponsePolicy the ZK response policy
+     * @return the [EudiWalletConfig] instance
+     */
+    fun configureZkResponsePolicy(zkResponsePolicy: ZkResponsePolicy) = apply {
+        this.zkResponsePolicy = zkResponsePolicy
     }
 
     internal var issuerTrustConfig: IssuerTrustConfig? = null

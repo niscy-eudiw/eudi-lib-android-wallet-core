@@ -675,12 +675,10 @@ The `ZkResponsePolicy` determines behavior when ZK proof generation fails:
 
 | Policy | Behavior |
 |--------|----------|
-| `ZkResponsePolicy.Strict` | Aborts disclosure for the document. **Recommended for production.** |
-| `ZkResponsePolicy.FallbackToFullDisclosure` | Falls back to sending the full document. Current default for backwards compatibility. |
+| `ZkResponsePolicy.Strict` | Aborts disclosure for the document (default). |
+| `ZkResponsePolicy.FallbackToFullDisclosure` | Falls back to sending the full document. |
 
-> **Note:** The default policy is `FallbackToFullDisclosure` for backwards compatibility. This will
-> change to `Strict` in a future release. We recommend explicitly setting `ZkResponsePolicy.Strict`
-> in production to prevent unintended full document disclosure when proof generation fails.
+Integrators using `EudiWalletConfig` can set the policy via `configureZkResponsePolicy()`.
 
 When a ZK proof is successfully generated, the credential is **not consumed** — the credential policy
 (e.g., one-time-use limits) is not applied, since the actual credential key is never sent to the

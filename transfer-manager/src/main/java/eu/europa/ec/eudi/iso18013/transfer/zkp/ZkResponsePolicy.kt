@@ -22,15 +22,13 @@ package eu.europa.ec.eudi.iso18013.transfer.zkp
 sealed interface ZkResponsePolicy {
 
     /**
-     * Abort disclosure for the document if ZK proof generation fails.
-     * Recommended for production use to prevent unintended full document disclosure.
+     * Abort disclosure for the document if ZK proof generation fails (default).
+     * Prevents unintended full document disclosure.
      */
     data object Strict : ZkResponsePolicy
 
     /**
      * Fall back to full document disclosure if ZK proof generation fails.
-     * This is the current default for backwards compatibility and will be changed
-     * to [Strict] in a future release.
      */
     data object FallbackToFullDisclosure : ZkResponsePolicy
 }

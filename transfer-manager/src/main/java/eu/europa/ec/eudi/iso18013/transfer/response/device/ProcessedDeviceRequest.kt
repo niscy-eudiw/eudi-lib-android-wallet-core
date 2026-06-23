@@ -74,7 +74,7 @@ class ProcessedDeviceRequest(
     trustMetadata: TrustMetadata?,
     private val readerAuthPolicy: ReaderAuthPolicy = ReaderAuthPolicy.EnforceIfPresent,
     private val zkSystemRepository: ZkSystemRepository? = null,
-    private val zkResponsePolicy: ZkResponsePolicy = ZkResponsePolicy.FallbackToFullDisclosure
+    private val zkResponsePolicy: ZkResponsePolicy = ZkResponsePolicy.Strict
 ) : RequestProcessor.ProcessedRequest.Success(
     presentmentData = presentmentData,
     requester = requester,
