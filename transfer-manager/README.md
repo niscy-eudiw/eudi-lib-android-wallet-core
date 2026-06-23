@@ -352,9 +352,9 @@ The response is produced via
 
 Finally, the wire response is sent with `TransferManager.sendResponse(response)`.
 
-> **Note:** Currently, only a single request-response cycle per session is supported.
-> Sending a response automatically terminates the presentation session. To perform another
-> exchange, a new session must be started.
+> **Note:** Each session supports a single request-response cycle. Sending a response
+> terminates the presentation session; start a new session to perform another exchange.
+> This is conformant with ISO/IEC 18013-5:2021 §9.1.1.4, which makes additional exchanges optional, not required.
 
 #### Inspecting the request
 
