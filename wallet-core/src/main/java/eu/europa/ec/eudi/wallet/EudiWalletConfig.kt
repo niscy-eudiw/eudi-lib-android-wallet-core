@@ -595,16 +595,6 @@ class EudiWalletConfig {
         private set
 
     /**
-     * Configure Zero-Knowledge Proofs (ZKP) support.
-     * This allows you to enable ZKP support by providing a [ZkSystemRepository].
-     */
-    fun configureZkp(
-        zkSystemRepository: ZkSystemRepository
-    ) = apply {
-        this.zkSystemRepository = zkSystemRepository
-    }
-
-    /**
      * The policy that determines behavior when ZK proof generation fails during
      * response generation.
      *
@@ -617,18 +607,26 @@ class EudiWalletConfig {
      * The default is [ZkResponsePolicy.Strict].
      *
      * @see ZkResponsePolicy
-     * @see configureZkp
      */
     var zkResponsePolicy: ZkResponsePolicy = ZkResponsePolicy.Strict
         private set
 
     /**
-     * Configure the [ZkResponsePolicy] for Zero-Knowledge Proof response generation.
+     * Configure Zero-Knowledge Proofs (ZKP) support.
+     * This allows you to enable ZKP support by providing a [ZkSystemRepository]
+     * and optionally set the [ZkResponsePolicy] that determines behavior when
+     * ZK proof generation fails. The default policy is [ZkResponsePolicy.Strict].
      *
-     * @param zkResponsePolicy the ZK response policy
+     * @param zkSystemRepository the ZK system repository
+     * @param zkResponsePolicy the ZK response policy (default [ZkResponsePolicy.Strict])
      * @return the [EudiWalletConfig] instance
      */
-    fun configureZkResponsePolicy(zkResponsePolicy: ZkResponsePolicy) = apply {
+    @JvmOverloads
+    fun configureZkp(
+        zkSystemRepository: ZkSystemRepository,
+        zkResponsePolicy: ZkResponsePolicy = ZkResponsePolicy.Strict
+    ) = apply {
+        this.zkSystemRepository = zkSystemRepository
         this.zkResponsePolicy = zkResponsePolicy
     }
 
