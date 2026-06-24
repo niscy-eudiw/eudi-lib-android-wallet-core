@@ -62,19 +62,19 @@ internal class TrustEvaluatingCwtSignatureVerifier(
         val certs = extractX5cFromCwt(statusListToken)
         logger?.d(TAG, "CWT: x5chain has ${certs.size} certs, leaf=${certs.firstOrNull()?.subjectX500Principal}")
 
-        // Evaluate trust via ETSI
+        // Evaluate trust via ETSI (revocation context for status list tokens)
         val trustResult = trustConfig.isChainTrustedForAttestation
-            .issuance(certs, attestationIdentifier)
+            .revocation(certs, attestationIdentifier)
         logger?.d(TAG, "CWT: trustResult=$trustResult for attestation=$attestationIdentifier")
 
         // Resolve verification context from classifications
         val verificationContext = trustConfig.classifications
             ?.classify(attestationIdentifier)
             ?.fold(
-                ifPid = VerificationContext.PID,
-                ifPubEaa = VerificationContext.PubEAA,
-                ifQEaa = VerificationContext.QEAA,
-                ifEaa = { useCase -> VerificationContext.EAA(useCase) },
+                ifPid = VerificationContext.PIDStatus,
+                ifPubEaa = VerificationContext.PubEAAStatus,
+                ifQEaa = VerificationContext.QEAAStatus,
+                ifEaa = { useCase -> VerificationContext.EAAStatus(useCase) },
             )
         logger?.d(TAG, "CWT: verificationContext=$verificationContext")
 

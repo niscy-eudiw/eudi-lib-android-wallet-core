@@ -18,6 +18,9 @@ package eu.europa.ec.eudi.wallet.trust
 import eu.europa.ec.eudi.etsi1196x2.consultation.AttestationIdentifier
 import eu.europa.ec.eudi.etsi1196x2.consultation.CertificationChainValidation
 import eu.europa.ec.eudi.etsi1196x2.consultation.IsChainTrustedForAttestation
+import eu.europa.ec.eudi.wallet.internal.d
+import eu.europa.ec.eudi.wallet.internal.e
+import eu.europa.ec.eudi.wallet.logging.Logger
 import org.multipaz.cbor.Cbor
 import org.multipaz.cose.Cose
 import org.multipaz.cose.toCoseLabel
@@ -39,45 +42,43 @@ import java.util.Base64
  */
 internal class MsoMdocCredentialTrustVerifier(
     private val isChainTrusted: IsChainTrustedForAttestation<List<X509Certificate>, TrustAnchor>,
+    private val logger: Logger? = null,
 ) : CredentialTrustVerifier {
 
     override suspend fun verify(
         credentialValue: String,
         attestationIdentifier: AttestationIdentifier,
     ): CertificationChainValidation<TrustAnchor>? = runCatching {
-        //  Base64url-decode the credential string
+        // Base64url-decode the credential string
         val credentialBytes = Base64.getUrlDecoder().decode(credentialValue)
 
-        //  Parse issuerAuth from StaticAuthData
+        // Parse issuerAuth from StaticAuthData
         val issuerAuthBytes = StaticAuthDataParser(credentialBytes)
             .parse()
             .issuerAuth
 
-        //  Decode COSE_Sign1 from issuerAuth
+        // Decode COSE_Sign1 from issuerAuth
         val coseSign1 = Cbor.decode(issuerAuthBytes).asCoseSign1
 
-        //  Extract x5chain from unprotected headers (COSE label 33)
+        // Extract x5chain from unprotected headers (COSE label 33)
         val x5chainDataItem = coseSign1.unprotectedHeaders[Cose.COSE_LABEL_X5CHAIN.toCoseLabel]
-            ?: run { android.util.Log.w("IssuerTrust", "VERIFIER NULL A: no x5chain in COSE headers"); return@runCatching null }
+            ?: run { logger?.d(TAG, "No x5chain in COSE unprotected headers"); return@runCatching null }
         val x5chain = x5chainDataItem.asX509CertChain
 
-        //  Convert to List<X509Certificate> (JVM extension)
+        // Convert to List<X509Certificate> (JVM extension)
         val javaCerts = x5chain.javaX509Certificates
-        android.util.Log.d("IssuerTrust", "VERIFIER: x5chain has ${javaCerts.size} certs, leaf=${javaCerts.firstOrNull()?.subjectX500Principal}")
+        logger?.d(TAG, "x5chain has ${javaCerts.size} certs, leaf=${javaCerts.firstOrNull()?.subjectX500Principal}")
         require(javaCerts.isNotEmpty()) { "x5chain must contain at least one certificate" }
 
-        //  Evaluate trust via the ETSI library
-        android.util.Log.d("IssuerTrust", "VERIFIER: calling isChainTrusted.issuance()...")
+        // Evaluate trust via the ETSI library
         val trustResult = isChainTrusted.issuance(javaCerts, attestationIdentifier)
-            ?: run { android.util.Log.w("IssuerTrust", "VERIFIER NULL B: issuance() returned null"); return@runCatching null }
+            ?: run { logger?.d(TAG, "issuance() returned null"); return@runCatching null }
 
-        android.util.Log.d("IssuerTrust", "VERIFIER: trustResult=$trustResult")
-
-        //  Verify COSE signature using the leaf certificate's public key
+        // Verify COSE signature using the leaf certificate's public key
         val leafCert = x5chain.certificates.first()
         val algIdentifier = coseSign1.protectedHeaders[Cose.COSE_LABEL_ALG.toCoseLabel]
             ?.asNumber?.toInt()
-            ?: run { android.util.Log.w("IssuerTrust", "VERIFIER NULL C: no algorithm in COSE headers"); return@runCatching null }
+            ?: run { logger?.d(TAG, "No algorithm in COSE protected headers"); return@runCatching null }
         val algorithm = Algorithm.fromCoseAlgorithmIdentifier(algIdentifier)
 
         Cose.coseSign1Check(
@@ -89,6 +90,10 @@ internal class MsoMdocCredentialTrustVerifier(
 
         trustResult
     }.onFailure { e ->
-        android.util.Log.e("IssuerTrust", "MsoMdocCredentialTrustVerifier failed", e)
+        logger?.e(TAG, "MsoMdoc credential trust verification failed", e)
     }.getOrNull()
+
+    companion object {
+        private const val TAG = "MdocIssuerTrust"
+    }
 }

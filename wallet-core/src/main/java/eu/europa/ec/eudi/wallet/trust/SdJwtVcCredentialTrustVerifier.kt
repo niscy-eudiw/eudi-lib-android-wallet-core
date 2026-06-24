@@ -22,6 +22,9 @@ import eu.europa.ec.eudi.sdjwt.NimbusSdJwtOps
 import eu.europa.ec.eudi.sdjwt.vc.IssuerVerificationMethod
 import eu.europa.ec.eudi.sdjwt.vc.TypeMetadataPolicy
 import eu.europa.ec.eudi.sdjwt.vc.X509CertificateTrust
+import eu.europa.ec.eudi.wallet.internal.d
+import eu.europa.ec.eudi.wallet.internal.e
+import eu.europa.ec.eudi.wallet.logging.Logger
 import java.security.cert.TrustAnchor
 import java.security.cert.X509Certificate
 
@@ -37,6 +40,7 @@ import java.security.cert.X509Certificate
  */
 internal class SdJwtVcCredentialTrustVerifier(
     private val isChainTrusted: IsChainTrustedForAttestation<List<X509Certificate>, TrustAnchor>,
+    private val logger: Logger? = null,
 ) : CredentialTrustVerifier {
 
     override suspend fun verify(
@@ -47,8 +51,11 @@ internal class SdJwtVcCredentialTrustVerifier(
 
         // Create trust callback that captures the evaluation result
         val trust = X509CertificateTrust<List<X509Certificate>> { chain, _ ->
+            logger?.d(TAG, "x5c chain has ${chain.size} certs, leaf=${chain.firstOrNull()?.subjectX500Principal}")
             result = isChainTrusted.issuance(chain, attestationIdentifier)
-            result is CertificationChainValidation.Trusted
+            val trusted = result is CertificationChainValidation.Trusted
+            logger?.d(TAG, "issuance() trusted=$trusted")
+            trusted
         }
 
         // Create verifier with UsingX5c method
@@ -58,7 +65,13 @@ internal class SdJwtVcCredentialTrustVerifier(
             checkStatus = null
         )
 
-        verifier.verify(credentialValue).getOrNull()
+        verifier.verify(credentialValue)
+            .onFailure { e -> logger?.e(TAG, "SD-JWT VC credential trust verification failed", e) }
+            .getOrNull()
         return result
+    }
+
+    companion object {
+        private const val TAG = "SdJwtIssuerTrust"
     }
 }
