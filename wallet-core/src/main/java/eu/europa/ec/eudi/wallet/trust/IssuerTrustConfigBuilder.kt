@@ -210,8 +210,8 @@ class IssuerTrustConfigBuilder {
             ?: TrustPolicy.uniform(TrustPolicy.Action.ENFORCE)
 
         val defaultVerifiers = mapOf<KClass<out DocumentFormat>, CredentialTrustVerifier>(
-            MsoMdocFormat::class to MsoMdocCredentialTrustVerifier(attestation),
-            SdJwtVcFormat::class to SdJwtVcCredentialTrustVerifier(attestation),
+            MsoMdocFormat::class to MsoMdocCredentialTrustVerifier(attestation, logger),
+            SdJwtVcFormat::class to SdJwtVcCredentialTrustVerifier(attestation, logger),
         )
         val verifiers = defaultVerifiers + customVerifiers
 

@@ -26,6 +26,7 @@ import eu.europa.ec.eudi.wallet.document.IssuedDocument
 import eu.europa.ec.eudi.wallet.document.format.MsoMdocFormat
 import eu.europa.ec.eudi.wallet.document.format.SdJwtVcFormat
 import eu.europa.ec.eudi.wallet.internal.d
+import eu.europa.ec.eudi.wallet.internal.e
 import eu.europa.ec.eudi.wallet.logging.Logger
 import eu.europa.ec.eudi.wallet.trust.StatusListTrustConfig
 import io.ktor.client.HttpClient
@@ -255,9 +256,11 @@ class DocumentStatusResolverImpl(
             logger?.d(TAG, "resolveStatus: result=$status")
             status
         }
+    }.also {result ->
+        logger?.d(TAG, "resolveStatus: also=$result")
     }
 
-    private fun withJwtVerifier(
+        private fun withJwtVerifier(
         verifier: VerifyStatusListTokenJwtSignature,
         format: SdJwtVcFormat,
     ): VerifyStatusListTokenJwtSignature {
