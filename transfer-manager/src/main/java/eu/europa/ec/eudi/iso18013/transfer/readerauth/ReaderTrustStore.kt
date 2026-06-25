@@ -66,7 +66,7 @@ interface ReaderTrustStore {
          */
         @JvmStatic
         fun getDefault(trustedCertificates: List<X509Certificate>): ReaderTrustStore {
-            return ReaderTrustStoreImpl(trustedCertificates, DEFAULT)
+            return ReaderTrustStoreImpl(trustedCertificates, DEFAULT, revocationPolicy = RevocationPolicy.HardFail)
         }
 
         /**
