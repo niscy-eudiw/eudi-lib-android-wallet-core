@@ -33,14 +33,14 @@ import kotlin.coroutines.CoroutineContext
  *
  * Delegates reader certificate chain validation to the ETSI library's
  * [IsChainTrustedForEUDIW], enabling dynamic trust anchor resolution
- * from LoTE (ETSI TS 119 602) and/or LOTL (ETSI TS 119 612).
+ * from LoTE (ETSI TS 119 602)
  *
  * This is a drop-in replacement for
  * [eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStoreImpl] — configure it
  * via [eu.europa.ec.eudi.wallet.EudiWalletConfig.configureReaderTrustStore] or
  * [eu.europa.ec.eudi.wallet.EudiWallet.setReaderTrustStore].
  *
- * @param isChainTrusted the ETSI chain trust validator (supports LoTE, LOTL, or combined sources)
+ * @param isChainTrusted the ETSI chain trust validator (supports LoTE, or combined sources)
  * @param verificationContext the EUDI verification context for reader authentication
  *        (defaults to [VerificationContext.WalletRelyingPartyAccessCertificate])
  * @param coroutineContext the coroutine context for the sync/async bridge

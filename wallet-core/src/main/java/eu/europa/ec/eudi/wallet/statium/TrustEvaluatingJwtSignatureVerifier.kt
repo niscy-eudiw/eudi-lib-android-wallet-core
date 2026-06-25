@@ -76,9 +76,23 @@ internal class TrustEvaluatingJwtSignatureVerifier(
         // Apply policy
         val action = trustConfig.trustPolicy.resolve(attestationIdentifier, verificationContext)
         logger?.d(TAG, "JWT: policy action=$action")
-        if (action == TrustPolicy.Action.ENFORCE && trustResult is CertificationChainValidation.NotTrusted) {
-            logger?.e(TAG, "JWT: ENFORCE + NotTrusted → throwing", trustResult.cause)
-            throw StatusListNotTrustedException(trustResult.cause)
+        if (action == TrustPolicy.Action.ENFORCE) {
+            when {
+                trustResult == null -> {
+                    logger?.e(TAG, "JWT: ENFORCE + null trustResult → throwing")
+                    throw StatusListNotTrustedException(
+                        "No trust anchors available for attestation=$attestationIdentifier " +
+                            "(verificationContext=$verificationContext)"
+                    )
+                }
+                trustResult is CertificationChainValidation.NotTrusted -> {
+                    logger?.e(TAG, "JWT: ENFORCE + NotTrusted → throwing", trustResult.cause)
+                    throw StatusListNotTrustedException(
+                        "Status list token signer certificate chain is not trusted",
+                        trustResult.cause,
+                    )
+                }
+            }
         }
     }
 

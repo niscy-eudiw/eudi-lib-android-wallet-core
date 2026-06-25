@@ -20,8 +20,9 @@ package eu.europa.ec.eudi.wallet.statium
  * [trust policy][eu.europa.ec.eudi.wallet.trust.TrustPolicy] action is
  * [ENFORCE][eu.europa.ec.eudi.wallet.trust.TrustPolicy.Action.ENFORCE].
  *
- * @param cause the underlying cause from the trust evaluation
+ * @param message description of the trust failure
+ * @param cause the underlying cause from the trust evaluation, if available
  */
-class StatusListNotTrustedException(cause: Throwable) : Exception(
-    "Status list token signer certificate chain is not trusted", cause
+class StatusListNotTrustedException(message: String, cause: Throwable? = null) : Exception(
+    message, cause
 )
