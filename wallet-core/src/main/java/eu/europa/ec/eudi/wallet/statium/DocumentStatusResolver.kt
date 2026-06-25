@@ -256,8 +256,6 @@ class DocumentStatusResolverImpl(
             logger?.d(TAG, "resolveStatus: result=$status")
             status
         }
-    }.also {result ->
-        logger?.d(TAG, "resolveStatus: also=$result")
     }
 
         private fun withJwtVerifier(
