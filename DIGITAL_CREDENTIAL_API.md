@@ -2,8 +2,12 @@
 
 The **EUDI Wallet Core** library includes support for the [Digital Credential API](https://w3c-fedid.github.io/digital-credentials/).
 
-The current implementation of DCAPI follows the protocol `org-iso-mdoc`,
-according to the [ISO/IEC TS 18013-7:2025](https://www.iso.org/standard/91154.html) **Annex C**.
+DCAPI supports two protocol families:
+
+- **`org-iso-mdoc`** — ISO mdoc presentation, according to the [ISO/IEC TS 18013-7:2025](https://www.iso.org/standard/91154.html) **Annex C** (MSO mdoc documents).
+- **[OpenID4VP 1.0 over the Digital Credential API](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#appendix-A)** — `openid4vp-v1-signed` and `openid4vp-v1-unsigned` (MSO mdoc and SD-JWT VC documents).
+
+You choose which protocols the wallet accepts through the configuration described below.
 
 > **Note:** DCAPI is **disabled by default**. You can enable it in your application by following the steps below.
 
@@ -72,18 +76,60 @@ In the application's `AndroidManifest.xml` file define an Activity to listen the
 
 ### Configure the EudiWallet
 
-Configure and initialize the `EudiWallet` with DCAPI enabled:
+Configure and initialize the `EudiWallet` with DCAPI enabled. At least one supported protocol must
+be declared via `withSupportedProtocols(...)`:
 
 ```kotlin
 val config = EudiWalletConfig()
     .configureDCAPI {
         withEnabled(true) // Enable DCAPI, by default it is disabled
+        withSupportedProtocols(DCAPIProtocol.ISO_MDOC) // at least one protocol is required
     }
 // ... Rest of your configurations
 
 
 // Initialize the EudiWallet with the configuration
 val eudiWallet = EudiWallet(context, config)
+```
+
+#### Supported protocols
+
+The DCAPI protocols the wallet processes are declared with `withSupportedProtocols(...)`, using the
+`DCAPIProtocol` enum:
+
+- `DCAPIProtocol.ISO_MDOC` — ISO mdoc (`org-iso-mdoc`).
+- `DCAPIProtocol.OPENID4VP_V1_SIGNED` — OpenID4VP 1.0, signed request.
+- `DCAPIProtocol.OPENID4VP_V1_UNSIGNED` — OpenID4VP 1.0, unsigned request.
+
+> **Note:** Declaring at least one protocol is mandatory when DCAPI is enabled. Enabling DCAPI
+> without `withSupportedProtocols(...)` fails at configuration time. A request for a protocol that
+> is not declared here is rejected.
+
+Enabling an OpenID4VP protocol additionally requires the wallet's OpenID4VP configuration to be set
+via `configureOpenId4Vp { ... }` (see [Initialize the library](README.md#initialize-the-library));
+otherwise configuration fails. OpenID4VP over the DCAPI reuses that configuration.
+
+Document formats follow the enabled protocols:
+
+- **MSO mdoc** documents are presented over `org-iso-mdoc` and OpenID4VP.
+- **SD-JWT VC** documents are presented over OpenID4VP only, so they are offered to verifiers only
+  when an OpenID4VP protocol is enabled.
+
+Example enabling both ISO mdoc and OpenID4VP:
+
+```kotlin
+val config = EudiWalletConfig()
+    .configureOpenId4Vp {
+        // OpenID4VP configuration — required when an OpenID4VP protocol is enabled
+    }
+    .configureDCAPI {
+        withEnabled(true)
+        withSupportedProtocols(
+            DCAPIProtocol.ISO_MDOC,
+            DCAPIProtocol.OPENID4VP_V1_SIGNED,
+            DCAPIProtocol.OPENID4VP_V1_UNSIGNED,
+        )
+    }
 ```
 
 In the `DCAPIConfig` you can also set up your own allowlist of privileged user agents
@@ -118,6 +164,7 @@ You can provide it as a JSON String in the `DCAPIConfig`:
 val config = EudiWalletConfig()
     .configureDCAPI {
         withEnabled(true) // Enable DCAPI
+        withSupportedProtocols(DCAPIProtocol.ISO_MDOC) // at least one protocol is required
         withPrivilegedAllowlist(customAllowListJson) // Override the bundled default allowlist
     }
 ```
@@ -134,8 +181,9 @@ val customWallet = EudiWallet(context, config) {
 
 ### Verifier Origin Handling
 
-When the wallet receives a DCAPI request, it must determine the **origin** of the
-verifier and bind it into the `SessionTranscript` according to ISO/IEC 18013-7 Annex C.
+When the wallet receives a DCAPI request, it must determine the **origin** of the verifier and bind
+it into the session transcript: for `org-iso-mdoc` according to ISO/IEC TS 18013-7:2025 **Annex C**,
+and for OpenID4VP according to [OpenID4VP 1.0, §B.2.6](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#appendix-B.2.6), where the session transcript applies to **mdoc** documents only.
 
 #### Web origin (privileged user agents)
 
@@ -161,8 +209,8 @@ android:apk-key-hash:<encoded SHA 256 fingerprint>
 
 See for more details [here](https://developer.android.com/identity/digital-credentials/credential-holder/credential-holder#check-verifier-origin).
 
-**Note:** For interoperability, native Android verifier apps must compute the same
-origin value from their own signing certificate and bind it into their `SessionTranscript`.
+**Note:** For interoperability, a native Android verifier app must use the same origin value in its
+session transcript.
 
 ### Starting the DCAPI Presentation
 
@@ -274,3 +322,16 @@ if (error is DCAPIException) {
     finish()
 }
 ```
+
+## Limitations
+
+Some DCQL features are not yet supported over the Digital Credential API. These are tied to the
+version of the credential matcher currently bundled with the library, and are expected to be
+supported as the matcher is updated:
+
+- **DCQL `multiple` matching** — a credential query with `"multiple": true` (returning more than
+  one matching credential for a single query) is not supported; one credential per query is offered.
+- **Array claim paths** — DCQL claim paths that select array elements, by index or with the `null`
+  wildcard (e.g. `["nationalities", null]`), are not supported.
+
+In addition, **`openid4vp-v1-multisigned`** (multi-signed OpenID4VP requests) is not supported yet.

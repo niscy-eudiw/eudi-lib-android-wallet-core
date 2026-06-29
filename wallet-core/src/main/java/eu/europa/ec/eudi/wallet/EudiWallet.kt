@@ -24,10 +24,11 @@ import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStore
 import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStoreImpl
 import eu.europa.ec.eudi.statium.Status
 import eu.europa.ec.eudi.wallet.dcapi.DCAPIManager
-import eu.europa.ec.eudi.wallet.dcapi.DCAPIRegistration
-import eu.europa.ec.eudi.wallet.dcapi.DCAPIRequestProcessor
-import eu.europa.ec.eudi.wallet.dcapi.DocumentManagerWithDCAPI
-import eu.europa.ec.eudi.wallet.dcapi.getDefaultPrivilegedUserAgents
+import eu.europa.ec.eudi.wallet.dcapi.registration.DCAPIRegistration
+import eu.europa.ec.eudi.wallet.dcapi.process.isomdoc.IsoMdocDCAPIRequestProcessor
+import eu.europa.ec.eudi.wallet.dcapi.process.openid4vp.OpenId4VpDCAPIRequestProcessor
+import eu.europa.ec.eudi.wallet.dcapi.registration.DocumentManagerWithDCAPI
+import eu.europa.ec.eudi.wallet.dcapi.internal.getDefaultPrivilegedUserAgents
 import eu.europa.ec.eudi.wallet.issue.openid4vci.reissue.DocumentManagerWithMetadataCleanup
 import eu.europa.ec.eudi.wallet.document.DocumentId
 import eu.europa.ec.eudi.wallet.document.DocumentManager
@@ -191,7 +192,7 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
      * @property transactionLogger the transaction logger to use if you want to provide a custom implementation
      * @property documentStatusResolver the document status resolver to use if you want to provide a custom implementation
      * @property dcapiRegistration the DCAPI registration to use if you want to provide a custom implementation, by default
-     * it will be [DCAPIIsoMdocRegistration] when the DCAPI is enabled in the configuration
+     * it will be [DefaultDCAPIRegistration] when the DCAPI is enabled in the configuration
      */
     class Builder(
         context: Context,
@@ -317,7 +318,7 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
         /**
          * Configure with the given [DCAPIRegistration] to use for registering credentials
          * with the Digital Credential API (DCAPI).
-         * If not set, the default [DCAPIIsoMdocRegistration] will be used when the DCAPI is enabled
+         * If not set, the default [DefaultDCAPIRegistration] will be used when the DCAPI is enabled
          * in the configuration.
          *
          * @param dcapiRegistration the DCAPI registration
@@ -408,10 +409,12 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
                         )
                     }
                     .let { manager ->
-                        if (config.dcapiConfig?.enabled == true) {
+                        val dcapiCfg = config.dcapiConfig
+                        if (dcapiCfg?.enabled == true) {
                             DocumentManagerWithDCAPI(
                                 delegate = manager,
                                 dcapiRegistration = dcapiRegistration,
+                                supportedProtocols = dcapiCfg.supportedProtocols.toList(),
                                 logger = loggerToUse
                             )
                         } else manager
@@ -484,8 +487,25 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
             val dcapiManager = config.dcapiConfig?.takeIf { it.enabled }?.let { dcapiConfig ->
                 val privilegedAllowlist =
                     dcapiConfig.privilegedAllowlist ?: context.getDefaultPrivilegedUserAgents()
+
+                val supportedProtocols = dcapiConfig.supportedProtocols.toList()
+                val openId4VpSupported = supportedProtocols.filter { it.isOpenId4Vp }
+
+                // OpenID4VP-over-DC-API processor, only when at least one OpenID4VP protocol is enabled.
+                val openId4VpDcApiProcessor = config.openId4VpConfig
+                    ?.takeIf { openId4VpSupported.isNotEmpty() }
+                    ?.let { openId4VpConfig ->
+                        OpenId4VpDCAPIRequestProcessor(
+                            openId4VpConfig = openId4VpConfig,
+                            dcqlRequestProcessor = DcqlRequestProcessor(documentManager, readerTrustStore),
+                            privilegedAllowlist = privilegedAllowlist,
+                            supportedProtocols = openId4VpSupported,
+                            ktorHttpClientFactory = ktorHttpClientFactory,
+                            logger = loggerObj,
+                        )
+                    }
                 DCAPIManager(
-                    DCAPIRequestProcessor(
+                    isoMdocRequestProcessor = IsoMdocDCAPIRequestProcessor(
                         documentManager = documentManager,
                         readerTrustStore = readerTrustStore,
                         readerAuthPolicy = config.readerAuthPolicy,
@@ -494,6 +514,8 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
                         zkResponsePolicy = config.zkResponsePolicy,
                         logger = loggerObj
                     ),
+                    supportedProtocols = supportedProtocols,
+                    openId4VpRequestProcessor = openId4VpDcApiProcessor,
                     logger = loggerObj
                 )
             }

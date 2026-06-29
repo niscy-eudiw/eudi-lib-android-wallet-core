@@ -14,12 +14,16 @@
  * limitations under the License.
  */
 
-package eu.europa.ec.eudi.wallet.dcapi
+package eu.europa.ec.eudi.wallet.dcapi.process.isomdoc
+
+import eu.europa.ec.eudi.wallet.dcapi.DCAPIRequest
+import eu.europa.ec.eudi.wallet.dcapi.DCAPIException
+import eu.europa.ec.eudi.wallet.dcapi.DCAPIProtocol
+import eu.europa.ec.eudi.wallet.dcapi.internal.*
 
 import androidx.credentials.ExperimentalDigitalCredentialApi
 import androidx.credentials.GetDigitalCredentialOption
 import androidx.credentials.provider.ProviderGetCredentialRequest
-import androidx.credentials.registry.provider.selectedEntryId
 import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStore
 import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStoreAware
 import eu.europa.ec.eudi.iso18013.transfer.response.ReaderAuthPolicy
@@ -35,26 +39,22 @@ import eu.europa.ec.eudi.wallet.internal.e
 import eu.europa.ec.eudi.wallet.logging.Logger
 import org.json.JSONObject
 import org.multipaz.mdoc.zkp.ZkSystemRepository
-import org.multipaz.presentment.CredentialPresentmentData
-import org.multipaz.presentment.CredentialPresentmentSet
-import org.multipaz.presentment.CredentialPresentmentSetOption
-import org.multipaz.presentment.CredentialPresentmentSetOptionMember
 
 /**
- * Processes requests for the Digital Credential API (DCAPI) by delegating to the
- * ISO 18013-5 [DeviceRequestProcessor] and narrowing its result to the credential the OS
- * picker has already selected (via [ProviderGetCredentialRequest.selectedEntryId]).
+ * Processes ISO mdoc requests for the Digital Credential API (DCAPI), following the `org-iso-mdoc`
+ * protocol of ISO/IEC TS 18013-7:2025 Annex C.
  *
- * The exposed [RequestProcessor.ProcessedRequest.Success.presentmentData] tree is filtered
- * to that single credential, so the wallet UI cannot inadvertently surface other matching
- * documents during consent.
+ * It delegates to the ISO 18013-5 [DeviceRequestProcessor] and narrows the result to the
+ * document(s) the OS credential picker selected, so the wallet only discloses what the user chose.
  *
- * Follows protocol `org-iso-mdoc` per ISO/IEC TS 18013-7:2025 Annex C.
+ * @param documentManager provides the issued documents to match against the request.
+ * @param readerTrustStore trust store used to verify the reader's authentication.
+ * @param readerAuthPolicy how reader authentication results affect document disclosure.
+ * @param privilegedAllowlist allowlist of privileged callers permitted to set the request origin.
+ * @param zkSystemRepository optional Zero-Knowledge Proof system repository.
+ * @param logger optional logger.
  */
-
-private const val TAG = "DCAPIRequestProcessor"
-
-internal class DCAPIRequestProcessor(
+class IsoMdocDCAPIRequestProcessor(
     private val documentManager: DocumentManager,
     override var readerTrustStore: ReaderTrustStore?,
     private val readerAuthPolicy: ReaderAuthPolicy = ReaderAuthPolicy.EnforceIfPresent,
@@ -64,39 +64,47 @@ internal class DCAPIRequestProcessor(
     private var logger: Logger? = null,
 ) : RequestProcessor, ReaderTrustStoreAware {
 
+    @OptIn(ExperimentalDigitalCredentialApi::class)
     override suspend fun process(request: Request): RequestProcessor.ProcessedRequest {
         require(request is DCAPIRequest) { "Request must be an DCAPIRequest" }
         logger?.d(TAG, "Processing DCAPI request")
 
         val credRequest = request.providerGetCredentialRequest
         val (deviceRequest, origin) = credRequest.toDeviceRequest()
-        val processedDeviceRequest = DeviceRequestProcessor(
+        val processed = DeviceRequestProcessor(
             documentManager = documentManager,
             readerTrustStore = readerTrustStore,
             readerAuthPolicy = readerAuthPolicy,
             zkSystemRepository = zkSystemRepository,
             zkResponsePolicy = zkResponsePolicy
-        ).process(deviceRequest) as? ProcessedDeviceRequest
-            ?: return RequestProcessor.ProcessedRequest.Failure(
-                DCAPIException("DeviceRequestProcessor failed to produce a ProcessedDeviceRequest"),
-            )
+        ).process(deviceRequest)
+        val processedDeviceRequest = processed as? ProcessedDeviceRequest
+            ?: run {
+                logger?.e(TAG, "DeviceRequestProcessor did not return ProcessedDeviceRequest: $processed")
+                return RequestProcessor.ProcessedRequest.Failure(
+                    DCAPIException("DeviceRequestProcessor failed: $processed"),
+                )
+            }
 
-        val credentialId = credRequest.selectedEntryId
-            ?: return RequestProcessor.ProcessedRequest.Failure(
-                DCAPIException("No selected credential ID in DCAPI request"),
+        val selectedIds = credRequest.selectedDocumentIds()
+        if (selectedIds.isEmpty()) {
+            logger?.e(TAG, "No credential selected by the OS picker for the DCAPI request")
+            return RequestProcessor.ProcessedRequest.Failure(
+                DCAPIException("No selected credential in DCAPI request"),
             )
-        logger?.d(TAG, "Filtering presentment data for credential ID: $credentialId")
+        }
+        logger?.d(TAG, "Filtering presentment data for credential IDs: $selectedIds")
 
         val filteredPresentmentData = processedDeviceRequest.presentmentData
-            .filterByCredentialId(credentialId)
+            .filterByCredentialIds(selectedIds)
         if (filteredPresentmentData.credentialSets.isEmpty()) {
-            logger?.e(TAG, "No requested document found for credential ID: $credentialId")
+            logger?.e(TAG, "No requested document found for credential IDs: $selectedIds")
             return RequestProcessor.ProcessedRequest.Failure(
-                DCAPIException("No requested document found for credential ID: $credentialId"),
+                DCAPIException("No requested document found for credential IDs: $selectedIds"),
             )
         }
 
-        return ProcessedDCPAPIRequest(
+        return ProcessedIsoMdocDCAPIRequest(
             processedDeviceRequest = processedDeviceRequest,
             providerGetCredentialRequest = request.providerGetCredentialRequest,
             origin = origin,
@@ -109,30 +117,16 @@ internal class DCAPIRequestProcessor(
 
     @OptIn(ExperimentalDigitalCredentialApi::class)
     private fun ProviderGetCredentialRequest.toDeviceRequest(): Pair<DeviceRequest, String> {
-        // Resolve the origin according to:
-        // https://developer.android.com/identity/digital-credentials/credential-holder/credential-holder#check-verifier-origin
-        //
-        // Privileged callers, such as trusted browsers, may act on behalf of another verifier
-        // by setting an origin. CallingAppInfo.getOrigin() returns this origin only when the
-        // caller's package name and signing certificate match the provided allowlist.
-        //
-        // If a trusted origin is returned, use it in the response.
-        //
-        // If origin is empty, the request is from an Android native app,
-        // and we derive the origin from the caller's signing certificate in the form:
-        // 'android:apk-key-hash:<encoded SHA 256 fingerprint>'
-        val callingOrigin = this.callingAppInfo.getOrigin(privilegedAllowlist)
-            ?: getAppOrigin(callingAppInfo.signingInfoCompat.signingCertificateHistory[0].toByteArray())
+        val callingOrigin = resolveOrigin(privilegedAllowlist)
         logger?.d(TAG, "Origin: $callingOrigin")
+
+        val (protocol, index) = resolveDcApiRequest(listOf(DCAPIProtocol.ISO_MDOC))
+        require(protocol == DCAPIProtocol.ISO_MDOC.identifier) { "Unsupported protocol: $protocol" }
 
         val option = this.credentialOptions[0] as GetDigitalCredentialOption
         val requestJson = JSONObject(option.requestJson)
-        val firstRequest = requestJson.getJSONArray(REQUESTS).getJSONObject(0)
-        val protocol = firstRequest[PROTOCOL] as String
-
-        require(protocol == DC_API_PROTOCOL_ORG_ISO_MDOC) { "Unsupported protocol: $protocol" }
-
-        val data = firstRequest[DATA] as JSONObject
+        val request = requestJson.getJSONArray(REQUESTS).getJSONObject(index)
+        val data = request[DATA] as JSONObject
         val deviceRequestBase64 = data[DEVICE_REQUEST] as String
         val encryptionInfoBase64 = data.getString(ENCRYPTION_INFO)
         val deviceRequestBytes = deviceRequestBase64.fromBase64()
@@ -150,29 +144,9 @@ internal class DCAPIRequestProcessor(
             sessionTranscriptBytes = sessionTranscriptBytes
         ) to callingOrigin
     }
-}
 
-/**
- * Walk a [CredentialPresentmentData] tree and keep only matches whose underlying
- * `Credential.document.identifier` equals [credentialId].
- */
-private fun CredentialPresentmentData.filterByCredentialId(
-    credentialId: String,
-): CredentialPresentmentData {
-    val sets = credentialSets.mapNotNull { set ->
-        val options = set.options.mapNotNull { option ->
-            val members = option.members.mapNotNull { member ->
-                val matches = member.matches.filter {
-                    it.credential.document.identifier == credentialId
-                }
-                if (matches.isEmpty()) null
-                else CredentialPresentmentSetOptionMember(matches = matches)
-            }
-            if (members.isEmpty()) null
-            else CredentialPresentmentSetOption(members = members)
-        }
-        if (options.isEmpty()) null
-        else CredentialPresentmentSet(optional = set.optional, options = options)
+    companion object {
+        private const val TAG = "IsoMdocDCAPIRequestProcessor"
+        private const val DEVICE_REQUEST = "deviceRequest"
     }
-    return CredentialPresentmentData(sets)
 }

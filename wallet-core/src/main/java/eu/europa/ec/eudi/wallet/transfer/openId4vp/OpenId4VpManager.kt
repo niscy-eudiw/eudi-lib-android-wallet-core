@@ -90,7 +90,7 @@ class OpenId4VpManager(
      * Uses the configuration and trust anchor from the request processor.
      */
     private val openId4Vp by lazy {
-        OpenId4Vp(
+        OpenId4Vp.overRedirects(
             openId4VPConfig = makeOpenId4VPConfig(
                 config,
                 requestProcessor.openid4VpX509CertificateTrust

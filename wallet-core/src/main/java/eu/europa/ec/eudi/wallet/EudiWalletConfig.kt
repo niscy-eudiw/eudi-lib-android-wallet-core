@@ -112,6 +112,11 @@ import kotlin.time.Duration.Companion.minutes
  *     .configureDCAPI {
  *         withEnabled(true) // Enable DCAPI, by default it is disabled
  *         withPrivilegedAllowlist("allowlist") // your own allowlist of privileged browsers/apps that you trust
+ *         withSupportedProtocols(
+ *             DCAPIProtocol.ISO_MDOC,
+ *             DCAPIProtocol.OPENID4VP_V1_SIGNED,
+ *             DCAPIProtocol.OPENID4VP_V1_UNSIGNED
+ *         )
  *     }
  *     .configureZkp(
  *         // To enable ZKP Support provide a ZkSystemRepository, for example:
@@ -208,7 +213,7 @@ class EudiWalletConfig {
     }
 
     /**
-     * Configuration for the Digital Credential.
+     * Configuration for the Digital Credential API (DCAPI).
      */
     var dcapiConfig: DCAPIConfig? = null
         private set
@@ -727,6 +732,20 @@ class EudiWalletConfig {
         this.etsiTrustConfig = EtsiTrustConfigBuilder().apply(block).build()
     }
 
+    /**
+     * Validates configuration that spans more than one section. OpenID4VP over the Digital
+     * Credential API reuses the wallet's OpenID4VP configuration, so enabling an OpenID4VP protocol
+     * in [DCAPIConfig.supportedProtocols] requires [openId4VpConfig] to be set.
+     */
+    private fun validateDcApiConfig() {
+        val dcapi = dcapiConfig?.takeIf { it.enabled } ?: return
+        require(openId4VpConfig != null || dcapi.supportedProtocols.none { it.isOpenId4Vp }) {
+            "DCAPIConfig.supportedProtocols includes an OpenID4VP protocol but " +
+                "EudiWalletConfig.openId4VpConfig is not set — configure OpenID4VP, or remove " +
+                "the OpenID4VP protocols from DCAPIConfig.supportedProtocols."
+        }
+    }
+
     companion object {
 
         const val DEFAULT_DOCUMENT_MANAGER_IDENTIFIER = "EudiWalletDocumentManager"
@@ -737,7 +756,9 @@ class EudiWalletConfig {
          * @return the EudiWalletConfig instance
          */
         operator fun invoke(configure: EudiWalletConfig.() -> Unit): EudiWalletConfig =
-            EudiWalletConfig().apply(configure)
+            EudiWalletConfig().apply(configure).also {
+                it.validateDcApiConfig()
+            }
     }
 }
 

@@ -100,6 +100,24 @@ class ProcessedDcqlRequest(
     override suspend fun generateResponse(
         selection: CredentialPresentmentSelection,
         keyUnlockData: Map<String, KeyUnlockData>
+    ): ResponseResult = generateResponse(
+        selection = selection,
+        keyUnlockData = keyUnlockData,
+        sessionTranscriptProvider = { it.getSessionTranscriptBytes() },
+        sdJwtAudience = null
+    )
+
+    /**
+     * Core response builder, parameterized so the DC API channel can inject the
+     * `OpenID4VPDCAPIHandover`-based session transcript (via [sessionTranscriptProvider],
+     * which receives [resolvedRequestObject]) and the SD-JWT VC `aud` ([sdJwtAudience],
+     * `origin:<origin>` for DC API). The default 2-arg override reproduces the HTTP behaviour.
+     */
+    suspend fun generateResponse(
+        selection: CredentialPresentmentSelection,
+        keyUnlockData: Map<String, KeyUnlockData>,
+        sessionTranscriptProvider: (ResolvedRequestObject) -> ByteArray,
+        sdJwtAudience: String?
     ): ResponseResult {
         // Confirm the user's consent-UI changes did not break the original DCQL
         // request — e.g. a deselected credential leaves a required query uncovered,
@@ -128,7 +146,7 @@ class ProcessedDcqlRequest(
                     FORMAT_MSO_MDOC -> verifiablePresentationForMsoMdoc(
                         match = match,
                         documentManager = documentManager,
-                        sessionTranscript = resolvedRequestObject.getSessionTranscriptBytes(),
+                        sessionTranscript = sessionTranscriptProvider(resolvedRequestObject),
                         keyUnlockData = keyUnlockData[match.credential.identifier]
                     )
 
@@ -136,7 +154,8 @@ class ProcessedDcqlRequest(
                         resolvedRequestObject = resolvedRequestObject,
                         match = match,
                         documentManager = documentManager,
-                        keyUnlockData = keyUnlockData[match.credential.identifier]
+                        keyUnlockData = keyUnlockData[match.credential.identifier],
+                        audience = sdJwtAudience
                     )
 
                     else -> throw IllegalArgumentException("Unsupported format: $format")
@@ -181,4 +200,21 @@ class ProcessedDcqlRequest(
             ResponseResult.Failure(e)
         }
     }
+
+    /**
+     * Returns a copy of this request with its presentment tree replaced by [presentmentData],
+     * preserving the resolved request, document manager, requester, trust metadata, nonce and
+     * per-query `multiple` flags (so the `multiple`-aware [presentmentSelections] logic is kept).
+     * Useful for narrowing the offered credentials to a previously made selection.
+     */
+    fun withPresentmentData(presentmentData: CredentialPresentmentData): ProcessedDcqlRequest =
+        ProcessedDcqlRequest(
+            resolvedRequestObject = resolvedRequestObject,
+            documentManager = documentManager,
+            presentmentData = presentmentData,
+            requester = requester,
+            trustMetadata = trustMetadata,
+            msoMdocNonce = msoMdocNonce,
+            multipleByQueryId = multipleByQueryId,
+        )
 }

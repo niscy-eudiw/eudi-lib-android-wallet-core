@@ -18,12 +18,10 @@
  * Constants for the Digital Credential API (DCAPI).
  */
 
-package eu.europa.ec.eudi.wallet.dcapi
+package eu.europa.ec.eudi.wallet.dcapi.internal
 
-internal const val DC_API_PROTOCOL_ORG_ISO_MDOC = "org-iso-mdoc"
 internal const val REQUESTS = "requests"
 internal const val PROTOCOL = "protocol"
 internal const val DCAPI = "dcapi"
 internal const val DATA = "data"
-internal const val DEVICE_REQUEST = "deviceRequest"
 internal const val ENCRYPTION_INFO = "encryptionInfo"

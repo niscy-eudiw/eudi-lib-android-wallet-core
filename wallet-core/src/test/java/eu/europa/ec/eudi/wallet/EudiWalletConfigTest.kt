@@ -20,6 +20,7 @@ import eu.europa.ec.eudi.iso18013.transfer.readerauth.ReaderTrustStore
 import eu.europa.ec.eudi.wallet.issue.openid4vci.OpenId4VciManager
 import eu.europa.ec.eudi.wallet.logging.Logger
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.ClientIdScheme
+import eu.europa.ec.eudi.wallet.dcapi.DCAPIProtocol
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.EncryptionAlgorithm
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.EncryptionMethod
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.Format
@@ -76,6 +77,7 @@ class EudiWalletConfigTest {
             configureDCAPI {
                 withEnabled(true)
                 withPrivilegedAllowlist("{}")
+                withSupportedProtocols(DCAPIProtocol.ISO_MDOC, DCAPIProtocol.OPENID4VP_V1_SIGNED)
             }
         }
         assertEquals(2, config.readerTrustedCertificates?.size)
@@ -110,6 +112,10 @@ class EudiWalletConfigTest {
 
         assertEquals(true, config.dcapiConfig?.enabled)
         assertEquals("{}", config.dcapiConfig?.privilegedAllowlist)
+        assertEquals(
+            setOf(DCAPIProtocol.ISO_MDOC, DCAPIProtocol.OPENID4VP_V1_SIGNED),
+            config.dcapiConfig?.supportedProtocols
+        )
     }
 
     @Test
