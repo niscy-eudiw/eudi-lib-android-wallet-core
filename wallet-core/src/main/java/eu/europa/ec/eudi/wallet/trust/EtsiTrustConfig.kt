@@ -41,7 +41,7 @@ import kotlin.time.Duration.Companion.minutes
  * @property relaxCertificateProfiles whether to strip end-entity profile constraints (for DEV/testing)
  * @property relaxPkixRevocation whether to disable PKIX revocation checking (for DEV/testing)
  * @property customJwtSignatureVerifier optional custom JWT signature verifier for LoTE JWTs;
- *   when null, the core uses its built-in [LoteJwtSignatureVerifier]
+ *   when null, the core uses its built-in [LoteJwtVerifier]
  * @property loteConstraints controls whether additional LoTE pointers are followed
  */
 data class EtsiTrustConfig(
@@ -164,7 +164,7 @@ class EtsiTrustConfigBuilder {
     /**
      * Sets a custom JWT signature verifier for LoTE JWTs.
      *
-     * When not set, the core uses its built-in [LoteJwtSignatureVerifier] that
+     * When not set, the core uses its built-in [LoteJwtVerifier] that
      * verifies JWT signatures using the `x5c` certificate chain from the JWT header.
      *
      * @param verifier the custom JWT signature verifier
