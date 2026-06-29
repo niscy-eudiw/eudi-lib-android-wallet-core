@@ -31,17 +31,21 @@ import java.security.interfaces.RSAPublicKey
 import java.util.Base64
 
 /**
- * JWT signature verifier for LoTE (List of Trusted Entities) JWTs.
+ * Default LoTE JWT verifier.
  *
- * Verifies the JWS signature of LoTE JWTs by:
- * Parsing the JWT compact serialization
- * Extracting the `x5c` certificate chain from the JWS header
- * Verifying the signature using the leaf certificate's public key
+ * This implementation **only verifies the JWS cryptographic signature** using the leaf
+ * certificate's public key from the `x5c` header. It does **not** perform:
+ * - Certificate chain validation (PKIX)
+ * - CRL / OCSP revocation checking on the signing certificate
+ * - Certificate policy or profile constraint checks
  *
+ * These additional trust checks will be added in a future release. In the meantime,
+ * provide a custom [VerifyJwtSignature] implementation via
+ * [EtsiTrustConfig.Builder.jwtSignatureVerifier] if thorough verification is required.
  *
  * @param logger optional logger for diagnostic output
  */
-internal class LoteJwtSignatureVerifier(
+internal class LoteJwtVerifier(
     private val logger: Logger? = null,
 ) : VerifyJwtSignature {
 

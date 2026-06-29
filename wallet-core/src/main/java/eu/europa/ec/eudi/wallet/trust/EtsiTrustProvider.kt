@@ -86,7 +86,7 @@ internal class EtsiTrustProvider(
 
         // LoTE pointer loading + JWT verification
         val jwtVerifier = config.customJwtSignatureVerifier
-            ?: LoteJwtSignatureVerifier(logger)
+            ?: LoteJwtVerifier(logger)
         val loadLoTEAndPointers = LoadLoTEAndPointers(
             constraints = config.loteConstraints,
             verifyJwtSignature = jwtVerifier,

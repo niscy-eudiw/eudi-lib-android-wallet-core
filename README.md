@@ -647,16 +647,19 @@ library directly (or any other trust framework).
 
 #### Dependencies
 
-Both ETSI consultation modules are exposed as `api` dependencies from wallet-core, so
-consumers can reference their types directly:
+The `etsi-1196x2-consultation` module is exposed as an `api` dependency from wallet-core,
+so consumers can reference its types directly (`SupportedLists`, `AttestationClassifications`,
+`IsChainTrustedForEUDIW`, etc.).
 
-- `etsi-1196x2-consultation` — base consultation types (`SupportedLists`, `AttestationClassifications`, `IsChainTrustedForEUDIW`, etc.)
-- `etsi-119602-consultation` — `Uri` type used in `configureEtsiTrust` DSL
+The `etsi-119602-consultation` module (which provides the `Uri` type used in `configureEtsiTrust`
+DSL) is **not** transitively available due to an upstream packaging issue. Consumers must
+declare it explicitly:
 
 ```groovy
 dependencies {
-    implementation "eu.europa.ec.eudi:eudi-lib-android-wallet-core:0.26.0-SNAPSHOT"
-    // Both ETSI modules are available transitively — no additional dependency needed
+    implementation "eu.europa.ec.eudi:eudi-lib-android-wallet-core:0.29.0-SNAPSHOT"
+    // Required explicitly — Uri type is not transitive from wallet-core
+    implementation "eu.europa.ec.eudi:eudi-lib-kmp-etsi-119602-consultation:${VERSION}"
 }
 ```
 
@@ -711,10 +714,13 @@ val config = EudiWalletConfig {
 }
 ```
 
-> **JWT Signature Verification:** The core includes a built-in `VerifyJwtSignature`
-> implementation that extracts the `x5c` certificate chain from the LoTE JWT header and
-> verifies the signature using the leaf certificate's public key (EC and RSA supported).
-> To override this, pass a custom verifier via `jwtSignatureVerifier()`.
+> **LoTE JWT Verification:** The built-in `LoteJwtVerifier` only performs **cryptographic
+> signature verification** — it extracts the `x5c` chain from the JWT header and verifies
+> the JWS signature using the leaf certificate's public key (EC and RSA supported). It does
+> **not** perform certificate chain validation (PKIX), CRL/OCSP revocation checking, or
+> certificate profile constraint checks on the signing certificate. These additional trust
+> checks will be added in a future release. To provide a custom implementation with
+> thorough verification, pass it via `jwtSignatureVerifier()`.
 >
 > **DEV/Testing knobs:** `relaxCertificateProfiles()` strips `endEntityProfile` constraints
 > from all provider types, useful when DEV certificates don't fully conform to ETSI profile
