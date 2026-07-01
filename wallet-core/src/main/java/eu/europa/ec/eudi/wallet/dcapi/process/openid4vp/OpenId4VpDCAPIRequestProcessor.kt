@@ -105,6 +105,14 @@ class OpenId4VpDCAPIRequestProcessor(
             }
 
             is Resolution.Success -> {
+                try {
+                    openId4VpConfig.encryptionPolicy
+                        .enforce(resolution.requestObject.responseMode)
+                } catch (e: IllegalArgumentException) {
+                    logger?.e(TAG, "EncryptionPolicy rejected DC-API request", e)
+                    return RequestProcessor.ProcessedRequest.Failure(e)
+                }
+
                 logger?.d(TAG, "Resolved OpenID4VP DC API request (protocol=$protocol); delegating to DCQL processor")
                 // The resolved request carries a DCQL query — reuse the shared DCQL processor.
                 val processed =

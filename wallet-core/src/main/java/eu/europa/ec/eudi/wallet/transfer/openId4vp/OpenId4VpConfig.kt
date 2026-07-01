@@ -18,6 +18,7 @@
 
 package eu.europa.ec.eudi.wallet.transfer.openId4vp
 
+import eu.europa.ec.eudi.openid4vp.ResponseMode
 import org.multipaz.crypto.Algorithm
 import java.net.URI
 
@@ -62,11 +63,15 @@ import java.net.URI
  * @property encryptionMethods List of supported encryption methods for content encryption
  * @property schemes URI schemes supported for OpenID4VP requests (default: "mdoc-openid4vp")
  * @property formats Supported credential formats (mDL/mDoc, SD-JWT VC, etc.)
+ * @property encryptionPolicy Policy enforcing `response_mode` constraints on incoming
+ *   requests (default: [EncryptionPolicy.HAIP], which accepts only encrypted response
+ *   modes — `direct_post.jwt` for OpenID4VP and `dc_api.jwt` for DC-API).
  *
  * @see ClientIdScheme
  * @see EncryptionAlgorithm
  * @see EncryptionMethod
  * @see Format
+ * @see EncryptionPolicy
  * @since 1.0.0
  */
 class OpenId4VpConfig private constructor(private val builder: Builder) {
@@ -84,6 +89,39 @@ class OpenId4VpConfig private constructor(private val builder: Builder) {
         get() = builder.schemes
 
     val formats: List<Format> = builder.formats
+
+    val encryptionPolicy: EncryptionPolicy = builder.encryptionPolicy
+
+    /**
+     * Policy enforcing constraints on the `response_mode` of an incoming request.
+     */
+    fun interface EncryptionPolicy {
+
+        /**
+         * Enforces the policy on [responseMode]. Throws when the mode is not accepted.
+         */
+        fun enforce(responseMode: ResponseMode)
+
+        companion object {
+
+            /**
+             * HAIP profile — accepts only encrypted response modes:
+             *  - OpenID4VP flow: [ResponseMode.DirectPostJwt]
+             *  - DC-API flow:    [ResponseMode.DCApiJwt]
+             *
+             * Anything else is rejected.
+             */
+            val HAIP = EncryptionPolicy { responseMode ->
+                require(
+                    responseMode is ResponseMode.DirectPostJwt ||
+                        responseMode == ResponseMode.DCApiJwt
+                ) {
+                    "HAIP profile requires an encrypted response mode " +
+                        "(direct_post.jwt or dc_api.jwt); got $responseMode"
+                }
+            }
+        }
+    }
 
     /**
      * Builder for constructing [OpenId4VpConfig] instances with validation and sensible defaults.
@@ -212,6 +250,19 @@ class OpenId4VpConfig private constructor(private val builder: Builder) {
          */
         fun withFormats(vararg formats: Format) =
             withFormats(formats.toList())
+
+        var encryptionPolicy: EncryptionPolicy = EncryptionPolicy.HAIP
+            private set
+
+        /**
+         * Sets the [EncryptionPolicy] applied to the response mode of an incoming
+         * request. Defaults to [EncryptionPolicy.HAIP], which accepts only encrypted
+         * response modes.
+         *
+         * @param encryptionPolicy the policy to apply.
+         */
+        fun withEncryptionPolicy(encryptionPolicy: EncryptionPolicy) =
+            apply { this.encryptionPolicy = encryptionPolicy }
 
         /**
          * Builds the [OpenId4VpConfig].
