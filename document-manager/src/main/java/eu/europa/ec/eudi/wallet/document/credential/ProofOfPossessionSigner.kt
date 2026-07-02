@@ -32,8 +32,8 @@ import org.multipaz.securearea.SecureArea
  *
  * @property list The list of [ProofOfPossessionSigner] instances to delegate to.
  */
-class ProofOfPossessionSigners(list: List<ProofOfPossessionSigner>) :
-    Collection<ProofOfPossessionSigner> by list
+class ProofOfPossessionSigners(private val list: List<ProofOfPossessionSigner>) :
+    List<ProofOfPossessionSigner> by list
 
 /**
  * Interface for creating Proof of Possession (PoP) signatures.

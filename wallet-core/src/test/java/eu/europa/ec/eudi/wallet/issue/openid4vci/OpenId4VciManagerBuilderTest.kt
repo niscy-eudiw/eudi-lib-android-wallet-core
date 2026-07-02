@@ -75,7 +75,7 @@ class OpenId4VciManagerBuilderTest {
     fun `Builder throws exception when walletAttestationsProvider is not set for AttestationBased authentication`() {
         val configWithAttestationBased = OpenId4VciManager.Config(
             issuerUrl = "https://issuer.example.com",
-            clientAuthenticationType = OpenId4VciManager.ClientAuthenticationType.AttestationBased,
+            clientAuthenticationType = OpenId4VciManager.ClientAuthenticationType.AttestationBased("test-client-id"),
             authFlowRedirectionURI = "app://redirect",
             dpopConfig = DPopConfig.Default,
             parUsage = OpenId4VciManager.Config.ParUsage.IF_SUPPORTED,

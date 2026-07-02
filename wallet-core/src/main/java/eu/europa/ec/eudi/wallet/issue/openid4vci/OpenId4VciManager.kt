@@ -296,8 +296,9 @@ interface OpenId4VciManager {
         /**
          * Attestation based client authentication using [WalletAttestationsProvider]
          * declared in [eu.europa.ec.eudi.wallet.EudiWallet.Builder]
+         * @param clientId the client id
          */
-        data object AttestationBased : ClientAuthenticationType
+        data class AttestationBased(val clientId: String) : ClientAuthenticationType
     }
 
     /**

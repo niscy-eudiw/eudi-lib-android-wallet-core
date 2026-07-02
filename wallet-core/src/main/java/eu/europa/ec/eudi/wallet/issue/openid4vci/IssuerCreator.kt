@@ -26,7 +26,12 @@ import eu.europa.ec.eudi.openid4vci.CredentialOffer
 import eu.europa.ec.eudi.openid4vci.Issuer
 import eu.europa.ec.eudi.openid4vci.IssuerMetadataPolicy
 import eu.europa.ec.eudi.openid4vci.OpenId4VCIConfig
+import eu.europa.ec.eudi.openid4vci.DPoPUsage
+import eu.europa.ec.eudi.openid4vci.HttpsUrl
+import eu.europa.ec.eudi.openid4vci.JwsAlgorithm
 import eu.europa.ec.eudi.openid4vci.ParUsage
+import eu.europa.ec.eudi.openid4vci.ProofsConfig
+import eu.europa.ec.eudi.openid4vci.Signer
 import eu.europa.ec.eudi.openid4vci.clientAttestationPOPJWSAlgs
 import eu.europa.ec.eudi.wallet.document.format.DocumentFormat
 import eu.europa.ec.eudi.wallet.document.format.MsoMdocFormat
@@ -34,14 +39,16 @@ import eu.europa.ec.eudi.wallet.document.format.SdJwtVcFormat
 import eu.europa.ec.eudi.wallet.issue.openid4vci.CredentialConfigurationFilter.Companion.DocTypeFilter
 import eu.europa.ec.eudi.wallet.issue.openid4vci.CredentialConfigurationFilter.Companion.VctFilter
 import eu.europa.ec.eudi.wallet.issue.openid4vci.dpop.DPopConfig
-import eu.europa.ec.eudi.wallet.issue.openid4vci.dpop.DPopSigner
 import eu.europa.ec.eudi.wallet.issue.openid4vci.dpop.SecureAreaDpopSigner
 import eu.europa.ec.eudi.wallet.logging.Logger
 import eu.europa.ec.eudi.wallet.provider.WalletAttestationsProvider
 import eu.europa.ec.eudi.wallet.provider.WalletKeyManager
 import io.ktor.client.HttpClient
+import com.nimbusds.jose.jwk.JWK
 import org.multipaz.crypto.Algorithm
 import java.net.URI
+import eu.europa.ec.eudi.openid4vci.DPoPConfig as VciDPoPConfig
+import eu.europa.ec.eudi.openid4vci.ProvisionDPoPSigner as VciProvisionDPoPSigner
 
 /**
  * Creates an [Issuer] from the given [Offer].
@@ -179,7 +186,7 @@ internal class IssuerCreator(
                         .map {
                             clientAttestationPopKeyId = it.keyInfo.alias
                             with(it) {
-                                walletAttestationsProvider.toClientAuthentication().getOrThrow()
+                                walletAttestationsProvider.toClientAuthentication(type.clientId).getOrThrow()
                             }
                         }.getOrThrow()
                 }
@@ -197,53 +204,64 @@ internal class IssuerCreator(
     ): OpenId4VCIConfig {
         val auth = authorizationServerMetadata.toClientAuthentication().getOrThrow()
         clientAuthentication = auth
+        // Resolve DPoP usage
+        val dPoPUsage = when (dpopConfig) {
+            DPopConfig.Disabled -> DPoPUsage.Never
+
+            DPopConfig.Default, is DPopConfig.Custom -> {
+                val resolvedConfig = when (dpopConfig) {
+                    DPopConfig.Default -> DPopConfig.Default.make(context)
+                    is DPopConfig.Custom -> dpopConfig
+                    else -> error("unreachable")
+                }
+
+                val signingAlg = resolvedConfig.secureArea.supportedAlgorithms
+                    .firstOrNull { it.isSigning && it.joseAlgorithmIdentifier != null }
+                    ?: throw IllegalStateException("No signing algorithm available for DPoP")
+
+                val provisionDPoPSigner = if (existingDpopKeyAlias != null) {
+                    // Re-issuance: reuse existing DPoP key bound to the access token
+                    object : VciProvisionDPoPSigner {
+                        override val popAlgorithm = JwsAlgorithm(signingAlg.joseAlgorithmIdentifier!!)
+                        override suspend fun invoke(authorizationServer: HttpsUrl): Signer<JWK> {
+                            return SecureAreaDpopSigner.fromExistingKey(
+                                resolvedConfig, existingDpopKeyAlias, logger
+                            ).also {
+                                dpopKeyAlias = it.keyInfo.alias
+                            }
+                        }
+                    }
+                } else {
+                    // Normal issuance: create new DPoP key
+                    object : VciProvisionDPoPSigner {
+                        override val popAlgorithm = JwsAlgorithm(signingAlg.joseAlgorithmIdentifier!!)
+                        override suspend fun invoke(authorizationServer: HttpsUrl): Signer<JWK> {
+                            return SecureAreaDpopSigner(
+                                resolvedConfig, listOf(signingAlg), logger
+                            ).also {
+                                dpopKeyAlias = it.keyInfo.alias
+                            }
+                        }
+                    }
+                }
+
+                DPoPUsage.IfSupported(VciDPoPConfig(provisionDPoPSigner))
+            }
+        }
+
         return OpenId4VCIConfig(
             clientAuthentication = auth,
             authFlowRedirectionURI = URI.create(authFlowRedirectionURI),
             encryptionSupportConfig = responseEncryptionConfig,
             supportedCredentialReusePolicies = supportedCredentialReusePolicies,
-            dPoPSigner = if (existingDpopKeyAlias != null) {
-                // Re-issuance: reuse existing DPoP key bound to the access token
-                val resolvedConfig = when (val cfg = dpopConfig) {
-                    DPopConfig.Disabled -> null
-                    DPopConfig.Default -> DPopConfig.Default.make(context)
-                    is DPopConfig.Custom -> cfg
-                }
-                resolvedConfig?.let { cfg ->
-                    SecureAreaDpopSigner.fromExistingKey(cfg, existingDpopKeyAlias, logger).also {
-                        dpopKeyAlias = it.keyInfo.alias
-                    }
-                }
-            } else {
-                // Normal issuance: create new DPoP key
-                DPopSigner.makeIfSupported(
-                    context = context,
-                    config = dpopConfig,
-                    authorizationServerMetadata = authorizationServerMetadata,
-                    logger = logger
-                )
-                    .onSuccess { signer ->
-                        // Track DPoP key alias for re-issuance metadata
-                        dpopKeyAlias = (signer as SecureAreaDpopSigner).keyInfo.alias
-                    }
-                    .getOrElse {
-                        logger?.log(
-                            Logger.Record(
-                                level = Logger.Companion.LEVEL_DEBUG,
-                                message = "DPoP not supported: ${it.message}",
-                                sourceClassName = "eu.europa.ec.eudi.wallet.issue.openid4vci.IssuerCreator",
-                                sourceMethod = "toOpenId4VCIConfig"
-                            )
-                        )
-                        null
-                    }
-            },
+            dPoPUsage = dPoPUsage,
             parUsage = when (parUsage) {
-                OpenId4VciManager.Config.ParUsage.IF_SUPPORTED -> ParUsage.IfSupported
-                OpenId4VciManager.Config.ParUsage.REQUIRED -> ParUsage.Required
+                OpenId4VciManager.Config.ParUsage.IF_SUPPORTED -> ParUsage.IfSupported()
+                OpenId4VciManager.Config.ParUsage.REQUIRED -> ParUsage.Required()
                 OpenId4VciManager.Config.ParUsage.NEVER -> ParUsage.Never
-                else -> ParUsage.IfSupported
-            }
+                else -> ParUsage.IfSupported()
+            },
+            proofs = ProofsConfig.Default,
         )
     }
 }

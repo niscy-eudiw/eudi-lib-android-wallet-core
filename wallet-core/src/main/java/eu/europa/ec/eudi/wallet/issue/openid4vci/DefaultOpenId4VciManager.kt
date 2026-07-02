@@ -92,7 +92,7 @@ internal class DefaultOpenId4VciManager(
         get() = issuerTrustConfig?.issuerMetadataPolicy ?: IssuerMetadataPolicy.IgnoreSigned
 
     private val offerResolver: OfferResolver by lazy {
-        OfferResolver(httpClientFactory, issuerMetadataPolicy)
+        OfferResolver(config, httpClientFactory, issuerMetadataPolicy)
     }
     private val issuerCreator: IssuerCreator by lazy {
         IssuerCreator(context, config, httpClientFactory, walletProvider, walletAttestationKeyManager, logger, issuerMetadataPolicy)
@@ -249,6 +249,7 @@ internal class DefaultOpenId4VciManager(
                 val deferredContext = DeferredContext.fromBytes(
                     deferredDocument.relatedData,
                     walletAttestationKeyManager,
+                    walletAttestationsProvider = walletProvider,
                     dpopConfig = resolvedDpopConfig,
                     logger = logger,
                 )

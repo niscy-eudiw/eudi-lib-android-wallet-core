@@ -54,17 +54,14 @@ class DocumentCreatorTest {
             CredentialConfigurationIdentifier("id")
         )
         val createSettings = mockk<CreateDocumentSettings>()
+        val credentialIssuerId = CredentialIssuerId("https://issuer.example.com").getOrThrow()
+        val credentialOfferMock = mockk<CredentialOffer>(relaxed = true)
+        every { credentialOfferMock.credentialIssuerIdentifier } returns credentialIssuerId
+        val offerMock = mockk<Offer>(relaxed = true) {
+            every { credentialOffer } returns credentialOfferMock
+        }
         val offeredDocument = mockk<Offer.OfferedDocument> {
-            every { offer } returns mockk(relaxed = true) {
-                every { credentialOffer } returns CredentialOffer(
-                    credentialIssuerIdentifier = CredentialIssuerId(
-                        value = "https://some.issuer.com"
-                    ).getOrThrow(),
-                    credentialIssuerMetadata = mockk(),
-                    authorizationServerMetadata = mockk(),
-                    credentialConfigurationIdentifiers = configurationIdentifiers,
-                )
-            }
+            every { offer } returns offerMock
             every { configurationIdentifier } returns configurationIdentifiers.first()
             every { configuration } returns credentialConfigurationMock
             every { credentialReusePolicy } returns CredentialReusePolicy.None

@@ -137,7 +137,7 @@ internal class ProcessDeferredOutcome(
 
             val (clientId, clientAttestationJwt) = when (val auth = cfg.clientAuthentication) {
                 is ClientAuthentication.None -> auth.id to null
-                is ClientAuthentication.AttestationBased -> auth.id to auth.attestationJWT.jwt.serialize()
+                is ClientAuthentication.AttestationBased -> auth.id to null
                 else -> auth.id to null
             }
 

@@ -214,7 +214,7 @@ internal class ProcessResponse(
             // Extract client ID and WIA JWT directly from ClientAuthentication
             val (clientId, clientAttestationJwt) = when (val auth = clientAuthentication) {
                 is ClientAuthentication.None -> auth.id to null
-                is ClientAuthentication.AttestationBased -> auth.id to auth.attestationJWT.jwt.serialize()
+                is ClientAuthentication.AttestationBased -> auth.id to null
                 else -> authServerMetadata.issuer.toString() to null
             }
 

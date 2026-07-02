@@ -58,7 +58,6 @@ class KeyAttestationSigner internal constructor(
 
         fun Factory(
             signers: List<ProofOfPossessionSigner>,
-            keyIndex: Int,
             walletAttestationsProvider: WalletAttestationsProvider,
             keyUnlockData: Map<String, KeyUnlockData?>? = null,
         ): suspend (Nonce?) -> Result<KeyAttestationSigner> = { nonce ->
@@ -70,7 +69,7 @@ class KeyAttestationSigner internal constructor(
                     KeyAttestationJWT(it)
                 }.getOrThrow()
 
-                val signer = signers[keyIndex]
+                val signer = signers[0]
                 val algorithm = signer.getKeyInfo().algorithm
                 val javaAlgorithm = requireNotNull(algorithm.javaAlgorithm) {
                     "No JCA algorithm name for ${algorithm.name}"
