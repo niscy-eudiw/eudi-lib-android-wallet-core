@@ -278,7 +278,12 @@ val config = EudiWalletConfig()
         withFormats(
             Format.MsoMdoc.ES256,
             Format.SdJwtVc.ES256
-        )
+        ) 
+        // Encryption policy — defaults to EncryptionPolicy.HAIP, which accepts only
+        // encrypted response modes (`direct_post.jwt` for OpenID4VP, `dc_api.jwt` for DC-API). 
+        // Override via withEncryptionPolicy(...) if a different profile is needed.
+        withEncryptionPolicy(EncryptionPolicy.HAIP)
+        
     }
     // configure document status resolver with 5 minutes clock skew tolerance
     .configureDocumentStatusResolver(clockSkewInMinutes = 5)
@@ -1078,6 +1083,10 @@ val config = EudiWalletConfig {
     configureOpenId4Vp {
         withClientIdSchemes(ClientIdScheme.X509SanDns)
         withSchemes("openid4vp", "eudi-openid4vp", "mdoc-openid4vp")
+        // Encryption policy — defaults to EncryptionPolicy.HAIP, which accepts only
+        // encrypted response modes (`direct_post.jwt` for OpenID4VP, `dc_api.jwt` for DC-API). 
+        // Override via .withEncryptionPolicy(...) if a different profile is needed.
+        withEncryptionPolicy(EncryptionPolicy.HAIP)
     }
 
     // Centralized ETSI trust — builds the full LoTE pipeline internally

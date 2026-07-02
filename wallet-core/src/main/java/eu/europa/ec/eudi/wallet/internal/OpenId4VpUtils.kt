@@ -29,12 +29,11 @@ package eu.europa.ec.eudi.wallet.internal
 
 import com.nimbusds.jose.JWEAlgorithm
 import com.nimbusds.jose.JWSAlgorithm
+import com.nimbusds.jose.jwk.JWKSet
 import com.upokecenter.cbor.CBORObject
 import eu.europa.ec.eudi.iso18013.transfer.SessionTranscriptBytes
 import eu.europa.ec.eudi.iso18013.transfer.internal.DocumentResponseGenerator
 import eu.europa.ec.eudi.openid4vp.CoseAlgorithm
-import eu.europa.ec.eudi.openid4vp.JarConfiguration
-import eu.europa.ec.eudi.openid4vp.JwkSetSource.ByReference
 import eu.europa.ec.eudi.openid4vp.OpenId4VPConfig
 import eu.europa.ec.eudi.openid4vp.PreregisteredClient
 import eu.europa.ec.eudi.openid4vp.ResolvedRequestObject
@@ -165,6 +164,60 @@ internal fun generateOpenId4VpHandover(
 }
 
 /**
+ * Generates the `OpenID4VPDCAPIHandover` CBOR object for OpenID4VP over the W3C Digital
+ * Credentials API (OpenID4VP 1.0, §"Invocation via the Digital Credentials API"):
+ *
+ * ```
+ * OpenID4VPDCAPIHandover = [
+ *   "OpenID4VPDCAPIHandover",
+ *   sha256( cbor([origin, nonce, jwkThumbprint]) )
+ * ]
+ * ```
+ *
+ * @param origin The verifier Origin, NOT prefixed with `origin:`.
+ * @param nonce The request `nonce`.
+ * @param jwkThumbprint The JWK SHA-256 thumbprint (RFC 7638) of the verifier's response
+ *   encryption key for response mode `dc_api.jwt`; `null` (encoded as CBOR null) for `dc_api`.
+ */
+internal fun generateOpenId4VpDCAPIHandover(
+    origin: String,
+    nonce: String,
+    jwkThumbprint: ByteArray?,
+): CBORObject {
+
+    val handoverInfoBytes = CBORObject.NewArray().apply {
+        Add(origin)
+        Add(nonce)
+        Add(jwkThumbprint ?: CBORObject.Null)
+    }.EncodeToBytes()
+
+    val handoverInfoHash = MessageDigest.getInstance(SHA_256_ALGORITHM)
+        .digest(handoverInfoBytes)
+
+    return CBORObject.NewArray().apply {
+        Add("OpenID4VPDCAPIHandover")
+        Add(handoverInfoHash)
+    }
+}
+
+/**
+ * Generates the session transcript for OpenID4VP over the DC API:
+ * `[ null, null, OpenID4VPDCAPIHandover ]`.
+ */
+internal fun generateDCAPISessionTranscript(
+    origin: String,
+    nonce: String,
+    jwkThumbprint: ByteArray?,
+): SessionTranscriptBytes {
+    val handover = generateOpenId4VpDCAPIHandover(origin, nonce, jwkThumbprint)
+    return CBORObject.NewArray().apply {
+        Add(CBORObject.Null)
+        Add(CBORObject.Null)
+        Add(handover)
+    }.EncodeToBytes()
+}
+
+/**
  * Generates a random nonce for a generic JARM (JWT Secured Authorization Response Mode) using a secure random generator.
  *
  * @return A URL-safe base64 encoded nonce string.
@@ -187,10 +240,9 @@ internal fun makeOpenId4VPConfig(
                     verifier.clientId to PreregisteredClient(
                         clientId = verifier.clientId,
                         legalName = verifier.legalName,
-                        jarConfig = JWSAlgorithm.parse(verifier.jwsAlgorithm.joseAlgorithmIdentifier) to ByReference(
-                            verifier.jwkSetSource
-                        )
-
+                        jarConfig = verifier.jwkSet?.let { jwkSet ->
+                            JWSAlgorithm.parse(verifier.jwsAlgorithm.joseAlgorithmIdentifier) to JWKSet.parse(jwkSet)
+                        },
                     )
                 }
             )
@@ -202,7 +254,6 @@ internal fun makeOpenId4VPConfig(
     }
     return OpenId4VPConfig(
         issuer = OpenId4VPConfig.SelfIssued,
-        jarConfiguration = JarConfiguration.Default,
         responseEncryptionConfiguration = ResponseEncryptionConfiguration.Supported(
             supportedAlgorithms = config.encryptionAlgorithms.map { it.nimbus },
             supportedMethods = config.encryptionMethods.map { it.nimbus }
@@ -230,6 +281,10 @@ internal fun ResolvedRequestObject.getSessionTranscriptBytes(): SessionTranscrip
         is ResponseMode.FragmentJwt -> mode.redirectUri.toString()
         is ResponseMode.Query -> mode.redirectUri.toString()
         is ResponseMode.QueryJwt -> mode.redirectUri.toString()
+        // DC API uses the OpenID4VPDCAPIHandover, not this URI-based handover;
+        // the HTTP resolver path never yields these modes. DC API support is handled separately.
+        ResponseMode.DCApi, ResponseMode.DCApiJwt ->
+            error("DC API response mode is not supported for OpenID4VP HTTP session transcript generation")
     }
     val sessionTranscriptBytes = generateSessionTranscript(
         clientId = clientId,
@@ -239,6 +294,25 @@ internal fun ResolvedRequestObject.getSessionTranscriptBytes(): SessionTranscrip
     )
     return sessionTranscriptBytes
 }
+
+/**
+ * Session transcript for the DC API channel. For [ResponseMode.DCApi]/[ResponseMode.DCApiJwt]
+ * it builds the [OpenID4VPDCAPIHandover]-based transcript bound to [origin], the request nonce,
+ * and the verifier's response-encryption key thumbprint (null for `dc_api`). All HTTP response
+ * modes delegate to the no-arg [getSessionTranscriptBytes].
+ *
+ * @param origin The verifier Origin from the DC API call (plain, NOT prefixed with `origin:`).
+ */
+internal fun ResolvedRequestObject.getSessionTranscriptBytes(origin: String): SessionTranscriptBytes =
+    when (this.responseMode) {
+        ResponseMode.DCApi, ResponseMode.DCApiJwt -> generateDCAPISessionTranscript(
+            origin = origin,
+            nonce = nonce,
+            jwkThumbprint = responseEncryptionSpecification?.recipientKey?.computeThumbprint()?.decode()
+        )
+
+        else -> getSessionTranscriptBytes()
+    }
 
 /**
  * Converts a list of [Format]s to [VpFormats] for use in VP configuration.
@@ -320,7 +394,8 @@ internal suspend fun verifiablePresentationForSdJwtVc(
     resolvedRequestObject: ResolvedRequestObject,
     match: CredentialPresentmentSetOptionMemberMatch,
     documentManager: DocumentManager,
-    keyUnlockData: KeyUnlockData?
+    keyUnlockData: KeyUnlockData?,
+    audience: String? = null
 ): VerifiablePresentation.Generic {
     val document = match.credential.requireIssuedDocument(documentManager)
     return document.consumingCredential {
@@ -350,7 +425,7 @@ internal suspend fun verifiablePresentationForSdJwtVc(
                 filteredSdJwt.present(
                     signingKey = signingKey,
                     nonce = resolvedRequestObject.nonce,
-                    audience = resolvedRequestObject.client.id.clientId
+                    audience = audience ?: resolvedRequestObject.client.id.clientId
                 )
             }.compactSerialization
         } else {

@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-package eu.europa.ec.eudi.wallet.dcapi
+package eu.europa.ec.eudi.wallet.dcapi.registration
 
+import eu.europa.ec.eudi.wallet.dcapi.DCAPIProtocol
 import eu.europa.ec.eudi.wallet.document.DocumentId
 import eu.europa.ec.eudi.wallet.document.DocumentManager
 import eu.europa.ec.eudi.wallet.document.IssuedDocument
@@ -30,25 +31,28 @@ import kotlinx.coroutines.launch
 import org.multipaz.context.applicationContext
 
 /**
- * [DocumentManagerWithDCAPI] is a wrapper around DocumentManager that updates the DCAPI credentials
- * after storing or deleting documents.
+ * A [DocumentManager] wrapper that keeps the Digital Credential API (DCAPI) registration in sync:
+ * it re-registers the wallet's documents whenever a document is stored or deleted.
  *
- * @property delegate The delegate [DocumentManager] instance.
- * @property dcapiRegistration The DCAPI registration instance used to register credentials, if not provided,
- * a default registration [DCAPIIsoMdocRegistration] will be used.
- * @property logger Optional logger for logging events
+ * @property delegate the document manager this class wraps and delegates to.
+ * @property supportedProtocols the protocols the wallet processes; passed to the registration.
+ * @property logger optional logger for logging events.
+ * @property dcapiRegistration the registration used to register documents; when not provided,
+ *   [DefaultDCAPIRegistration] is used.
  */
 
 internal class DocumentManagerWithDCAPI(
     private val delegate: DocumentManager,
+    private val supportedProtocols: List<DCAPIProtocol>,
     private val logger: Logger? = null,
-    private val dcapiRegistration: DCAPIRegistration ? = null
+    private val dcapiRegistration: DCAPIRegistration? = null
     ) : DocumentManager by delegate {
 
     private val registration: DCAPIRegistration by lazy {
-        dcapiRegistration ?: DCAPIIsoMdocRegistration(
+        dcapiRegistration ?: DefaultDCAPIRegistration(
             context = applicationContext,
             documentManager = delegate,
+            supportedProtocols = supportedProtocols,
             logger = logger
         )
     }

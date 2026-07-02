@@ -14,7 +14,12 @@
  * limitations under the License.
  */
 
-package eu.europa.ec.eudi.wallet.dcapi
+package eu.europa.ec.eudi.wallet.dcapi.process.isomdoc
+
+import eu.europa.ec.eudi.wallet.dcapi.DCAPIException
+import eu.europa.ec.eudi.wallet.dcapi.DCAPIProtocol
+import eu.europa.ec.eudi.wallet.dcapi.IsoMdocDCAPIResponse
+import eu.europa.ec.eudi.wallet.dcapi.internal.*
 
 import android.content.Intent
 import androidx.credentials.DigitalCredential
@@ -31,6 +36,7 @@ import eu.europa.ec.eudi.iso18013.transfer.response.device.DeviceResponse
 import eu.europa.ec.eudi.iso18013.transfer.response.device.ProcessedDeviceRequest
 import eu.europa.ec.eudi.wallet.internal.d
 import eu.europa.ec.eudi.wallet.internal.e
+import eu.europa.ec.eudi.wallet.internal.i
 import eu.europa.ec.eudi.wallet.logging.Logger
 import org.bouncycastle.util.encoders.Hex
 import org.json.JSONObject
@@ -44,21 +50,24 @@ import org.multipaz.trustmanagement.TrustMetadata
 import org.multipaz.util.fromBase64Url
 
 /**
- * Processes a DCAPI request by delegating ISO 18013-5 device-response generation to the
- * wrapped [ProcessedDeviceRequest] and then HPKE-encrypting the bytes for the verifier per
- * `org-iso-mdoc` (ISO/IEC TS 18013-7:2025 Annex C).
+ * Generates the response for an ISO mdoc Digital Credential API request, following the
+ * `org-iso-mdoc` protocol of ISO/IEC TS 18013-7:2025 Annex C.
  *
- * The [presentmentData] exposed here is already narrowed by the OS picker's selection
- * (see [DCAPIRequestProcessor]), so the consent UI surfaces only the selected credential.
+ * It delegates device-response generation to the wrapped [ProcessedDeviceRequest] and then encrypts
+ * the result for the verifier. The exposed [presentmentData] is already narrowed to the selected
+ * credential(s), so consent only covers what the user chose.
  *
- * @property processedDeviceRequest the underlying ISO 18013-5 processor — its
- *   `generateResponse(selection, ...)` does the actual signing.
- * @property providerGetCredentialRequest the original DCAPI request, used to re-derive the
- *   verifier's recipient public key (from `EncryptionInfo`) and to wrap the encrypted
- *   response back into a `DigitalCredential` intent extras.
- * @param origin resolved verifier origin (web origin or `android:apk-key-hash:...`).
+ * @param processedDeviceRequest the underlying ISO 18013-5 request, which generates the signed
+ *   device response.
+ * @param providerGetCredentialRequest the original request, used to read the verifier's encryption
+ *   key and to build the response intent.
+ * @param origin the resolved verifier origin.
+ * @param presentmentData the credentials offered for consent, narrowed to the user's selection.
+ * @param requester information about the verifier making the request.
+ * @param trustMetadata trust information about the verifier, when available.
+ * @param logger optional logger.
  */
-class ProcessedDCPAPIRequest(
+class ProcessedIsoMdocDCAPIRequest(
     private val processedDeviceRequest: ProcessedDeviceRequest,
     private val providerGetCredentialRequest: ProviderGetCredentialRequest,
     val origin: String,
@@ -78,15 +87,18 @@ class ProcessedDCPAPIRequest(
         keyUnlockData: Map<String, KeyUnlockData>
     ): ResponseResult {
         return try {
+            val (protocol, index) = providerGetCredentialRequest.resolveDcApiRequest(
+                listOf(DCAPIProtocol.ISO_MDOC)
+            )
+            require(protocol == DCAPIProtocol.ISO_MDOC.identifier) { "Unsupported protocol: $protocol" }
+            logger?.i(TAG, "Generating ISO mdoc DC API response (protocol=$protocol)")
+
             val option =
                 providerGetCredentialRequest.credentialOptions[0] as GetDigitalCredentialOption
             val json = JSONObject(option.requestJson)
-            val firstRequest = json.getJSONArray(REQUESTS).getJSONObject(0)
+            val request = json.getJSONArray(REQUESTS).getJSONObject(index)
 
-            val protocol = firstRequest[PROTOCOL] as String
-            require(protocol == DC_API_PROTOCOL_ORG_ISO_MDOC) { "Unsupported protocol: $protocol" }
-
-            val data = firstRequest[DATA] as JSONObject
+            val data = request[DATA] as JSONObject
             val encryptionInfoBase64 = data.getString(ENCRYPTION_INFO)
 
             val encryptionInfo = CBORObject.DecodeFromBytes(encryptionInfoBase64.fromBase64Url())
@@ -133,11 +145,12 @@ class ProcessedDCPAPIRequest(
             val response = JSONObject().put(RESPONSE, encryptedResponse.toBase64())
             logger?.d(TAG, "Response JSON: $response")
 
+            logger?.i(TAG, "ISO mdoc DC API response ready")
             ResponseResult.Success(
-                DCAPIResponse(
+                IsoMdocDCAPIResponse(
                     deviceResponseBytes = deviceResponse.deviceResponseBytes,
+                    documentIds = selection.matches.map { it.credential.document.identifier }.distinct(),
                     intent = createResponseIntent(protocol = protocol, data = response),
-                    documentIds = deviceResponse.documentIds
                 )
             )
         } catch (e: Exception) {
@@ -167,7 +180,7 @@ class ProcessedDCPAPIRequest(
     }
 
     companion object {
-        private const val TAG = "ProcessedDCPAPIRequest"
+        private const val TAG = "ProcessedIsoMdocDCAPIRequest"
         private const val ENC = "enc"
         private const val CIPHER_TEXT = "cipherText"
         private const val RECIPIENT_PUBLIC_KEY = "recipientPublicKey"
