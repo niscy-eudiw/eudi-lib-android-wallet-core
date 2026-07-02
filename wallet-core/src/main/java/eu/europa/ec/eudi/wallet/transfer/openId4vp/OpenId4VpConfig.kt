@@ -20,7 +20,6 @@ package eu.europa.ec.eudi.wallet.transfer.openId4vp
 
 import eu.europa.ec.eudi.openid4vp.ResponseMode
 import org.multipaz.crypto.Algorithm
-import java.net.URI
 
 /**
  * Configuration for OpenID4VP (OpenID for Verifiable Presentations) transfer operations.
@@ -362,14 +361,15 @@ sealed interface ClientIdScheme {
  * @property legalName the legal name of the client
  * @property verifierApi the verifier API
  * @property jwsAlgorithm the JWS algorithm. Default is [Algorithm.ESP256]
- * @property jwkSetSource the JWK set source. Default is the [verifierApi] with the path "/wallet/public-keys.json"
+ * @property jwkSet the verifier's public keys as a JWK Set (JSON), used to verify its signed (JAR)
+ * requests, or `null` if the verifier does not send signed requests. Must contain only public keys.
  */
 data class PreregisteredVerifier(
     var clientId: ClientId,
     var legalName: LegalName,
     var verifierApi: VerifierApi,
     var jwsAlgorithm: Algorithm = Algorithm.ESP256,
-    var jwkSetSource: URI = URI("$verifierApi/wallet/public-keys.json"),
+    var jwkSet: String? = null,
 ) {
     init {
         requireNotNull(jwsAlgorithm.joseAlgorithmIdentifier) {

@@ -61,7 +61,7 @@ class OpenId4VpManagerRejectionTest {
 
         val config = mockk<OpenId4VpConfig>(relaxed = true)
 
-        val mockOpenId4Vp = mockk<OpenId4Vp.OverHttp>(relaxed = true)
+        val mockOpenId4Vp = mockk<OpenId4Vp.OverRedirects>(relaxed = true)
 
 
         every { OpenId4Vp.overRedirects(any(), any()) } returns mockOpenId4Vp

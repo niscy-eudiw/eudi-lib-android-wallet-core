@@ -72,7 +72,7 @@ class OpenId4VpManagerEncryptionPolicyTest {
     fun `HAIP rejects DirectPost — Error emitted, processor never called`() {
         withMockedUri("haip-vp") {
             val config = buildConfig(EncryptionPolicy.HAIP)
-            val mockOpenId4Vp = mockk<OpenId4Vp.OverHttp>(relaxed = true)
+            val mockOpenId4Vp = mockk<OpenId4Vp.OverRedirects>(relaxed = true)
             every { OpenId4Vp.overRedirects(any(), any()) } returns mockOpenId4Vp
 
             val resolved = mockk<ResolvedRequestObject>(relaxed = true) {
@@ -114,7 +114,7 @@ class OpenId4VpManagerEncryptionPolicyTest {
     fun `HAIP accepts DirectPostJwt — processor invoked and RequestReceived emitted`() {
         withMockedUri("haip-vp") {
             val config = buildConfig(EncryptionPolicy.HAIP)
-            val mockOpenId4Vp = mockk<OpenId4Vp.OverHttp>(relaxed = true)
+            val mockOpenId4Vp = mockk<OpenId4Vp.OverRedirects>(relaxed = true)
             every { OpenId4Vp.overRedirects(any(), any()) } returns mockOpenId4Vp
 
             val resolved = mockk<ResolvedRequestObject>(relaxed = true) {
@@ -164,7 +164,7 @@ class OpenId4VpManagerEncryptionPolicyTest {
             val custom = EncryptionPolicy { mode -> seenMode = mode }
             val config = buildConfig(custom)
 
-            val mockOpenId4Vp = mockk<OpenId4Vp.OverHttp>(relaxed = true)
+            val mockOpenId4Vp = mockk<OpenId4Vp.OverRedirects>(relaxed = true)
             every { OpenId4Vp.overRedirects(any(), any()) } returns mockOpenId4Vp
 
             val mode = ResponseMode.DirectPost(URL("https://verifier.example/cb"))

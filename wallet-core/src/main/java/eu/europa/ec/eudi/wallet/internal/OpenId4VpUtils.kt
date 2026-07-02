@@ -29,11 +29,11 @@ package eu.europa.ec.eudi.wallet.internal
 
 import com.nimbusds.jose.JWEAlgorithm
 import com.nimbusds.jose.JWSAlgorithm
+import com.nimbusds.jose.jwk.JWKSet
 import com.upokecenter.cbor.CBORObject
 import eu.europa.ec.eudi.iso18013.transfer.SessionTranscriptBytes
 import eu.europa.ec.eudi.iso18013.transfer.internal.DocumentResponseGenerator
 import eu.europa.ec.eudi.openid4vp.CoseAlgorithm
-import eu.europa.ec.eudi.openid4vp.JwkSetSource.ByReference
 import eu.europa.ec.eudi.openid4vp.OpenId4VPConfig
 import eu.europa.ec.eudi.openid4vp.PreregisteredClient
 import eu.europa.ec.eudi.openid4vp.ResolvedRequestObject
@@ -240,10 +240,9 @@ internal fun makeOpenId4VPConfig(
                     verifier.clientId to PreregisteredClient(
                         clientId = verifier.clientId,
                         legalName = verifier.legalName,
-                        jarConfig = JWSAlgorithm.parse(verifier.jwsAlgorithm.joseAlgorithmIdentifier) to ByReference(
-                            verifier.jwkSetSource
-                        )
-
+                        jarConfig = verifier.jwkSet?.let { jwkSet ->
+                            JWSAlgorithm.parse(verifier.jwsAlgorithm.joseAlgorithmIdentifier) to JWKSet.parse(jwkSet)
+                        },
                     )
                 }
             )
