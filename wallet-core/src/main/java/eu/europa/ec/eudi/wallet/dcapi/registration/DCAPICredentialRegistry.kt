@@ -48,7 +48,9 @@ import java.net.URL
  *
  * It registers both MSO mdoc and SD-JWT VC documents, encoding their display fields and claims so
  * they can be matched against and presented to verifiers, and advertises the protocols the wallet
- * supports.
+ * supports. Each document also carries the exchange protocols it can be presented over, so a
+ * document is only offered for a request whose protocol it supports (for example, SD-JWT VC
+ * documents are offered over OpenID4VP but not over the ISO mdoc protocol).
  *
  * ```
  * val registry = DCAPICredentialRegistry(
@@ -68,7 +70,8 @@ internal class DCAPICredentialRegistry private constructor(
 
     companion object {
         private const val TAG = "DCAPICredentialRegistry"
-        // Digital Credentials API matcher from the multipaz project (v0.99.0), bundled unmodified.
+        // Digital Credentials API matcher from the multipaz project (v0.100.0-SNAPSHOT),
+        // bundled unmodified.
         private const val DEFAULT_MATCHER_FILE = "identitycredentialmatcher.wasm"
         private const val PROTOCOLS = "protocols"
         private const val CREDENTIALS = "credentials"
@@ -108,9 +111,13 @@ internal class DCAPICredentialRegistry private constructor(
 
         /**
          * Serializes the documents into the CBOR structure the registry expects: a top-level map
-         * `{ protocols: [...], credentials: [ { title, subtitle, bitmap, mdoc | sdjwt } ] }`.
-         * Each data element or claim is a 3-element array `[displayName, value, matchValue]`, where
-         * `matchValue` is the value used to match the document against a request.
+         * `{ protocols: [...], credentials: [ { title, subtitle, bitmap, protocols, mdoc | sdjwt } ] }`.
+         * The exchange protocols are set per document: MSO mdoc documents over all supported protocols,
+         * SD-JWT VC documents over the supported OpenID4VP protocols only. The top-level `protocols` is
+         * the fallback for a document that carries none and is intentionally left empty, so any such
+         * document is hidden rather than offered over every protocol. Each data element or claim is a
+         * 3-element array `[displayName, value, matchValue]`, where `matchValue` is the value used to
+         * match the document against a request.
          */
         private suspend fun List<IssuedDocument>.toCredentialBytes(
             context: Context,
@@ -134,11 +141,15 @@ internal class DCAPICredentialRegistry private constructor(
                 when (val format = document.format) {
                     is MsoMdocFormat -> {
                         logger?.d(TAG, "Adding mdoc credential id=${document.id}, docType=${format.docType}")
+                        // MSO mdoc can be presented over every supported protocol.
+                        credential.Add(PROTOCOLS, protocols.toProtocolsCbor())
                         credential.Add(MDOC, document.toMdocEntry(format, context))
                     }
 
                     is SdJwtVcFormat -> {
                         logger?.d(TAG, "Adding SD-JWT VC credential id=${document.id}, vct=${format.vct}")
+                        // SD-JWT VC can be presented over OpenID4VP.
+                        credential.Add(PROTOCOLS, protocols.filter { it.isOpenId4Vp }.toProtocolsCbor())
                         credential.Add(SDJWT, document.toSdJwtEntry(format, context))
                     }
                 }
@@ -146,11 +157,16 @@ internal class DCAPICredentialRegistry private constructor(
             }
 
             val database = CBORObject.NewMap().apply {
-                Add(PROTOCOLS, CBORObject.NewArray().apply { protocols.forEach { Add(it.identifier) } })
+                // Intentionally empty: exchange protocols are set per document.
+                Add(PROTOCOLS, CBORObject.NewArray())
                 Add(CREDENTIALS, credentialsArray)
             }
             return database.EncodeToBytes()
         }
+
+        /** Encodes a list of protocols as a CBOR array of their on-the-wire identifiers. */
+        private fun List<DCAPIProtocol>.toProtocolsCbor(): CBORObject =
+            CBORObject.NewArray().apply { forEach { Add(it.identifier) } }
 
         /** Builds the `mdoc` entry: docType + claims grouped by namespace. */
         private fun IssuedDocument.toMdocEntry(format: MsoMdocFormat, context: Context): CBORObject =
