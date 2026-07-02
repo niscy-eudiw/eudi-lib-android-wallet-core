@@ -31,7 +31,7 @@ class OpenId4VciManagerConfigBuilderTest {
     fun `ConfigBuilder builds Config with valid issuerUrl, clientAuthenticationType and authFlowRedirectionURI`() {
         val builder = OpenId4VciManager.Config.Builder()
             .withIssuerUrl("https://issuer.example.com")
-            .withClientAuthenticationType(OpenId4VciManager.ClientAuthenticationType.AttestationBased)
+            .withClientAuthenticationType(OpenId4VciManager.ClientAuthenticationType.AttestationBased("test-client-id"))
             .withAuthFlowRedirectionURI("app://redirect")
 
         val config = builder.build()
@@ -42,7 +42,7 @@ class OpenId4VciManagerConfigBuilderTest {
     @Test
     fun `ConfigBuilder throws exception when issuerUrl is not set`() {
         val builder = OpenId4VciManager.Config.Builder()
-            .withClientAuthenticationType(OpenId4VciManager.ClientAuthenticationType.AttestationBased)
+            .withClientAuthenticationType(OpenId4VciManager.ClientAuthenticationType.AttestationBased("test-client-id"))
             .withAuthFlowRedirectionURI("app://redirect")
 
         assertThrows(IllegalStateException::class.java) {
@@ -65,7 +65,7 @@ class OpenId4VciManagerConfigBuilderTest {
     fun `ConfigBuilder throws exception when authFlowRedirectionURI is not set`() {
         val builder = OpenId4VciManager.Config.Builder()
             .withIssuerUrl("https://issuer.example.com")
-            .withClientAuthenticationType(OpenId4VciManager.ClientAuthenticationType.AttestationBased)
+            .withClientAuthenticationType(OpenId4VciManager.ClientAuthenticationType.AttestationBased("test-client-id"))
 
         assertThrows(IllegalStateException::class.java) {
             builder.build()
@@ -76,13 +76,13 @@ class OpenId4VciManagerConfigBuilderTest {
     fun `ConfigBuilder sets issuerUrl correctly`() {
         val builder = OpenId4VciManager.Config.Builder()
             .withIssuerUrl("https://issuer.example.com")
-            .withClientAuthenticationType(OpenId4VciManager.ClientAuthenticationType.AttestationBased)
+            .withClientAuthenticationType(OpenId4VciManager.ClientAuthenticationType.AttestationBased("test-client-id"))
             .withAuthFlowRedirectionURI("app://redirect")
 
         val config = builder.build()
 
         assertEquals("https://issuer.example.com", config.issuerUrl)
-        assertEquals(OpenId4VciManager.ClientAuthenticationType.AttestationBased, config.clientAuthenticationType)
+        assertEquals(OpenId4VciManager.ClientAuthenticationType.AttestationBased("test-client-id"), config.clientAuthenticationType)
         assertEquals("app://redirect", config.authFlowRedirectionURI)
         assertIs<DPopConfig.Default>(config.dpopConfig)
     }
@@ -91,7 +91,7 @@ class OpenId4VciManagerConfigBuilderTest {
     fun `ConfigBuilder sets useDPoPIfSupported correctly`() {
         val builder = OpenId4VciManager.Config.Builder()
             .withIssuerUrl("https://issuer.example.com")
-            .withClientAuthenticationType(OpenId4VciManager.ClientAuthenticationType.AttestationBased)
+            .withClientAuthenticationType(OpenId4VciManager.ClientAuthenticationType.AttestationBased("test-client-id"))
             .withAuthFlowRedirectionURI("app://redirect")
             .withDPopConfig(DPopConfig.Disabled)
 
@@ -104,7 +104,7 @@ class OpenId4VciManagerConfigBuilderTest {
     fun `ConfigBuilder uses REQUIRED as default responseEncryptionConfig policy`() {
         val builder = OpenId4VciManager.Config.Builder()
             .withIssuerUrl("https://issuer.example.com")
-            .withClientAuthenticationType(OpenId4VciManager.ClientAuthenticationType.AttestationBased)
+            .withClientAuthenticationType(OpenId4VciManager.ClientAuthenticationType.AttestationBased("test-client-id"))
             .withAuthFlowRedirectionURI("app://redirect")
 
         val config = builder.build()

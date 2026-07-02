@@ -16,19 +16,29 @@
 
 package eu.europa.ec.eudi.wallet.issue.openid4vci
 
-import eu.europa.ec.eudi.openid4vci.CredentialOfferRequestResolver
+import eu.europa.ec.eudi.openid4vci.CredentialOffer
 import eu.europa.ec.eudi.openid4vci.IssuerMetadataPolicy
+import eu.europa.ec.eudi.openid4vci.OpenId4VCIConfig
 import io.ktor.client.HttpClient
 import org.jetbrains.annotations.VisibleForTesting
+import java.net.URI
 
 internal class OfferResolver(
+    private val config: OpenId4VciManager.Config,
     private val ktorHttpClientFactory: () -> HttpClient,
     private val issuerMetadataPolicy: IssuerMetadataPolicy = IssuerMetadataPolicy.IgnoreSigned,
 ) {
-    val resolver by lazy {
-        CredentialOfferRequestResolver(
-            httpClient = ktorHttpClientFactory(),
-            issuerMetadataPolicy = issuerMetadataPolicy
+
+    private val resolveConfig: OpenId4VCIConfig by lazy {
+        val clientId = when (val type = config.clientAuthenticationType) {
+            is OpenId4VciManager.ClientAuthenticationType.None -> type.clientId
+            is OpenId4VciManager.ClientAuthenticationType.AttestationBased -> type.clientId
+        }
+        OpenId4VCIConfig(
+            clientId = clientId,
+            authFlowRedirectionURI = URI.create(config.authFlowRedirectionURI),
+            encryptionSupportConfig = config.responseEncryptionConfig,
+            issuerMetadataPolicy = issuerMetadataPolicy,
         )
     }
 
@@ -42,7 +52,13 @@ internal class OfferResolver(
     }
 
     private suspend fun resolveAndCache(offerUri: String): Result<Offer> {
-        return resolver.resolve(offerUri).map {
+        return ktorHttpClientFactory().use { httpClient ->
+            CredentialOffer.resolve(
+                httpClient = httpClient,
+                config = resolveConfig,
+                uri = offerUri,
+            )
+        }.map {
             Offer(it)
         }.also { result ->
             result

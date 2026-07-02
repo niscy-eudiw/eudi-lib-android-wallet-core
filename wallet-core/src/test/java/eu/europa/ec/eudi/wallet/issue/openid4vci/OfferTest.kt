@@ -61,7 +61,11 @@ class OfferTest {
                 setOf(
                     ProofTypeMeta.Jwt(
                         listOf(JWSAlgorithm.ES256, JWSAlgorithm.ES384),
-                        KeyAttestationRequirement.NotRequired
+                        KeyAttestationRequirement(null, null, null)
+                    ),
+                    ProofTypeMeta.Attestation(
+                        listOf(JWSAlgorithm.ES256, JWSAlgorithm.ES384),
+                        KeyAttestationRequirement(null, null, null)
                     )
                 )
             )
