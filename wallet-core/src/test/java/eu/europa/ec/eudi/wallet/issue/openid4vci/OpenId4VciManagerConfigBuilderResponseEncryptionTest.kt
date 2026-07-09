@@ -34,7 +34,6 @@ class OpenId4VciManagerConfigBuilderResponseEncryptionTest(
     @Test
     fun `ConfigBuilder sets the responseEncryptionConfig property correctly`() {
         val builder = OpenId4VciManager.Config.Builder()
-            .withIssuerUrl("https://issuer.example.com")
             .withClientAuthenticationType(OpenId4VciManager.ClientAuthenticationType.None("testClientId"))
             .withAuthFlowRedirectionURI("app://redirect")
             .withResponseEncryptionConfig(responseEncryptionConfig)

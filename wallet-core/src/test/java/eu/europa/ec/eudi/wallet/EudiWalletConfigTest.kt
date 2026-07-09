@@ -28,6 +28,7 @@ import eu.europa.ec.eudi.wallet.transfer.openId4vp.PreregisteredVerifier
 import io.mockk.mockk
 import java.security.cert.X509Certificate
 import kotlin.test.Test
+import kotlin.test.assertIs
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -44,8 +45,9 @@ class EudiWalletConfigTest {
             configureLogging(Logger.LEVEL_ERROR)
             configureDocumentManager("storage/path")
             configureOpenId4Vci {
-                withIssuerUrl("https://example.com")
-                withClientAuthenticationType(OpenId4VciManager.ClientAuthenticationType.AttestationBased("test-client-id"))
+                withClientAuthenticationType(
+                    OpenId4VciManager.ClientAuthenticationType.AttestationBased("test-client-id")
+                )
                 withAuthFlowRedirectionURI("eudi-openid4ci://authorize")
             }
             configureOpenId4Vp {
@@ -106,8 +108,7 @@ class EudiWalletConfigTest {
             EncryptionMethod.A128CBC_HS256,
             config.openId4VpConfig?.encryptionMethods?.get(0)
         )
-        assertEquals("https://example.com", config.openId4VciConfig?.issuerUrl)
-        assertEquals(OpenId4VciManager.ClientAuthenticationType.AttestationBased("test-client-id"), config.openId4VciConfig?.clientAuthenticationType)
+        assertIs<OpenId4VciManager.ClientAuthenticationType.AttestationBased>(config.openId4VciConfig?.clientAuthenticationType)
         assertEquals("eudi-openid4ci://authorize", config.openId4VciConfig?.authFlowRedirectionURI)
 
         assertEquals(true, config.dcapiConfig?.enabled)

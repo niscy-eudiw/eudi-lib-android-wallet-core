@@ -21,7 +21,7 @@ import eu.europa.ec.eudi.openid4vci.Nonce
 import eu.europa.ec.eudi.openid4vci.SignOperation
 import eu.europa.ec.eudi.openid4vci.Signer
 import eu.europa.ec.eudi.wallet.document.credential.ProofOfPossessionSigner
-import eu.europa.ec.eudi.wallet.provider.WalletAttestationsProvider
+import eu.europa.ec.eudi.wallet.provider.WalletKeyAttestationProvider
 import org.multipaz.securearea.KeyLockedException
 import org.multipaz.securearea.KeyUnlockData
 
@@ -58,11 +58,11 @@ class KeyAttestationSigner internal constructor(
 
         fun Factory(
             signers: List<ProofOfPossessionSigner>,
-            walletAttestationsProvider: WalletAttestationsProvider,
+            walletKeyAttestationProvider: WalletKeyAttestationProvider,
             keyUnlockData: Map<String, KeyUnlockData?>? = null,
         ): suspend (Nonce?) -> Result<KeyAttestationSigner> = { nonce ->
             runCatching {
-                val keyAttestationJWT = walletAttestationsProvider.getKeyAttestation(
+                val keyAttestationJWT = walletKeyAttestationProvider.getKeyAttestation(
                     keys = signers.map { it.getKeyInfo() },
                     nonce = nonce
                 ).map {
