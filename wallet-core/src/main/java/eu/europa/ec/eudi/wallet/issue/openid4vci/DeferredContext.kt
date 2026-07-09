@@ -39,7 +39,7 @@ import eu.europa.ec.eudi.wallet.issue.openid4vci.dpop.DPopConfig
 import eu.europa.ec.eudi.wallet.issue.openid4vci.dpop.SecureAreaDpopSigner
 import eu.europa.ec.eudi.wallet.issue.openid4vci.reissue.StoredDeferredContext
 import eu.europa.ec.eudi.wallet.logging.Logger
-import eu.europa.ec.eudi.wallet.provider.WalletAttestationsProvider
+import eu.europa.ec.eudi.wallet.provider.WalletInstanceAttestationProvider
 import eu.europa.ec.eudi.wallet.provider.WalletKeyManager
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
@@ -115,7 +115,7 @@ internal data class DeferredContext(
 internal fun DeferredContext.Companion.fromBytes(
     bytes: ByteArray,
     walletKeyManager: WalletKeyManager,
-    walletAttestationsProvider: WalletAttestationsProvider?,
+    walletInstanceAttestationProvider: WalletInstanceAttestationProvider?,
     dpopConfig: DPopConfig.Custom? = null,
     logger: Logger? = null,
 ): DeferredContext {
@@ -123,13 +123,13 @@ internal fun DeferredContext.Companion.fromBytes(
 
     // Recreate client authentication
     val clientAuthentication =
-        if (dto.clientAttestationPopKeyId != null && walletAttestationsProvider != null) {
+        if (dto.clientAttestationPopKeyId != null && walletInstanceAttestationProvider != null) {
             val key = runBlocking {
                 walletKeyManager.getWalletAttestationKey(dto.clientAttestationPopKeyId)
             } ?: error("Key alias '${dto.clientAttestationPopKeyId}' not found in WalletKeyManager")
 
             with(key) {
-                walletAttestationsProvider.toClientAuthentication(dto.clientId)
+                walletInstanceAttestationProvider.toClientAuthentication(dto.clientId)
             }.getOrThrow()
         } else {
             ClientAuthentication.None(dto.clientId)

@@ -33,7 +33,7 @@ open class WalletAttestationKey(
     val signFunction: suspend (ByteArray) -> ByteArray,
 ) {
 
-    fun WalletAttestationsProvider.toClientAuthentication(
+    fun WalletInstanceAttestationProvider.toClientAuthentication(
         clientId: String,
     ): Result<ClientAuthentication.AttestationBased> =
         runCatching {

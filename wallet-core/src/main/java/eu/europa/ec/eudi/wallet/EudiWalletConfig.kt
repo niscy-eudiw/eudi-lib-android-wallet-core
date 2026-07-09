@@ -82,11 +82,9 @@ import kotlin.time.Duration.Companion.minutes
  *         ReaderAuthPolicy.EnforceIfPresent
  *     )
  *     .configureOpenId4Vci {
- *         withIssuerUrl("https://issuer.com")
- *         withClientId("client-id")
+ *         withClientAuthenticationType(OpenId4VciManager.ClientAuthenticationType.None("client-id"))
  *         withAuthFlowRedirectionURI("eudi-openid4ci://authorize")
  *         withParUsage(OpenId4VciManager.Config.ParUsage.Companion.IF_SUPPORTED)
- *         withUseDPoPIfSupported(true)
  *     }
  *     .configureProximityPresentation(
  *         enableBlePeripheralMode = true,

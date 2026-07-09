@@ -38,12 +38,15 @@ import eu.europa.ec.eudi.wallet.document.format.MsoMdocFormat
 import eu.europa.ec.eudi.wallet.document.format.SdJwtVcFormat
 import eu.europa.ec.eudi.wallet.issue.openid4vci.CredentialConfigurationFilter.Companion.DocTypeFilter
 import eu.europa.ec.eudi.wallet.issue.openid4vci.CredentialConfigurationFilter.Companion.VctFilter
+import eu.europa.ec.eudi.wallet.issue.openid4vci.OpenId4VciManager.Companion.TAG
 import eu.europa.ec.eudi.wallet.issue.openid4vci.dpop.DPopConfig
 import eu.europa.ec.eudi.wallet.issue.openid4vci.dpop.SecureAreaDpopSigner
+import eu.europa.ec.eudi.wallet.internal.e
 import eu.europa.ec.eudi.wallet.logging.Logger
-import eu.europa.ec.eudi.wallet.provider.WalletAttestationsProvider
+import eu.europa.ec.eudi.wallet.provider.WalletInstanceAttestationProvider
 import eu.europa.ec.eudi.wallet.provider.WalletKeyManager
 import io.ktor.client.HttpClient
+import com.nimbusds.jose.JWSAlgorithm
 import com.nimbusds.jose.jwk.JWK
 import org.multipaz.crypto.Algorithm
 import java.net.URI
@@ -57,7 +60,7 @@ internal class IssuerCreator(
     private val context: Context,
     private val config: OpenId4VciManager.Config,
     private val ktorHttpClientFactory: () -> HttpClient,
-    private val walletProvider: WalletAttestationsProvider?,
+    private val walletInstanceAttestationProvider: WalletInstanceAttestationProvider?,
     private val walletAttestationKeyManager: WalletKeyManager,
     private val logger: Logger?,
     private val issuerMetadataPolicy: IssuerMetadataPolicy = IssuerMetadataPolicy.IgnoreSigned,
@@ -153,15 +156,20 @@ internal class IssuerCreator(
         credentialConfigurationIdentifiers: List<CredentialConfigurationIdentifier>,
         existingDpopKeyAlias: String? = null,
     ): Issuer {
-        return Issuer.makeWalletInitiated(
-            config = config.toOpenId4VCIConfig(
-                authorizationServerMetadata,
-                existingDpopKeyAlias
-            ),
-            credentialIssuerId = credentialIssuerMetadata.credentialIssuerIdentifier,
-            credentialConfigurationIdentifiers = credentialConfigurationIdentifiers,
-            httpClient = ktorHttpClientFactory()
-        ).getOrThrow()
+        return try {
+            Issuer.makeWalletInitiated(
+                config = config.toOpenId4VCIConfig(
+                    authorizationServerMetadata,
+                    existingDpopKeyAlias
+                ),
+                credentialIssuerId = credentialIssuerMetadata.credentialIssuerIdentifier,
+                credentialConfigurationIdentifiers = credentialConfigurationIdentifiers,
+                httpClient = ktorHttpClientFactory()
+            ).getOrThrow()
+        } catch (e: Throwable) {
+            logger?.e(TAG, "Failed to create wallet-initiated issuer", e)
+            throw e
+        }
     }
 
     private suspend fun CIAuthorizationServerMetadata.toClientAuthentication(): Result<ClientAuthentication> =
@@ -170,8 +178,8 @@ internal class IssuerCreator(
             when (val type = config.clientAuthenticationType) {
                 is OpenId4VciManager.ClientAuthenticationType.None -> ClientAuthentication.None(type.clientId)
                 is OpenId4VciManager.ClientAuthenticationType.AttestationBased -> {
-                    val walletAttestationsProvider = checkNotNull(walletProvider) {
-                        "Wallet attestation provider is not provided in the IssuerCreator for attestation based client authentication"
+                    val walletAttestationsProvider = checkNotNull(walletInstanceAttestationProvider) {
+                        "WalletInstanceAttestationProvider is required for attestation-based client authentication"
                     }
                     val clientAttestationPOPJWSAlgs = clientAttestationPOPJWSAlgs
                         .takeUnless { it.isNullOrEmpty() }
@@ -261,7 +269,24 @@ internal class IssuerCreator(
                 OpenId4VciManager.Config.ParUsage.NEVER -> ParUsage.Never
                 else -> ParUsage.IfSupported()
             },
-            proofs = ProofsConfig.Default,
+            proofs = proofTypes.toProofsConfig(),
         )
     }
 }
+
+private fun OpenId4VciManager.SupportedProofTypes.toProofsConfig(): ProofsConfig {
+    return ProofsConfig(
+        isNoProofSupported = isNoProofSupported,
+        jwtProof = jwtProofAlgorithms?.let { algs ->
+            ProofsConfig.SupportedJwtProof(algs.mapToJWSAlgorithms())
+        },
+        attestationProof = attestationProofAlgorithms?.let { algs ->
+            ProofsConfig.SupportedAttestationProof(algs.mapToJWSAlgorithms())
+        },
+    )
+}
+
+private fun Set<Algorithm>.mapToJWSAlgorithms(): Set<JWSAlgorithm> =
+    mapNotNull { it.joseAlgorithmIdentifier }
+        .map { JWSAlgorithm.parse(it) }
+        .toSet()

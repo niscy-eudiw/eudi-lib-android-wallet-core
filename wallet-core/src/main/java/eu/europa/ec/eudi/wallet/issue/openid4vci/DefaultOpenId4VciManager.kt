@@ -75,7 +75,7 @@ import java.util.concurrent.Executor
 internal class DefaultOpenId4VciManager(
     private val context: Context,
     private val documentManager: DocumentManager,
-    private val walletProvider: WalletAttestationsProvider?,
+    private val walletProvider: WalletAttestationsProvider? = null,
     private val walletAttestationKeyManager: WalletKeyManager,
     var config: OpenId4VciManager.Config,
     var logger: Logger? = null,
@@ -116,8 +116,8 @@ internal class DefaultOpenId4VciManager(
         }
     }
 
-    override suspend fun getIssuerMetadata(): Result<CredentialIssuerMetadata> {
-        return CredentialIssuerId(config.issuerUrl).mapCatching {
+    override suspend fun getIssuerMetadata(issuerUrl: String): Result<CredentialIssuerMetadata> {
+        return CredentialIssuerId(issuerUrl).mapCatching {
             CredentialIssuerMetadataResolver(httpClientFactory()).resolve(
                 issuer = it,
                 policy = issuerMetadataPolicy
@@ -127,12 +127,14 @@ internal class DefaultOpenId4VciManager(
 
     @Deprecated("Use issueDocumentByConfigurationIdentifiers that accepts a list of identifiers")
     override fun issueDocumentByConfigurationIdentifier(
+        issuerUrl: String,
         credentialConfigurationId: String,
         txCode: String?,
         executor: Executor?,
         onIssueEvent: OpenId4VciManager.OnIssueEvent
     ) {
         issueDocumentByConfigurationIdentifiers(
+            issuerUrl,
             listOf(credentialConfigurationId),
             txCode,
             executor,
@@ -141,6 +143,7 @@ internal class DefaultOpenId4VciManager(
     }
 
     override fun issueDocumentByConfigurationIdentifiers(
+        issuerUrl: String,
         credentialConfigurationIds: List<String>,
         txCode: String?,
         executor: Executor?,
@@ -149,7 +152,7 @@ internal class DefaultOpenId4VciManager(
         launch(executor, onIssueEvent) { coroutineScope, listener ->
             try {
                 val issuer = issuerCreator.createIssuer(
-                    config.issuerUrl,
+                    issuerUrl,
                     credentialConfigurationIds.map{ id -> CredentialConfigurationIdentifier(id) }
                 )
                 doIssue(issuer, Offer(issuer.credentialOffer), txCode, listener)
@@ -161,6 +164,7 @@ internal class DefaultOpenId4VciManager(
     }
 
     override fun issueDocumentByFormat(
+        issuerUrl: String,
         format: DocumentFormat,
         txCode: String?,
         executor: Executor?,
@@ -168,7 +172,7 @@ internal class DefaultOpenId4VciManager(
     ) {
         launch(executor, onIssueEvent) { coroutineScope, listener ->
             try {
-                val issuer = issuerCreator.createIssuer(config.issuerUrl, format)
+                val issuer = issuerCreator.createIssuer(issuerUrl, format)
                 val offer = Offer(issuer.credentialOffer)
                 doIssue(issuer, offer, txCode, listener)
             } catch (e: Throwable) {
@@ -178,14 +182,16 @@ internal class DefaultOpenId4VciManager(
         }
     }
 
-    @Deprecated("Use issueDocumentByConfigurationIdentifier or issueDocumentByFormat instead")
+    @Deprecated("Use issueDocumentByConfigurationIdentifiers or issueDocumentByFormat instead")
     override fun issueDocumentByDocType(
+        issuerUrl: String,
         docType: String,
         txCode: String?,
         executor: Executor?,
         onIssueEvent: OpenId4VciManager.OnIssueEvent,
     ) {
         issueDocumentByFormat(
+            issuerUrl = issuerUrl,
             format = MsoMdocFormat(
                 docType = docType
             ),
@@ -249,7 +255,7 @@ internal class DefaultOpenId4VciManager(
                 val deferredContext = DeferredContext.fromBytes(
                     deferredDocument.relatedData,
                     walletAttestationKeyManager,
-                    walletAttestationsProvider = walletProvider,
+                    walletInstanceAttestationProvider = walletProvider,
                     dpopConfig = resolvedDpopConfig,
                     logger = logger,
                 )
@@ -385,7 +391,7 @@ internal class DefaultOpenId4VciManager(
 
                 //  Submit the issuance request using stored AuthorizedRequest
                 //  (skips the authorization flow - uses refresh token instead)
-                val submit = SubmitRequest(config, walletProvider, issuer, updatedAuthorizedRequest)
+                val submit = SubmitRequest(walletProvider, issuer, updatedAuthorizedRequest)
                 var response = submit.request(requestMap).also {
                     authorizedRequest = submit.authorizedRequest
                 }
@@ -401,7 +407,7 @@ internal class DefaultOpenId4VciManager(
                     }
                     logger?.d(TAG, "Re-issuance token expired for $documentId, falling back to full authorization")
                     authorizedRequest = issuerAuthorization.authorize(issuer, null)
-                    val retrySubmit = SubmitRequest(config, walletProvider, issuer, authorizedRequest)
+                    val retrySubmit = SubmitRequest(walletProvider, issuer, authorizedRequest)
                     response = retrySubmit.request(requestMap).also {
                         authorizedRequest = retrySubmit.authorizedRequest
                     }
@@ -507,7 +513,7 @@ internal class DefaultOpenId4VciManager(
         )
         val requestMap = documentCreator.createDocuments(offer)
 
-        val submit = SubmitRequest(config, walletProvider, issuer, authorizedRequest)
+        val submit = SubmitRequest(walletProvider, issuer, authorizedRequest)
         val response = submit.request(requestMap).also {
             authorizedRequest = submit.authorizedRequest
         }
