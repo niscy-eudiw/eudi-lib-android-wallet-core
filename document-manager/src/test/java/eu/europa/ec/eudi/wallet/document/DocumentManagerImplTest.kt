@@ -16,10 +16,17 @@
 
 package eu.europa.ec.eudi.wallet.document
 
+import android.util.Log
+import com.upokecenter.cbor.CBORObject
 import eu.europa.ec.eudi.wallet.document.credential.IssuerProvidedCredential
 import eu.europa.ec.eudi.wallet.document.format.MsoMdocFormat
+import eu.europa.ec.eudi.wallet.document.format.SdJwtVcFormat
+import eu.europa.ec.eudi.wallet.document.sample.generateData
+import eu.europa.ec.eudi.wallet.document.sample.generateMso
+import eu.europa.ec.eudi.wallet.document.sample.signMso
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
 import kotlinx.coroutines.runBlocking
 import org.multipaz.cbor.Cbor
 import org.multipaz.credential.SecureAreaBoundCredential
@@ -29,6 +36,7 @@ import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.Storage
 import org.multipaz.storage.ephemeral.EphemeralStorage
+import java.util.Base64
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -142,6 +150,85 @@ class DocumentManagerImplTest {
         // The specific exception for a key mismatch might be more specific,
         // but IllegalArgumentException is a common fallback.
         assertIs<IllegalArgumentException>(storeDocumentResult.exceptionOrNull())
+    }
+
+    @Test
+    fun `should return failure result when a data element is nested too deeply`() {
+        // The MSO generator logs through android.util.Log.
+        mockkStatic(Log::class)
+        every { Log.w(any(), any<String>()) } returns 0
+        val docType = "eu.europa.ec.eudi.pid.1"
+        val unsignedDocument = documentManager.createDocument(
+            format = MsoMdocFormat(docType = docType),
+            createSettings = CreateDocumentSettings(
+                secureAreaIdentifier = secureArea.identifier,
+                createKeySettings = SoftwareCreateKeySettings.Builder().build(),
+            )
+        ).getOrThrow()
+
+        // An element value of 20000 nested arrays, embedded with tag 24 after every 10 arrays.
+        var elementValue = CBORObject.FromObject(0)
+        repeat(2000) {
+            repeat(10) { elementValue = CBORObject.NewArray().Add(elementValue) }
+            elementValue = CBORObject.FromObjectAndTag(elementValue.EncodeToBytes(), 24)
+        }
+        val issuerSignedItem = CBORObject.NewMap()
+            .Add("digestID", 0)
+            .Add("random", ByteArray(16))
+            .Add("elementIdentifier", "family_name")
+            .Add("elementValue", elementValue)
+        val nameSpaces = CBORObject.NewMap().Add(
+            docType,
+            CBORObject.NewArray().Add(CBORObject.FromObjectAndTag(issuerSignedItem.EncodeToBytes(), 24))
+        )
+        val issuerProvidedCredentials = runBlocking {
+            unsignedDocument.getPoPSigners().map {
+                val keyInfo = it.getKeyInfo()
+                val mso = generateMso("sha-256", docType, keyInfo.publicKey, nameSpaces)
+                IssuerProvidedCredential(keyInfo.alias, generateData(nameSpaces, signMso(mso)))
+            }
+        }
+
+        val storeDocumentResult =
+            documentManager.storeIssuedDocument(unsignedDocument, issuerProvidedCredentials)
+
+        val error = assertIs<IllegalArgumentException>(storeDocumentResult.exceptionOrNull())
+        assertIs<IllegalArgumentException>(error.cause)
+        assertFalse(documentManager.getDocumentById(unsignedDocument.id) is IssuedDocument)
+    }
+
+    @Test
+    fun `should return failure result when a claim of an SD-JWT VC is nested too deeply`() {
+        val vct = "urn:eudi:pid:1"
+        val unsignedDocument = documentManager.createDocument(
+            format = SdJwtVcFormat(vct = vct),
+            createSettings = CreateDocumentSettings(
+                secureAreaIdentifier = secureArea.identifier,
+                createKeySettings = SoftwareCreateKeySettings.Builder().build(),
+            )
+        ).getOrThrow()
+        val issuerProvidedCredentials = runBlocking {
+            unsignedDocument.getPoPSigners().map {
+                val keyInfo = it.getKeyInfo()
+                // A claim of 33 nested arrays. The cnf claim holds the key of the credential.
+                val payload = """{"vct":"$vct","cnf":{"jwk":${keyInfo.publicKey.toJwk()}},""" +
+                    """"nationalities":${"[".repeat(33)}"GR"${"]".repeat(33)}}"""
+                IssuerProvidedCredential(keyInfo.alias, sdJwt(payload).toByteArray())
+            }
+        }
+
+        val storeDocumentResult =
+            documentManager.storeIssuedDocument(unsignedDocument, issuerProvidedCredentials)
+
+        val error = assertIs<IllegalArgumentException>(storeDocumentResult.exceptionOrNull())
+        assertIs<IllegalArgumentException>(error.cause)
+        assertFalse(documentManager.getDocumentById(unsignedDocument.id) is IssuedDocument)
+    }
+
+    /** An SD-JWT without disclosures, whose JWT carries [payload] and is not signed. */
+    private fun sdJwt(payload: String): String {
+        fun String.base64Url() = Base64.getUrlEncoder().withoutPadding().encodeToString(toByteArray())
+        return """{"alg":"ES256","typ":"dc+sd-jwt"}""".base64Url() + "." + payload.base64Url() + ".c2lnbmF0dXJl~"
     }
 
     @Test

@@ -56,14 +56,22 @@ internal fun ByteArray.withTag24(): ByteArray {
     return CBORObject.FromObjectAndTag(this, 24).EncodeToBytes()
 }
 
+/** The maximum nesting depth of a converted value, counting the values embedded with tag 24. */
+private const val MAX_DEPTH = 32
+
 /**
  * Converts a CBOR-encoded ByteArray to a native Kotlin object.
  *
  * @return The decoded value as a native Kotlin type (Map, List, String, Number, Boolean, or null).
+ * @throws IllegalArgumentException when the value is nested deeper than [MAX_DEPTH]
  */
 @JvmSynthetic
 internal fun ByteArray.toObject(): Any? {
-    return CBORObject.DecodeFromBytes(this).parse()
+    return toObject(depth = 0)
+}
+
+private fun ByteArray.toObject(depth: Int): Any? {
+    return CBORObject.DecodeFromBytes(this).parse(depth)
 }
 
 /**
@@ -78,9 +86,11 @@ internal fun ByteArray.toObject(): Any? {
  * - arrays (as Lists)
  * - maps (as Map associations)
  *
+ * @param depth the nesting depth of this object, which continues into the values embedded with tag 24
  * @return The CBORObject converted to an appropriate native Kotlin type.
  */
-private fun CBORObject.parse(): Any? = when {
+private fun CBORObject.parse(depth: Int): Any? = when {
+    depth > MAX_DEPTH -> throw IllegalArgumentException("Issuer data exceeds the maximum nesting depth of $MAX_DEPTH")
     isNull -> null
     isTrue -> true
     isFalse -> false
@@ -92,13 +102,13 @@ private fun CBORObject.parse(): Any? = when {
 
     else -> when (type) {
         CBORType.ByteString -> when {
-            HasMostOuterTag(24) -> GetByteString().toObject()
+            HasMostOuterTag(24) -> GetByteString().toObject(depth + 1)
             else -> Base64.getUrlEncoder().encodeToString(GetByteString())
         }
 
         CBORType.TextString -> AsString()
-        CBORType.Array -> values.map { it.parse() }.toList()
-        CBORType.Map -> keys.associate { it.parse() to this[it].parse() }
+        CBORType.Array -> values.map { it.parse(depth + 1) }.toList()
+        CBORType.Map -> keys.associate { it.parse(depth + 1) to this[it].parse(depth + 1) }
         else -> null
     }
 }

@@ -27,6 +27,9 @@ import kotlinx.serialization.json.float
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.long
 
+/** The maximum nesting depth of a parsed element. */
+private const val MAX_DEPTH = 32
+
 /**
  * Extension function to parse a [JsonElement] into native Kotlin types.
  *
@@ -41,11 +44,17 @@ import kotlinx.serialization.json.long
  *   - If conversion fails, falls back to the original string content
  *
  * @return The parsed value as a Kotlin type, or null if parsing fails
+ * @throws IllegalArgumentException when the element is nested deeper than [MAX_DEPTH]
  */
 internal fun JsonElement.parse(): Any? {
+    return parse(depth = 0)
+}
+
+private fun JsonElement.parse(depth: Int): Any? {
+    require(depth <= MAX_DEPTH) { "Issuer data exceeds the maximum nesting depth of $MAX_DEPTH" }
     return when (this) {
-        is JsonArray -> map { it.parse() }
-        is JsonObject -> mapValues { (_, v) -> v.parse() }
+        is JsonArray -> map { it.parse(depth + 1) }
+        is JsonObject -> mapValues { (_, v) -> v.parse(depth + 1) }
         is JsonNull -> null
         is JsonPrimitive -> when {
             isString -> runCatching { content }
