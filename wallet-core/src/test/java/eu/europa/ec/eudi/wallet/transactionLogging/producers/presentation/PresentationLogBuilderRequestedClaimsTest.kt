@@ -136,6 +136,50 @@ class PresentationLogBuilderRequestedClaimsTest {
         assertEquals(listOf(ClaimPath.ofKeys("org.iso.18013.5.1", "family_name")), claim.claims)
     }
 
+    /**
+     * Every credential of the tree is logged once, whichever set, option or member offers it, and
+     * without building the selection combinations.
+     */
+    @Test
+    fun `credentials of every set, option and member are logged`() {
+        val pid = sdJwtSource("eu.europa.ec.eudi.pid.1")
+        val ehic = sdJwtSource("eu.europa.ec.eudi.ehic.1")
+        val photo = sdJwtSource("eu.europa.ec.eudi.photo.1")
+        val pidMatch = matchOf(pid, listOf(jsonClaim("eu.europa.ec.eudi.pid.1", path("family_name"))))
+        val ehicMatch = matchOf(ehic, listOf(jsonClaim("eu.europa.ec.eudi.ehic.1", path("social_security_pin"))))
+        val photoMatch = matchOf(photo, listOf(jsonClaim("eu.europa.ec.eudi.photo.1", path("portrait"))))
+        val data = CredentialQueryResult(
+            listOf(
+                CredentialPresentmentSet(
+                    optional = false,
+                    options = listOf(
+                        CredentialPresentmentSetOption(listOf(CredentialPresentmentSetOptionMember(listOf(pidMatch)))),
+                        CredentialPresentmentSetOption(
+                            listOf(
+                                CredentialPresentmentSetOptionMember(listOf(pidMatch)),
+                                CredentialPresentmentSetOptionMember(listOf(ehicMatch)),
+                            ),
+                        ),
+                    ),
+                ),
+                CredentialPresentmentSet(
+                    optional = true,
+                    options = listOf(
+                        CredentialPresentmentSetOption(listOf(CredentialPresentmentSetOptionMember(listOf(photoMatch)))),
+                    ),
+                ),
+            ),
+        )
+        val request = OpenId4VpRequest(mockk(relaxed = true))
+
+        val log = builder.withRequest(builder.createEmptyPresentationLog(), request, success(data))
+
+        assertEquals(
+            listOf("eu.europa.ec.eudi.pid.1", "eu.europa.ec.eudi.ehic.1", "eu.europa.ec.eudi.photo.1"),
+            log.listOfClaimsRequested.map { it.credentialIdentifier },
+        )
+    }
+
     @Test
     fun `unsupported request type marks the entry not completed`() {
         val request = object : Request {}
@@ -184,8 +228,8 @@ class PresentationLogBuilderRequestedClaimsTest {
     private fun success(data: CredentialQueryResult): RequestProcessor.ProcessedRequest.Success {
         val processed = mockk<RequestProcessor.ProcessedRequest.Success>()
         every { processed.presentmentData } returns data
-        // withRequest reads presentmentSelections; derive it from the tree, like the real getter.
-        every { processed.presentmentSelections } returns data.getAllSelections()
+        // The log reads the tree, never every selection combination.
+        every { processed.presentmentSelections } throws AssertionError("selections must not be built")
         every { processed.getOrNull() } returns processed
         return processed
     }
@@ -238,6 +282,8 @@ class PresentationLogBuilderRequestedClaimsTest {
             intentToRetain = false,
             values = null,
         )
+
+    private fun path(vararg names: String): JsonArray = JsonArray(names.map { JsonPrimitive(it) })
 
     private fun jsonClaim(vct: String, claimPath: JsonArray): JsonRequestedClaim =
         JsonRequestedClaim(

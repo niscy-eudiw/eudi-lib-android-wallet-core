@@ -84,6 +84,10 @@ import org.multipaz.sdjwt.credential.SdJwtVcCredential
  *    `credential_sets` rules and produces the [CredentialQueryResult] tree consumed
  *    by [ProcessedDcqlRequest] for the presentation step.
  *
+ * A request that allows more than [MAX_PRESENTMENT_SELECTIONS] selections is rejected with a
+ * [RequestProcessor.ProcessedRequest.Failure], because every selection the user can choose from is
+ * built in memory. The failure is not sent to the verifier.
+ *
  * @property documentManager Provides access to documents stored in the wallet.
  * @property openid4VpX509CertificateTrust Verifies trust in the reader's certificate.
  * @property transactionDataTypes The transaction data types the wallet accepts, each with the
@@ -190,11 +194,19 @@ class DcqlRequestProcessor(
                 credentialSets = credentialSets,
                 matchesByQueryId = matchesByQueryId,
             )
+            val presentmentData = CredentialQueryResult(sets)
+
+            // Every option the user can choose from is built in memory, so a request that allows
+            // too many is rejected before they are built
+            if (countMultipleAwareSelections(presentmentData, multipleByQueryId) > MAX_PRESENTMENT_SELECTIONS) {
+                logger?.e(TAG, "DCQL request allows more than $MAX_PRESENTMENT_SELECTIONS selections")
+                return tooManySelections()
+            }
 
             ProcessedDcqlRequest(
                 resolvedRequestObject = request.resolvedRequestObject,
                 documentManager = documentManager,
-                presentmentData = CredentialQueryResult(sets),
+                presentmentData = presentmentData,
                 requester = requester,
                 trustMetadata = trustMetadata,
                 msoMdocNonce = generateJarmNonce(),
@@ -296,6 +308,17 @@ class DcqlRequestProcessor(
 
     private fun invalidTransactionData(message: String): RequestProcessor.ProcessedRequest.Failure =
         invalidTransactionData(IllegalArgumentException(message))
+
+    /**
+     * Returns a failure for a request that allows more than [MAX_PRESENTMENT_SELECTIONS] selections.
+     * The failure is not reported to the verifier: the number of selections depends on the
+     * credentials in the wallet, so an error response sent without the End-User would reveal them
+     * (OpenID4VP 1.0 sections 15.1, 15.4.1 and 15.9).
+     */
+    private fun tooManySelections(): RequestProcessor.ProcessedRequest.Failure =
+        RequestProcessor.ProcessedRequest.Failure(
+            IllegalArgumentException("The request allows more than $MAX_PRESENTMENT_SELECTIONS selections")
+        )
 
     /**
      * Reads this transaction data with the parser of its type. The hash the wallet sends is

@@ -49,11 +49,7 @@ internal fun buildMultipleAwareSelections(
     fun picksForMember(
         member: CredentialPresentmentSetOptionMember,
     ): List<List<CredentialPresentmentSetOptionMemberMatch>> {
-        val queryId = member.matches.firstOrNull()
-            ?.let { (it.source as? CredentialMatchSourceOpenID4VP)?.credentialQuery?.id }
-            ?.let(::QueryId)
-        val allowsMultiple = queryId?.let { multipleByQueryId[it] } ?: false
-        return if (allowsMultiple) {
+        return if (member.allowsMultiple(multipleByQueryId)) {
             // One pick that carries every match together.
             listOf(member.matches)
         } else {
@@ -84,6 +80,61 @@ internal fun buildMultipleAwareSelections(
     return cartesianProduct(perSet).map { perSetPicks ->
         CredentialSelection(matches = perSetPicks.flatten())
     }
+}
+
+/**
+ * The most options [buildMultipleAwareSelections] may produce for a request. Every option is built
+ * in memory, and their number is the product of the choices of every credential set, so it grows
+ * exponentially with the credential sets. This many options are more than a consent screen can
+ * usefully present.
+ */
+internal const val MAX_PRESENTMENT_SELECTIONS = 1000L
+
+/**
+ * Counts the options [buildMultipleAwareSelections] produces for the same input, without
+ * building them. The count stops growing at [cap], so it is exact below [cap] and [cap] otherwise.
+ *
+ * @param data the input presentment tree.
+ * @param multipleByQueryId the `multiple` flag per query (missing keys default to `false`).
+ * @param cap the value at which the count stops growing.
+ * @return the number of options, or [cap] when there are at least that many.
+ */
+internal fun countMultipleAwareSelections(
+    data: CredentialQueryResult,
+    multipleByQueryId: Map<QueryId, Boolean>,
+    cap: Long = MAX_PRESENTMENT_SELECTIONS + 1,
+): Long {
+    fun Long.timesCapped(other: Long): Long = when {
+        this == 0L || other == 0L -> 0L
+        this > cap / other -> cap
+        else -> this * other
+    }
+
+    fun Long.plusCapped(other: Long): Long = minOf(this + other, cap)
+
+    return data.credentialSets.fold(1L) { total, set ->
+        val setCount = set.options.fold(if (set.optional) 1L else 0L) { sum, option ->
+            val optionCount = option.members.fold(1L) { product, member ->
+                val picks = if (member.allowsMultiple(multipleByQueryId)) 1L else member.matches.size.toLong()
+                product.timesCapped(picks)
+            }
+            sum.plusCapped(optionCount)
+        }
+        total.timesCapped(setCount)
+    }
+}
+
+/**
+ * Whether the query of the member's matches has `multiple = true`. A member whose matches have no
+ * query is treated as `multiple = false`.
+ */
+private fun CredentialPresentmentSetOptionMember.allowsMultiple(
+    multipleByQueryId: Map<QueryId, Boolean>,
+): Boolean {
+    val queryId = matches.firstOrNull()
+        ?.let { (it.source as? CredentialMatchSourceOpenID4VP)?.credentialQuery?.id }
+        ?.let(::QueryId)
+    return queryId?.let { multipleByQueryId[it] } ?: false
 }
 
 /**

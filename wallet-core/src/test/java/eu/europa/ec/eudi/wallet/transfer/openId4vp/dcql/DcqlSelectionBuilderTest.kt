@@ -201,6 +201,53 @@ class DcqlSelectionBuilderTest {
         assertTrue(listOf(optionBPidA) in flattened, "pid option keeps single match")
     }
 
+    /**
+     * The count equals the number of options built, for a required set with two options (one of
+     * them with two members), an optional set, and both values of the `multiple` flag:
+     * (2 + 1 × 3) × (1 + 2) = 15.
+     */
+    @Test
+    fun `count equals the number of options built`() {
+        val data = CredentialQueryResult(
+            credentialSets = listOf(
+                CredentialPresentmentSet(
+                    optional = false,
+                    options = listOf(
+                        CredentialPresentmentSetOption(
+                            members = listOf(
+                                CredentialPresentmentSetOptionMember(matches = List(2) { matchWithQueryId(QueryId("pid")) }),
+                            ),
+                        ),
+                        CredentialPresentmentSetOption(
+                            members = listOf(
+                                CredentialPresentmentSetOptionMember(matches = List(2) { matchWithQueryId(QueryId("mdl")) }),
+                                CredentialPresentmentSetOptionMember(matches = List(3) { matchWithQueryId(QueryId("loyalty")) }),
+                            ),
+                        ),
+                    ),
+                ),
+                singleOptionSet(optional = true, matches = List(2) { matchWithQueryId(QueryId("photo")) }),
+            ),
+        )
+        val multipleByQueryId = mapOf(QueryId("mdl") to true)
+
+        val built = buildMultipleAwareSelections(data, multipleByQueryId)
+
+        assertEquals(15, built.size)
+        assertEquals(built.size.toLong(), countMultipleAwareSelections(data, multipleByQueryId))
+    }
+
+    /** The count stops growing at the cap instead of overflowing, here for 2^100 options. */
+    @Test
+    fun `count stops at the cap for exponentially many options`() {
+        val pid = matchWithQueryId(QueryId("pid"))
+        val data = CredentialQueryResult(
+            credentialSets = List(100) { singleOptionSet(optional = true, matches = listOf(pid)) },
+        )
+
+        assertEquals(MAX_PRESENTMENT_SELECTIONS + 1, countMultipleAwareSelections(data, emptyMap()))
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     /**

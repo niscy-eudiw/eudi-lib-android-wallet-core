@@ -100,7 +100,9 @@ class PresentationLogBuilder {
             } else {
                 // Take the claims from what the user was shown on the consent screen, de-duplicated
                 // per credential (a match repeats across selection combinations).
-                val matches = success.presentmentSelections
+                val matches = success.presentmentData.credentialSets
+                    .flatMap { it.options }
+                    .flatMap { it.members }
                     .flatMap { it.matches }
                     .distinctBy { it.offeredKey() }
                 if (matches.isEmpty()) {
