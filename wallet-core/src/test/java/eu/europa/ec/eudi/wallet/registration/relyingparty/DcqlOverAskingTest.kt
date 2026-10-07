@@ -33,6 +33,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 private const val PID_VCT = "urn:eudi:pid:1"
+private const val EHIC_VCT = "urn:eudi:ehic:1"
 private const val SD_JWT_VC_FORMAT = "dc+sd-jwt"
 
 /**
@@ -139,6 +140,36 @@ class DcqlOverAskingTest {
 
         assertEquals(1, result.size)
         assertEquals(claimPath("nationalities", null), result.single().path)
+    }
+
+    /**
+     * The types of an SD-JWT VC query are alternatives and a credential of any of them can be presented
+     * (OpenID4VP 1.0 Appendix B.3.5), so a type that is not registered is reported even when the query
+     * also names a registered one.
+     */
+    @Test
+    fun `an unregistered type requested together with a registered one is reported`() {
+        val requested = DCQL(
+            credentials = Credentials(
+                listOf(
+                    CredentialQuery.sdJwtVc(
+                        id = QueryId("query_0"),
+                        sdJwtVcMeta = DCQLMetaSdJwtVcExtensions(vctValues = listOf(PID_VCT, EHIC_VCT)),
+                        claims = listOf(
+                            ClaimsQuery.sdJwtVc(path = ClaimPath(listOf(ClaimPathElement.Claim("family_name")))),
+                        ),
+                    ),
+                ),
+            ),
+            credentialSets = null,
+        ).toRequestedAttestations()
+        val registration = registeredFor(RegisteredClaim(path = claimPath("family_name")))
+
+        val result = registration.findOverAskedClaims(requested)
+
+        assertEquals(1, result.size)
+        assertEquals(CredentialMeta(vctValues = listOf(EHIC_VCT)), result.single().meta)
+        assertEquals(claimPath("family_name"), result.single().path)
     }
 }
 

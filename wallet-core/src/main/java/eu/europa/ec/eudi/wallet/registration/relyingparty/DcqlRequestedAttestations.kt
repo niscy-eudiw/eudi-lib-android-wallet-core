@@ -27,20 +27,35 @@ import eu.europa.ec.eudi.wallet.registration.ClaimPathElement as RegistrationCla
 /**
  * Projects the credential queries of a DCQL query onto the requested attestations checked against the
  * registered scope.
+ *
+ * The `vct_values` of an SD-JWT VC query are alternative types and a credential of any of them can be
+ * presented (OpenID4VP 1.0 Appendix B.3.5), so each type is a requested attestation of its own.
  */
 internal fun DCQL.toRequestedAttestations(): List<RequestedAttestation> =
-    credentials.value.map { it.toRequestedAttestation() }
+    credentials.value.flatMap { it.toRequestedAttestations() }
 
-private fun CredentialQuery.toRequestedAttestation(): RequestedAttestation {
+private fun CredentialQuery.toRequestedAttestations(): List<RequestedAttestation> {
+    val claimPaths = claims.orEmpty().map { claimsQuery ->
+        claimsQuery.path.value.map { it.toRegistrationClaimPathElement() }
+    }
     val docType = if (format == Format.MsoMdoc) metaMsoMdoc?.doctypeValue?.value else null
     val vctValues = if (format == Format.SdJwtVc) metaSdJwtVc?.vctValues else null
-    return RequestedAttestation(
-        format = format.value,
-        meta = credentialMetaOrNull(doctypeValue = docType, vctValues = vctValues),
-        claimPaths = claims.orEmpty().map { claimsQuery ->
-            claimsQuery.path.value.map { it.toRegistrationClaimPathElement() }
-        },
-    )
+    if (vctValues.isNullOrEmpty()) {
+        return listOf(
+            RequestedAttestation(
+                format = format.value,
+                meta = credentialMetaOrNull(doctypeValue = docType),
+                claimPaths = claimPaths,
+            ),
+        )
+    }
+    return vctValues.distinct().map { vct ->
+        RequestedAttestation(
+            format = format.value,
+            meta = credentialMetaOrNull(vctValues = listOf(vct)),
+            claimPaths = claimPaths,
+        )
+    }
 }
 
 /** Projects a DCQL claim path element onto its registration equivalent, element for element. */
