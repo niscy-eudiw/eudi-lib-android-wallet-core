@@ -41,7 +41,6 @@ dependencies {
     implementation(libs.upokecenter.cbor)
     implementation(libs.cose.java)
 
-    implementation(libs.ktor.client.logging)
     implementation(libs.bouncy.castle.prov)
     implementation(libs.bouncy.castle.pkix)
 
@@ -53,6 +52,7 @@ dependencies {
     testImplementation(libs.kotlin.coroutines.test)
     testImplementation(libs.biometric.ktx)
     testImplementation(libs.robolectric)
+    testImplementation(libs.ktor.client.logging)
 
     androidTestImplementation(libs.android.junit)
     androidTestImplementation(libs.mockito.android)

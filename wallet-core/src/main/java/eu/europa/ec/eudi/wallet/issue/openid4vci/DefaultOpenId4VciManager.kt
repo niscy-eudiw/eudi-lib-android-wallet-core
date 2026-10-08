@@ -39,7 +39,6 @@ import eu.europa.ec.eudi.wallet.internal.d
 import eu.europa.ec.eudi.wallet.internal.e
 import eu.europa.ec.eudi.wallet.internal.mainExecutor
 import eu.europa.ec.eudi.wallet.internal.wrappedWithContentNegotiation
-import eu.europa.ec.eudi.wallet.internal.wrappedWithLogging
 import eu.europa.ec.eudi.wallet.issue.openid4vci.IssueEvent.Companion.failure
 import eu.europa.ec.eudi.wallet.issue.openid4vci.OpenId4VciManager.Companion.TAG
 import eu.europa.ec.eudi.wallet.issue.openid4vci.dpop.DPopConfig
@@ -91,7 +90,6 @@ internal class DefaultOpenId4VciManager(
 
     internal val httpClientFactory
         get() = (ktorHttpClientFactory ?: DefaultHttpClientFactory)
-            .wrappedWithLogging(logger)
             .wrappedWithContentNegotiation()
 
     private val issuerMetadataPolicy: IssuerMetadataPolicy

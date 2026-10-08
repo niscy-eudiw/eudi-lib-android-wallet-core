@@ -16,41 +16,10 @@
 
 package eu.europa.ec.eudi.wallet.internal
 
-import eu.europa.ec.eudi.wallet.issue.openid4vci.OpenId4VciManager.Companion.TAG
-import eu.europa.ec.eudi.wallet.logging.Logger
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.plugins.logging.LogLevel
-import io.ktor.client.plugins.logging.Logging
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
-
-/**
- * Wraps the [HttpClient] with a logging interceptor.
- * @receiver the [HttpClient] factory
- * @param libraryLogger the logger
- * @return the wrapped [HttpClient] factory
- */
-@JvmSynthetic
-internal fun (() -> HttpClient).wrappedWithLogging(libraryLogger: Logger?): (() -> HttpClient) {
-    return if (libraryLogger != null) {
-        {
-            val ktorLogger = object : io.ktor.client.plugins.logging.Logger {
-                override fun log(message: String) {
-                    libraryLogger.d(TAG, message)
-                }
-            }
-            this().let { client ->
-                client.config {
-                    install(Logging) {
-                        logger = ktorLogger
-                        level = LogLevel.ALL
-                    }
-                }
-            }
-        }
-    } else this
-}
 
 @JvmSynthetic
 internal fun (() -> HttpClient).wrappedWithContentNegotiation(): (() -> HttpClient) {

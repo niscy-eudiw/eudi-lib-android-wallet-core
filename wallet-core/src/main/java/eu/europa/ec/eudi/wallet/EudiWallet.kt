@@ -35,7 +35,6 @@ import eu.europa.ec.eudi.wallet.document.IssuedDocument
 import eu.europa.ec.eudi.wallet.internal.LogPrinterImpl
 import eu.europa.ec.eudi.wallet.internal.i
 import eu.europa.ec.eudi.wallet.internal.wrappedWithContentNegotiation
-import eu.europa.ec.eudi.wallet.internal.wrappedWithLogging
 import eu.europa.ec.eudi.wallet.issue.openid4vci.OpenId4VciManager
 import eu.europa.ec.eudi.wallet.logging.Logger
 import eu.europa.ec.eudi.wallet.presentation.PresentationManager
@@ -291,6 +290,8 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
          *
          * If not set, the default Ktor HTTP client factory will be used which is initialized with the default
          *
+         * The library does not log HTTP traffic. To log it, install Ktor's `Logging` plugin in this client.
+         *
          * @param ktorHttpClientFactory the Ktor HTTP client factory
          * @return this [Builder] instance
          */
@@ -514,7 +515,6 @@ interface EudiWallet : DocumentManager, PresentationManager, DocumentStatusResol
 
             val trustMarkManagerToUse = trustMarkSource?.let { source ->
                 val httpFactory = (ktorHttpClientFactory ?: { HttpClient() })
-                    .wrappedWithLogging(loggerToUse)
                     .wrappedWithContentNegotiation()
                 TrustMarkManager(
                     source = source,

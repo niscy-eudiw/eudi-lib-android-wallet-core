@@ -31,14 +31,12 @@ import eu.europa.ec.eudi.openid4vp.RegistrationCertificatePolicy
 import eu.europa.ec.eudi.wallet.registration.relyingparty.ResolvedWrpRegistration
 import eu.europa.ec.eudi.openid4vp.Resolution
 import eu.europa.ec.eudi.openid4vp.ResolvedRequestObject
-import eu.europa.ec.eudi.openid4vp.asException
 import eu.europa.ec.eudi.wallet.internal.d
 import eu.europa.ec.eudi.wallet.internal.e
 import eu.europa.ec.eudi.wallet.internal.generateJarmNonce
 import eu.europa.ec.eudi.wallet.internal.i
 import eu.europa.ec.eudi.wallet.internal.makeOpenId4VPConfig
 import eu.europa.ec.eudi.wallet.internal.wrappedWithContentNegotiation
-import eu.europa.ec.eudi.wallet.internal.wrappedWithLogging
 import eu.europa.ec.eudi.wallet.logging.Logger
 import eu.europa.ec.eudi.wallet.transfer.openId4vp.dcql.DcqlRequestProcessor
 import io.ktor.client.HttpClient
@@ -78,7 +76,7 @@ class OpenId4VpManager(
 ) : TransferEvent.Listenable {
 
     /**
-     * Lazy initialization of the OpenID4VP protocol handler with logging and content negotiation.
+     * Lazy initialization of the OpenID4VP protocol handler with content negotiation.
      * Uses the configuration and trust anchor from the request processor.
      */
     private val openId4Vp by lazy {
@@ -89,7 +87,6 @@ class OpenId4VpManager(
                 registrationCertificatePolicy
             ),
             httpClient = (ktorHttpClientFactory ?: DefaultHttpClientFactory)
-                .wrappedWithLogging(logger)
                 .wrappedWithContentNegotiation()
                 .invoke()
         )

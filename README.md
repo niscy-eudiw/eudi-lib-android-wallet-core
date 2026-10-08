@@ -315,6 +315,61 @@ val customWallet = EudiWallet(context, config) {
 See the [CustomizeSecureArea.md](CustomizeSecureArea.md) for more information on how to use the
 wallet-core library with custom SecureArea implementations.
 
+#### Logging
+
+The library writes its logs to a `Logger`:
+
+- Without `withLogger`, the built-in logger writes to Logcat the records up to the level set with
+  `configureLogging` (default `Logger.LEVEL_INFO`).
+- With `withLogger`, the custom logger receives records of every level and chooses which to keep;
+  `configureLogging` does not apply to it.
+
+```kotlin
+// built-in logger
+val config = EudiWalletConfig()
+    .configureLogging(level = Logger.LEVEL_DEBUG)
+
+// custom logger
+val wallet = EudiWallet(context, config) {
+    withLogger { record ->
+        if (record.level <= Logger.LEVEL_INFO) {
+            Log.i(record.sourceClassName, record.message, record.thrown)
+        }
+    }
+}
+```
+
+`Logger.LEVEL_DEBUG` is intended for development builds.
+
+##### HTTP Logging
+
+The library does not log HTTP traffic. To log it, add the `io.ktor:ktor-client-logging` dependency
+and install Ktor's `Logging` plugin in the client returned by `withKtorHttpClientFactory`:
+
+```kotlin
+import io.ktor.client.plugins.logging.ANDROID
+import io.ktor.client.plugins.logging.Logger as KtorLogger
+
+val wallet = EudiWallet(context, config) {
+    withKtorHttpClientFactory {
+        HttpClient {
+            install(Logging) {
+                logger = KtorLogger.ANDROID
+                level = LogLevel.HEADERS
+                sanitizeHeader { name ->
+                    name == HttpHeaders.Authorization ||
+                        name == "DPoP" ||
+                        name.startsWith("OAuth-Client-Attestation")
+                }
+            }
+        }
+    }
+}
+```
+
+Requests and responses carry access tokens, wallet attestations and personal data. `sanitizeHeader`
+hides header values only; `LogLevel.BODY` and `LogLevel.ALL` also write the request and response bodies.
+
 #### Reader Authentication Policy
 
 The reader authentication policy controls how reader authentication results affect document
