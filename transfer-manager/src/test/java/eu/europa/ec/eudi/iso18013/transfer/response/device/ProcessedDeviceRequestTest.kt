@@ -24,8 +24,10 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
+import org.multipaz.cose.CoseSign1
 import org.multipaz.credential.Credential
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.mdoc.request.DocRequest
 import org.multipaz.mdoc.response.DeviceResponseParser
 import org.multipaz.presentment.CredentialMatchSourceIso18013
 import org.multipaz.presentment.CredentialMatchSourceOpenID4VP
@@ -47,23 +49,26 @@ import kotlin.test.assertIs
 /**
  * Unit tests for [ProcessedDeviceRequest.generateResponse], focusing on:
  *
- *  - **Policy gate**: when [ReaderAuthPolicy] demands trust that is missing,
- *    [generateResponse] must return an empty `STATUS_GENERAL_ERROR` device response and
- *    **not** sign any documents. This regression-guards against an earlier bug where the
- *    short-circuit branch was missing a `return`, silently falling through to the normal
- *    document loop even when policy said to skip.
+ *  - **Global policy gate** (`usesReaderAuthAll = true`): when [ReaderAuthPolicy] demands
+ *    trust that is missing, [generateResponse] must return an empty `STATUS_GENERAL_ERROR`
+ *    device response and **not** sign any documents.
+ *
+ *  - **Per-DocRequest policy gate** (`usesReaderAuthAll = false`): when per-DocRequest
+ *    `readerAuth` is used (ISO 18013-5 1st edition), the policy is evaluated per-match
+ *    inside the signing loop. Matches whose DocRequest lacks trusted reader auth are skipped,
+ *    preventing a trusted DocRequest from leaking an untrusted one's documents.
  *
  *  - **Per-match iteration**: matches whose source is not [CredentialMatchSourceIso18013]
  *    (e.g. a leaked OpenID4VP match) are skipped silently — the loop continues without
  *    surfacing an error.
  *
  * Strategy: we construct [ProcessedDeviceRequest] directly with controllable `requester` /
- * `trustMetadata` / `readerAuthPolicy`, then exercise [generateResponse] with an empty
- * selection (or a single non-Iso18013 match) so that no real credentials or signing are
- * needed. The resulting response bytes are decoded via [DeviceResponseParser] to assert
- * on the wire-level status code (`STATUS_OK` vs `STATUS_GENERAL_ERROR`) — `documentIds`
- * alone is insufficient because it's empty in both the "skipped by policy" and "normal
- * path with no matches" outcomes.
+ * `trustMetadata` / `readerAuthPolicy` / `usesReaderAuthAll`, then exercise
+ * [generateResponse] with an empty selection (or a single non-Iso18013 match) so that no
+ * real credentials or signing are needed. The resulting response bytes are decoded via
+ * [DeviceResponseParser] to assert on the wire-level status code (`STATUS_OK` vs
+ * `STATUS_GENERAL_ERROR`) — `documentIds` alone is insufficient because it's empty in both
+ * the "skipped by policy" and "normal path with no matches" outcomes.
  */
 class ProcessedDeviceRequestTest {
 
@@ -153,6 +158,134 @@ class ProcessedDeviceRequestTest {
             trustMetadata = null,
             requester = Requester(requesterIdentities = listOf(Iso18013RequesterIdentity(mockk<X509CertChain>()))),
             readerAuthPolicy = ReaderAuthPolicy.DoNotEnforce,
+        )
+
+        val response = processed.generateEmptyResponse()
+
+        assertEquals(emptyList(), response.documentIds)
+        assertEquals(Constants.DEVICE_RESPONSE_STATUS_OK, parseStatus(response))
+    }
+
+    // ── Per-DocRequest policy gate (usesReaderAuthAll = false) ────────────────
+    //
+    // When the request uses per-DocRequest reader authentication (ISO 18013-5 1st ed.),
+    // the policy is evaluated individually for each match's DocRequest inside the signing
+    // loop. These tests verify that the per-DocRequest check correctly skips or allows
+    // matches based on their own readerAuth, independent of the global trustMetadata.
+
+    @Test
+    fun `per-DocRequest AlwaysRequire skips match with null readerAuth`() = runBlocking {
+        // AlwaysRequire + null readerAuth on the DocRequest → the match is silently skipped
+        // by the defense-in-depth check. With no documents signed, the response is STATUS_OK
+        // with an empty document list (the consent-level filter in DeviceRequestProcessor
+        // would have excluded this DocRequest already; this is the fallback).
+        val trustStore = mockk<ReaderTrustStore>()
+        val processed = buildProcessedRequest(
+            trustMetadata = null,
+            readerAuthPolicy = ReaderAuthPolicy.AlwaysRequire(trustStore),
+            usesReaderAuthAll = false,
+        )
+        val match = mockIso18013Match(docRequestReaderAuth = null)
+
+        val result = processed.generateResponse(
+            selection = CredentialSelection(matches = listOf(match)),
+            keyUnlockData = emptyMap(),
+        )
+
+        val success = assertIs<ResponseResult.Success>(result)
+        val response = assertIs<DeviceResponse>(success.response)
+        assertEquals(emptyList(), response.documentIds)
+        assertEquals(Constants.DEVICE_RESPONSE_STATUS_OK, parseStatus(response))
+    }
+
+    @Test
+    fun `per-DocRequest EnforceIfPresent skips match with untrusted readerAuth`() = runBlocking {
+        // readerAuth is present (non-null CoseSign1) but has no x5chain → passesReaderAuthPolicy
+        // returns false → match silently skipped. STATUS_OK with no documents.
+        val trustStore = mockk<ReaderTrustStore>()
+        val processed = buildProcessedRequest(
+            trustMetadata = null,
+            readerAuthPolicy = ReaderAuthPolicy.EnforceIfPresent(trustStore),
+            usesReaderAuthAll = false,
+        )
+        val match = mockIso18013Match(docRequestReaderAuth = mockCoseSign1WithoutCertChain())
+
+        val result = processed.generateResponse(
+            selection = CredentialSelection(matches = listOf(match)),
+            keyUnlockData = emptyMap(),
+        )
+
+        val success = assertIs<ResponseResult.Success>(result)
+        val response = assertIs<DeviceResponse>(success.response)
+        assertEquals(emptyList(), response.documentIds)
+        assertEquals(Constants.DEVICE_RESPONSE_STATUS_OK, parseStatus(response))
+    }
+
+    @Test
+    fun `per-DocRequest EnforceIfPresent passes match with null readerAuth`(): Unit = runBlocking {
+        // No per-DocRequest auth → nothing to enforce → the match is NOT skipped.
+        // Unlike AlwaysRequire (which rejects null readerAuth), EnforceIfPresent only
+        // rejects when auth is present but untrusted. With a null-readerAuth match that
+        // passes the per-doc policy but no real credential to sign, the loop hits the
+        // mock credential's requireIssuedDocument, which fails → ResponseResult.Failure.
+        // What matters: it was NOT skipped by the per-doc policy check.
+        val trustStore = mockk<ReaderTrustStore>()
+        val processed = buildProcessedRequest(
+            trustMetadata = null,
+            readerAuthPolicy = ReaderAuthPolicy.EnforceIfPresent(trustStore),
+            usesReaderAuthAll = false,
+        )
+        val match = mockIso18013Match(docRequestReaderAuth = null)
+
+        val result = processed.generateResponse(
+            selection = CredentialSelection(matches = listOf(match)),
+            keyUnlockData = emptyMap(),
+        )
+
+        // The match passes the per-doc policy but fails in the signing loop (mock credential).
+        // A policy-skipped match would have produced STATUS_OK with empty documents instead.
+        assertIs<ResponseResult.Failure>(result)
+    }
+
+    @Test
+    fun `per-DocRequest DoNotEnforce allows all matches regardless of readerAuth`() = runBlocking {
+        val processed = buildProcessedRequest(
+            trustMetadata = null,
+            readerAuthPolicy = ReaderAuthPolicy.DoNotEnforce,
+            usesReaderAuthAll = false,
+        )
+
+        val response = processed.generateEmptyResponse()
+
+        assertEquals(emptyList(), response.documentIds)
+        assertEquals(Constants.DEVICE_RESPONSE_STATUS_OK, parseStatus(response))
+    }
+
+    @Test
+    fun `usesReaderAuthAll true preserves existing global check behavior`() = runBlocking {
+        // AlwaysRequire with no trust: global check should short-circuit to STATUS_GENERAL_ERROR
+        // even though usesReaderAuthAll is true (default, existing behavior).
+        val processed = buildProcessedRequest(
+            trustMetadata = null,
+            readerAuthPolicy = ReaderAuthPolicy.AlwaysRequire(mockk<ReaderTrustStore>()),
+            usesReaderAuthAll = true,
+        )
+
+        val response = processed.generateEmptyResponse()
+
+        assertEquals(emptyList(), response.documentIds)
+        assertEquals(Constants.DEVICE_RESPONSE_STATUS_GENERAL_ERROR, parseStatus(response))
+    }
+
+    @Test
+    fun `per-DocRequest gate does not short-circuit globally when usesReaderAuthAll is false`() = runBlocking {
+        // With usesReaderAuthAll = false and AlwaysRequire, the global gate does NOT fire.
+        // An empty selection means no matches are iterated, so we get STATUS_OK (not
+        // STATUS_GENERAL_ERROR which the global gate would have produced).
+        val processed = buildProcessedRequest(
+            trustMetadata = null,
+            readerAuthPolicy = ReaderAuthPolicy.AlwaysRequire(mockk<ReaderTrustStore>()),
+            usesReaderAuthAll = false,
         )
 
         val response = processed.generateEmptyResponse()
@@ -373,6 +506,7 @@ class ProcessedDeviceRequestTest {
         trustMetadata: TrustMetadata?,
         requester: Requester = Requester(requesterIdentities = emptyList()),
         readerAuthPolicy: ReaderAuthPolicy = ReaderAuthPolicy.DoNotEnforce,
+        usesReaderAuthAll: Boolean = true,
         presentmentData: CredentialQueryResult = CredentialQueryResult(emptyList()),
     ): ProcessedDeviceRequest = ProcessedDeviceRequest(
         documentManager = mockk<DocumentManager>(relaxed = true),
@@ -381,11 +515,44 @@ class ProcessedDeviceRequestTest {
         requester = requester,
         trustMetadata = trustMetadata,
         readerAuthPolicy = readerAuthPolicy,
+        usesReaderAuthAll = usesReaderAuthAll,
     )
 
     /** Mock a [CredentialPresentmentSetOptionMemberMatch] with no behaviour — used as an
      *  opaque identity token in the selection-shape assertions. */
     private fun mockMatch(): CredentialPresentmentSetOptionMemberMatch = mockk()
+
+    /**
+     * Create a mock [CredentialPresentmentSetOptionMemberMatch] whose source is a
+     * [CredentialMatchSourceIso18013] backed by a [DocRequest] with the given [readerAuth].
+     * Used to test the per-DocRequest policy gate in the signing loop.
+     */
+    private fun mockIso18013Match(
+        docRequestReaderAuth: CoseSign1?,
+    ): CredentialPresentmentSetOptionMemberMatch {
+        val docRequest = mockk<DocRequest> {
+            every { readerAuth } returns docRequestReaderAuth
+        }
+        return mockk {
+            every { source } returns CredentialMatchSourceIso18013(docRequest = docRequest)
+            every { credential } returns mockk<Credential>(relaxed = true)
+            every { claims } returns emptyMap()
+        }
+    }
+
+    /**
+     * Create a mock [CoseSign1] with **no** x5chain header.
+     *
+     * [passesReaderAuthPolicy] sees that `readerAuth` is non-null (auth is "present") but
+     * cannot extract a cert chain, so it returns `false`. This is sufficient to trigger the
+     * "present but untrusted" path for [ReaderAuthPolicy.EnforceIfPresent] without needing
+     * to mock the x5chain extraction internals (which involves the `javaX509Certificates`
+     * extension property that MockK cannot intercept).
+     */
+    private fun mockCoseSign1WithoutCertChain(): CoseSign1 = mockk {
+        every { protectedHeaders } returns emptyMap()
+        every { unprotectedHeaders } returns emptyMap()
+    }
 
     /**
      * Shorthand for the typical one-set / one-option / one-member shape that

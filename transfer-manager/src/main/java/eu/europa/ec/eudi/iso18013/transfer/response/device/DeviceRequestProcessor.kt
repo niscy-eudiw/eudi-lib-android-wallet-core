@@ -18,6 +18,7 @@ package eu.europa.ec.eudi.iso18013.transfer.response.device
 
 import eu.europa.ec.eudi.iso18013.transfer.internal.cn
 import eu.europa.ec.eudi.iso18013.transfer.internal.getValidIssuedMsoMdocDocuments
+import eu.europa.ec.eudi.iso18013.transfer.internal.passesReaderAuthPolicy
 import eu.europa.ec.eudi.iso18013.transfer.response.EU_WRPRC_REQUEST_INFO_KEY
 import eu.europa.ec.eudi.iso18013.transfer.response.ReaderAuthPolicy
 import eu.europa.ec.eudi.iso18013.transfer.response.WrpRegistrationValidator
@@ -98,6 +99,15 @@ class DeviceRequestProcessor(
                 false
             }
 
+            // ISO 18013-5 has two mutually exclusive signing modes:
+            //  - `readerAuthAll` (2nd edition): signatures cover ALL DocRequests globally.
+            //  - Per-DocRequest `readerAuth` (1st edition): each DocRequest independently
+            //    carries its own COSE_Sign1 (or none at all).
+            // When readerAuthAll is used, the existing global trust resolution is correct.
+            // When per-DocRequest auth is used, we must evaluate policy per-DocRequest to
+            // prevent a trusted DocRequest from leaking an untrusted one's documents.
+            val usesReaderAuthAll = parsedRequest.readerAuthAll.isNotEmpty()
+
             // A request may carry several reader signatures (18013-5 2nd ed. `readerAuthAll`),
             // each one a separate identity of the *same* reader — typically one per trust
             // framework it is registered in. Trust is therefore disjunctive: the first identity
@@ -132,7 +142,15 @@ class DeviceRequestProcessor(
                 TrustMetadata(displayName = readerCertChain.cn.takeIf { it.isNotBlank() })
             } else null
 
-            val credentialSets = parsedRequest.docRequests.mapNotNull { docRequest ->
+            // When per-DocRequest auth is used (!usesReaderAuthAll), filter out
+            // DocRequests that don't pass the reader auth policy before building the
+            // consent tree. This prevents untrusted DocRequests from reaching the UI.
+            val eligibleDocRequests = if (usesReaderAuthAll) {
+                parsedRequest.docRequests
+            } else {
+                parsedRequest.docRequests.filter { it.passesReaderAuthPolicy(readerAuthPolicy) }
+            }
+            val credentialSets = eligibleDocRequests.mapNotNull { docRequest ->
                 docRequest.toCredentialPresentmentSet(documentManager)
             }
 
@@ -163,6 +181,7 @@ class DeviceRequestProcessor(
                 trustMetadata = trustMetadata,
                 zkSystemRepository = zkSystemRepository,
                 readerAuthPolicy = readerAuthPolicy,
+                usesReaderAuthAll = usesReaderAuthAll,
                 zkResponsePolicy = zkResponsePolicy,
                 wrpRegistration = wrpRegistration
             )

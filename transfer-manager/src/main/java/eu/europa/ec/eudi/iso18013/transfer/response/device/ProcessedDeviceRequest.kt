@@ -20,6 +20,7 @@ import eu.europa.ec.eudi.iso18013.transfer.internal.DocumentResponseGenerator.ge
 import eu.europa.ec.eudi.iso18013.transfer.internal.DocumentResponseGenerator.generateDocumentResponseWithoutConsuming
 import eu.europa.ec.eudi.iso18013.transfer.internal.assertAgeOverRequestLimitForIso18013
 import eu.europa.ec.eudi.iso18013.transfer.internal.flattenToSingleSelection
+import eu.europa.ec.eudi.iso18013.transfer.internal.passesReaderAuthPolicy
 import eu.europa.ec.eudi.iso18013.transfer.internal.requireIssuedDocument
 import eu.europa.ec.eudi.iso18013.transfer.response.ReaderAuthPolicy
 import eu.europa.ec.eudi.iso18013.transfer.response.WrpRegistrationInfo
@@ -61,6 +62,11 @@ import org.multipaz.util.Constants
  * @property readerAuthPolicy decides whether [generateResponse] short-circuits to an empty
  *   `STATUS_GENERAL_ERROR` response when the reader isn't trust-verified. See
  *   [ReaderAuthPolicy] for the individual modes.
+ * @property usesReaderAuthAll `true` when the request uses `readerAuthAll` (ISO 18013-5 2nd ed.),
+ *   meaning all DocRequests are covered uniformly by the global signatures and the global policy
+ *   check is correct. `false` when per-DocRequest `readerAuth` is used (1st ed.), meaning each
+ *   DocRequest must be evaluated individually — the per-match check inside the signing loop
+ *   prevents an untrusted DocRequest from leaking its document.
  * @property zkSystemRepository optional ZKP system repository — when set, the response
  *   generation will attempt to produce a ZK proof for any [CredentialMatchSourceIso18013]
  *   carrying a `zkRequest` on its [docRequest][CredentialMatchSourceIso18013.docRequest].
@@ -76,6 +82,7 @@ class ProcessedDeviceRequest(
     requester: Requester,
     trustMetadata: TrustMetadata?,
     private val readerAuthPolicy: ReaderAuthPolicy,
+    private val usesReaderAuthAll: Boolean = true,
     private val zkSystemRepository: ZkSystemRepository? = null,
     private val zkResponsePolicy: ZkResponsePolicy = ZkResponsePolicy.Strict,
     wrpRegistration: WrpRegistrationInfo? = null
@@ -125,23 +132,28 @@ class ProcessedDeviceRequest(
     ): ResponseResult {
         return try {
 
-            val isReaderTrustVerified = trustMetadata != null
-            val readerAuthPresent = requester.requesterIdentities.isNotEmpty()
-            val skipAllByPolicy = when (readerAuthPolicy) {
-                ReaderAuthPolicy.DoNotEnforce -> false
-                is ReaderAuthPolicy.EnforceIfPresent -> readerAuthPresent && !isReaderTrustVerified
-                is ReaderAuthPolicy.AlwaysRequire -> !isReaderTrustVerified
-            }
+            // Global policy gate: applies only when readerAuthAll covers the entire request.
+            // When per-DocRequest auth is used, this check is skipped in favour of the
+            // per-match check inside the loop below.
+            if (usesReaderAuthAll) {
+                val isReaderTrustVerified = trustMetadata != null
+                val readerAuthPresent = requester.requesterIdentities.isNotEmpty()
+                val skipAllByPolicy = when (readerAuthPolicy) {
+                    ReaderAuthPolicy.DoNotEnforce -> false
+                    is ReaderAuthPolicy.EnforceIfPresent -> readerAuthPresent && !isReaderTrustVerified
+                    is ReaderAuthPolicy.AlwaysRequire -> !isReaderTrustVerified
+                }
 
-            if (skipAllByPolicy) {
-                return ResponseResult.Success(
-                    DeviceResponse(
-                        deviceResponseBytes = DeviceResponseGenerator(Constants.DEVICE_RESPONSE_STATUS_GENERAL_ERROR)
-                            .generate(),
-                        sessionTranscriptBytes = sessionTranscript,
-                        documentIds = emptyList()
+                if (skipAllByPolicy) {
+                    return ResponseResult.Success(
+                        DeviceResponse(
+                            deviceResponseBytes = DeviceResponseGenerator(Constants.DEVICE_RESPONSE_STATUS_GENERAL_ERROR)
+                                .generate(),
+                            sessionTranscriptBytes = sessionTranscript,
+                            documentIds = emptyList()
+                        )
                     )
-                )
+                }
             }
 
             val deviceResponseGenerator =
@@ -151,6 +163,13 @@ class ProcessedDeviceRequest(
             for (match in selection.matches) {
                 val source = match.source as? CredentialMatchSourceIso18013 ?: continue
                 val docRequest = source.docRequest
+
+                // Defense-in-depth: when per-DocRequest auth is used, re-evaluate the
+                // policy for each match's DocRequest. This guards against a match that
+                // somehow bypassed the consent-level filter in DeviceRequestProcessor.
+                if (!usesReaderAuthAll && !docRequest.passesReaderAuthPolicy(readerAuthPolicy)) {
+                    continue
+                }
 
                 val issuedDocument = match.credential.requireIssuedDocument(documentManager)
                 issuedDocument.assertAgeOverRequestLimitForIso18013(match.claims.keys)
