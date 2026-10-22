@@ -52,7 +52,7 @@ sealed interface DocumentData {
             return when (format) {
                 is MsoMdocFormat -> MsoMdocData(
                     format = format,
-                    nameSpacedData = NameSpacedData.fromIssuerProvidedData(issuerProvidedData),
+                    nameSpacedData = readIssuerData { NameSpacedData.fromIssuerProvidedData(issuerProvidedData) },
                     issuerMetadata = issuerMetadata
                 )
 
@@ -64,6 +64,19 @@ sealed interface DocumentData {
             }
         }
     }
+}
+
+/**
+ * Runs [block], which reads issuer provided data recursively.
+ *
+ * Issuer provided data nested deeper than the stack of the current thread allows fails with an
+ * [IllegalArgumentException] instead of a [StackOverflowError]. Reading the data has no side
+ * effects, so the thread can continue after the error.
+ */
+private inline fun <T> readIssuerData(block: () -> T): T = try {
+    block()
+} catch (e: StackOverflowError) {
+    throw IllegalArgumentException("The issuer provided data is nested too deeply to be read", e)
 }
 
 /**
@@ -102,16 +115,18 @@ data class MsoMdocData(
 ) : DocumentData {
 
     override val claims: List<MsoMdocClaim>
-        get() = nameSpacedData.nameSpaceNames.flatMap { nameSpace ->
-            nameSpacedData.getDataElementNames(nameSpace).map { dataElementName ->
-                val metadataClaimName = listOf(nameSpace, dataElementName)
-                MsoMdocClaim(
-                    nameSpace = nameSpace,
-                    dataElementName = dataElementName,
-                    value = nameSpacedData.getDataElement(nameSpace, dataElementName).toObject(),
-                    rawValue = nameSpacedData.getDataElement(nameSpace, dataElementName),
-                    issuerMetadata = issuerMetadata?.claims?.find { it.path == metadataClaimName }
-                )
+        get() = readIssuerData {
+            nameSpacedData.nameSpaceNames.flatMap { nameSpace ->
+                nameSpacedData.getDataElementNames(nameSpace).map { dataElementName ->
+                    val metadataClaimName = listOf(nameSpace, dataElementName)
+                    MsoMdocClaim(
+                        nameSpace = nameSpace,
+                        dataElementName = dataElementName,
+                        value = nameSpacedData.getDataElement(nameSpace, dataElementName).toObject(),
+                        rawValue = nameSpacedData.getDataElement(nameSpace, dataElementName),
+                        issuerMetadata = issuerMetadata?.claims?.find { it.path == metadataClaimName }
+                    )
+                }
             }
         }
 
@@ -202,51 +217,53 @@ data class SdJwtVcData(
     val sdJwtVc: String
 ) : DocumentData {
     override val claims: List<SdJwtVcClaim> by lazy {
-        val (claims, disclosuresPerClaim) = DefaultSdJwtOps.unverifiedIssuanceFrom(sdJwtVc)
-            .getOrThrow().recreateClaimsAndDisclosuresPerClaim()
+        readIssuerData {
+            val (claims, disclosuresPerClaim) = DefaultSdJwtOps.unverifiedIssuanceFrom(sdJwtVc)
+                .getOrThrow().recreateClaimsAndDisclosuresPerClaim()
 
-        // Filter out paths that are excluded from claims
-        val filteredDisclosuresPerClaim = disclosuresPerClaim
-            .filterNot { (path, _) -> path.head().toString() in ExcludedIdentifiers }
+            // Filter out paths that are excluded from claims
+            val filteredDisclosuresPerClaim = disclosuresPerClaim
+                .filterNot { (path, _) -> path.head().toString() in ExcludedIdentifiers }
 
-        // create the list of claims that will be returned
-        // and populate it with the claims and their children
-        mutableListOf<MutableSdJwtClaim>().also { sdJwtVcClaims ->
+            // create the list of claims that will be returned
+            // and populate it with the claims and their children
+            mutableListOf<MutableSdJwtClaim>().also { sdJwtVcClaims ->
 
-            for ((path, disclosures) in filteredDisclosuresPerClaim) {
-                val value = claims.query(path).getOrNull()?.toJsonElement()
-                val selectivelyDisclosable = disclosures.isNotEmpty()
+                for ((path, disclosures) in filteredDisclosuresPerClaim) {
+                    val value = claims.query(path).getOrNull()?.toJsonElement()
+                    val selectivelyDisclosable = disclosures.isNotEmpty()
 
-                // start from the root of the list of claims
-                var current = sdJwtVcClaims
+                    // start from the root of the list of claims
+                    var current = sdJwtVcClaims
 
-                for (key in path.value) {
-                    // each `key` is a typed ClaimPathElement (Claim name, ArrayElement
-                    // index, or AllArrayElements wildcard); we preserve that type in the
-                    // tree so downstream consumers can tell an object key apart from an
-                    // array index without parsing strings.
-                    val existingNode = current.find { it.pathElement == key }
+                    for (key in path.value) {
+                        // each `key` is a typed ClaimPathElement (Claim name, ArrayElement
+                        // index, or AllArrayElements wildcard); we preserve that type in the
+                        // tree so downstream consumers can tell an object key apart from an
+                        // array index without parsing strings.
+                        val existingNode = current.find { it.pathElement == key }
 
-                    // if the path element is already present, move to the children of the existing node
-                    if (existingNode != null) {
-                        current = existingNode.children
-                    } else {
-                        // if the path element is not present, create a new claim and add it to the current list of claims
-                        val newClaim = MutableSdJwtClaim(
-                            pathElement = key,
-                            value = value?.parse(),
-                            rawValue = value?.toString() ?: "",
-                            selectivelyDisclosable = selectivelyDisclosable,
-                            metadata = issuerMetadata?.claims?.find { m -> m.path == path.value.map { it.toString() } }
-                        )
-                        // add the new claim to the current list of claims
-                        current.add(newClaim)
-                        // set the current list of claims to the children of the new claim
-                        current = newClaim.children
+                        // if the path element is already present, move to the children of the existing node
+                        if (existingNode != null) {
+                            current = existingNode.children
+                        } else {
+                            // if the path element is not present, create a new claim and add it to the current list of claims
+                            val newClaim = MutableSdJwtClaim(
+                                pathElement = key,
+                                value = value?.parse(),
+                                rawValue = value?.toString() ?: "",
+                                selectivelyDisclosable = selectivelyDisclosable,
+                                metadata = issuerMetadata?.claims?.find { m -> m.path == path.value.map { it.toString() } }
+                            )
+                            // add the new claim to the current list of claims
+                            current.add(newClaim)
+                            // set the current list of claims to the children of the new claim
+                            current = newClaim.children
+                        }
                     }
                 }
-            }
-        }.map { it.toSdJwtVcClaim() }
+            }.map { it.toSdJwtVcClaim() }
+        }
     }
 
     /**

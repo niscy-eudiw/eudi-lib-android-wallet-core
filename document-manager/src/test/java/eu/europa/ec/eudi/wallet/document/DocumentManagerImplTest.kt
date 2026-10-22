@@ -302,16 +302,118 @@ class DocumentManagerImplTest {
             ),
         ).getOrThrow()
 
-    private fun pidNameSpaces(familyName: String): CBORObject {
+    private fun pidNameSpaces(familyName: String): CBORObject =
+        pidNameSpaces(CBORObject.FromObject(familyName).EncodeToBytes())
+
+    /** Name spaces of one PID data element, whose value is [encodedValue], already encoded in CBOR. */
+    private fun pidNameSpaces(encodedValue: ByteArray): CBORObject {
         val issuerSignedItem = CBORObject.NewOrderedMap()
             .Add("digestID", 0)
             .Add("random", ByteArray(16) { 1 })
             .Add("elementIdentifier", "family_name")
-            .Add("elementValue", familyName)
+            .Add("elementValue", 0)
+            .EncodeToBytes()
+            // The value 0 of the last entry is the single byte 0x00, which encodedValue replaces
+            .let { it.copyOf(it.size - 1) + encodedValue }
         return CBORObject.NewMap().Add(
             PID_DOC_TYPE,
-            CBORObject.NewArray().Add(CBORObject.FromObjectAndTag(issuerSignedItem.EncodeToBytes(), 24)),
+            CBORObject.NewArray().Add(CBORObject.FromObjectAndTag(issuerSignedItem, 24)),
         )
+    }
+
+    @Test
+    fun `should store a credential whose data element is nested 100 levels deep`() {
+        val unsignedDocument = createPidDocument()
+        var elementValue = CBORObject.FromObject(0)
+        repeat(100) { elementValue = CBORObject.NewArray().Add(elementValue) }
+        val nameSpaces = pidNameSpaces(elementValue.EncodeToBytes())
+
+        val storeDocumentResult = documentManager.storeIssuedDocument(
+            unsignedDocument,
+            issuerProvidedCredentials(
+                unsignedDocument = unsignedDocument,
+                msoDocType = PID_DOC_TYPE,
+                msoNameSpaces = nameSpaces,
+                issuedNameSpaces = nameSpaces,
+            ),
+        )
+
+        assertTrue(storeDocumentResult.isSuccess, "${storeDocumentResult.exceptionOrNull()}")
+        val issuedDocument = assertIs<IssuedDocument>(documentManager.getDocumentById(unsignedDocument.id))
+        assertEquals(1, issuedDocument.data.claims.size)
+    }
+
+    @Test
+    fun `should return failure result when a data element is nested too deeply to be read`() {
+        val unsignedDocument = createPidDocument()
+        // 20000 nested arrays, embedded with tag 24 after every 10 arrays
+        var elementValue = CBORObject.FromObject(0)
+        repeat(2000) {
+            repeat(10) { elementValue = CBORObject.NewArray().Add(elementValue) }
+            elementValue = CBORObject.FromObjectAndTag(elementValue.EncodeToBytes(), 24)
+        }
+        val nameSpaces = pidNameSpaces(elementValue.EncodeToBytes())
+
+        val storeDocumentResult = documentManager.storeIssuedDocument(
+            unsignedDocument,
+            issuerProvidedCredentials(
+                unsignedDocument = unsignedDocument,
+                msoDocType = PID_DOC_TYPE,
+                msoNameSpaces = nameSpaces,
+                issuedNameSpaces = nameSpaces,
+            ),
+        )
+
+        val error = assertIs<IllegalArgumentException>(storeDocumentResult.exceptionOrNull())
+        assertIs<StackOverflowError>(error.cause?.cause)
+        assertFalse(documentManager.getDocumentById(unsignedDocument.id) is IssuedDocument)
+    }
+
+    @Test
+    fun `should return failure result when the issuer data is nested too deeply to be decoded`() {
+        val unsignedDocument = createPidDocument()
+        // 20000 nested arrays without tag 24, which the issuer data decoder reads in one pass.
+        // The claims are read before the MSO is checked, so the MSO covers a shallow value.
+        val nameSpaces = pidNameSpaces(ByteArray(20000) { 0x81.toByte() } + 0x00)
+
+        val storeDocumentResult = documentManager.storeIssuedDocument(
+            unsignedDocument,
+            issuerProvidedCredentials(
+                unsignedDocument = unsignedDocument,
+                msoDocType = PID_DOC_TYPE,
+                msoNameSpaces = pidNameSpaces("Doe"),
+                issuedNameSpaces = nameSpaces,
+            ),
+        )
+
+        val error = assertIs<IllegalArgumentException>(storeDocumentResult.exceptionOrNull())
+        assertIs<StackOverflowError>(error.cause?.cause)
+        assertFalse(documentManager.getDocumentById(unsignedDocument.id) is IssuedDocument)
+    }
+
+    @Test
+    fun `should return failure result when a claim of an sd-jwt vc is nested too deeply to be read`() {
+        val unsignedDocument = createSdJwtVcDocument()
+        // A claim of 20000 nested arrays
+        val payload = """{"vct":"$SD_JWT_VCT","nationalities":${"[".repeat(20000)}"GR"${"]".repeat(20000)}}"""
+        val issuerProvidedCredentials = runBlocking {
+            unsignedDocument.getPoPSigners().map {
+                IssuerProvidedCredential(it.getKeyInfo().alias, sdJwt(payload).encodeToByteArray())
+            }
+        }
+
+        val storeDocumentResult =
+            documentManager.storeIssuedDocument(unsignedDocument, issuerProvidedCredentials)
+
+        val error = assertIs<IllegalArgumentException>(storeDocumentResult.exceptionOrNull())
+        assertIs<StackOverflowError>(error.cause?.cause)
+        assertFalse(documentManager.getDocumentById(unsignedDocument.id) is IssuedDocument)
+    }
+
+    /** An SD-JWT VC without disclosures, whose JWT carries [payload] and is not signed. */
+    private fun sdJwt(payload: String): String {
+        fun String.base64Url() = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(toByteArray())
+        return """{"alg":"ES256","typ":"dc+sd-jwt"}""".base64Url() + "." + payload.base64Url() + ".c2lnbmF0dXJl~"
     }
 
     @Test
