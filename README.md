@@ -767,13 +767,14 @@ so consumers can reference its types directly (`SupportedLists`, `AttestationCla
 
 The `etsi-119602-consultation` module (which provides the `Uri` type used in `configureEtsiTrust`
 DSL) is **not** transitively available due to an upstream packaging issue. Consumers must
-declare it explicitly:
+declare it explicitly, with the version that wallet-core uses (the `eudi-lib-kmp-etsi1196x2`
+version in `gradle/libs.versions.toml`):
 
 ```groovy
 dependencies {
     implementation "eu.europa.ec.eudi:eudi-lib-android-wallet-core:0.32.0-SNAPSHOT"
     // Required explicitly — Uri type is not transitive from wallet-core
-    implementation "eu.europa.ec.eudi:eudi-lib-kmp-etsi-119602-consultation:${VERSION}"
+    implementation "eu.europa.ec.eudi:etsi-119602-consultation:0.5.0-alpha.1-SNAPSHOT"
 }
 ```
 
