@@ -1342,6 +1342,12 @@ val openId4VciManagerWithCustomHttpClient = wallet.createOpenId4VciManager(
 )
 ```
 
+The issuer trust, signed metadata and issuer registration settings of `EudiWalletConfig` apply to
+managers created with `createOpenId4VciManager`, also when a custom `OpenId4VciManager.Config` is
+passed. A manager created with `OpenId4VciManager.Builder` or `OpenId4VciManager(context) { }` does
+not use signed issuer metadata, does not verify the issuer against trusted lists, and does not
+validate the issuer's registration certificate.
+
 **NOTE:** When `withClientAuthenticationType(OpenId4VciManager.ClientAuthenticationType.AttestationBased)` is configured, the `EudiWallet` must also be instantiated with a WalletProvider
 
 ##### How configuration is resolved
