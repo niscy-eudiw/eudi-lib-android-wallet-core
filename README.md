@@ -2274,11 +2274,13 @@ wallet.addTransferEventListener { event ->
             val selection: CredentialSelection = variants[userSelectedIndex]
             val matches = selection.matches
 
-            // Per-credential unlock data, keyed by `match.credential.identifier`.
-            val keyUnlockData: Map<String, KeyUnlockData> = matches.associate { match ->
-                match.credential.identifier to
-                    wallet.getDefaultKeyUnlockData(match.credential.identifier)
-            }
+            // Unlock data for the key of each matched credential, keyed by
+            // `match.credential.identifier`.
+            val keyUnlockData: Map<String, KeyUnlockData> = matches.mapNotNull { match ->
+                val credential = match.credential as SecureAreaBoundCredential
+                getDefaultKeyUnlockData(credential.secureArea, credential.alias)
+                    ?.let { match.credential.identifier to it }
+            }.toMap()
 
             // generate the response
             val response = success.generateResponse(
@@ -2569,14 +2571,15 @@ val transferEventListener = TransferEvent.Listener { event ->
             val matches = selection.matches
 
             // If any picked credential requires unlock data (e.g. PIN-locked keys),
-            // build a map keyed by `match.credential.identifier`.
-            val keyUnlockData: Map<String, KeyUnlockData> = matches.associate { match ->
-                val document = wallet.getDocumentById(...) as IssuedDocument
-                val unlockData = document.DefaultKeyUnlockData
+            // build a map for the key of each matched credential, keyed by
+            // `match.credential.identifier`.
+            val keyUnlockData: Map<String, KeyUnlockData> = matches.mapNotNull { match ->
+                val credential = match.credential as SecureAreaBoundCredential
+                val unlockData = getDefaultKeyUnlockData(credential.secureArea, credential.alias)
                 // authenticate the user using unlockData.getCryptoObjectForSigning(...)
                 // if biometric / device-credential gating is required
-                match.credential.identifier to unlockData
-            }
+                unlockData?.let { match.credential.identifier to it }
+            }.toMap()
 
             // generate the response
             val response = success.generateResponse(
