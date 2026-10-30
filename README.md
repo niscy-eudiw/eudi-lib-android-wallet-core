@@ -207,6 +207,7 @@ Use this checklist before releasing a wallet that uses the library.
 |---|---|
 | Trusted lists | `configureEtsiTrust` uses the production lists of trusted entities (LoTE) for each check: the PID and attestation provider lists for issuer trust, `wrpacProviders` for reader authentication and signed issuer metadata, `wrprcProviders` for registration certificates. The list signers are trusted with `loteSignerTrustAnchors()` or `jwtSignatureVerifier()`; `relaxCertificateProfiles()` and `relaxPkixRevocation()` are not used. See [Centralized Trust Configuration](#centralized-trust-configuration-configureetsitrust). |
 | Issuer trust | Every credential type that the wallet accepts is classified (with `ENFORCE`, types that are not classified are rejected), and issuance managers are created with `wallet.createOpenId4VciManager()`. See [Issuer Trust Verification](#issuer-trust-verification) and [Creating an OpenId4VciManager](#creating-an-openid4vcimanager). |
+| DPoP | The authorization servers that the wallet uses support DPoP. DPoP is used only when the authorization server advertises it; otherwise the access token is issued without DPoP. See [DPoP Support](#dpop-support). |
 | Revocation status | `resolveStatus` is called wherever the status of a document is needed; the wallet does not check revocation on its own. The status list signer is verified only when `configureDocumentStatusResolver { }` (the block form) is used, with `configureEtsiTrust` or with a trust source in `configureTrust`. See [Resolving document status](#resolving-document-status) and [Revocation Status Trust Verification](#revocation-status-trust-verification). |
 | Registration certificates | The result (`wrpRegistration`, `issuerRegistration`) is shown to the user, who is asked for approval when `requiresExplicitApproval` is true; it is `null` when no trust is configured for registration certificates. The result does not block the interaction, with one exception: with `configureEtsiTrust` and the default `IssuerRegistrationPolicy.Enabled`, issuance is rejected when the issuer's signed metadata has no registration certificate. See [REGISTRATION_CERTIFICATE.md](REGISTRATION_CERTIFICATE.md). |
 | Dependencies | See [Dependencies](#dependencies) for the required dependencies. |
@@ -1914,6 +1915,9 @@ The default configuration automatically:
 - Uses StrongBox if the device supports it
 - Negotiates the algorithm with the authorization server
 - Requires no user authentication for key usage
+
+DPoP is used when the authorization server supports it, that is, when it advertises
+`dpop_signing_alg_values_supported`; otherwise the access token is issued without DPoP.
 
 ##### Disabling DPoP
 
