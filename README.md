@@ -608,6 +608,9 @@ The `findCredential()` method intelligently selects credentials based on:
 - Validity period (ensuring the credential is currently valid)
 - Availability (excluding deleted or invalidated credentials)
 
+`findCredential()` does not check the revocation status of a credential. To check it, call
+`resolveStatus` (see [Resolving document status](#resolving-document-status)).
+
 #### Deleting documents
 
 To delete a document, use the following code snippet:
