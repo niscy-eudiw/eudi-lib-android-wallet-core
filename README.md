@@ -318,7 +318,9 @@ val config = EudiWalletConfig()
         
     }
     // configure document status resolver with 5 minutes clock skew tolerance
-    .configureDocumentStatusResolver(clockSkewInMinutes = 5)
+    .configureDocumentStatusResolver {
+        clockSkew(5)
+    }
 
 // Create the wallet instance with default components
 val wallet = EudiWallet(context, config)
@@ -709,11 +711,15 @@ You can configure the default implementation using `EudiWalletConfig`:
 ```kotlin
 val config = EudiWalletConfig()
     // Configure a clock skew allowance (in minutes) for token verification
-    .configureDocumentStatusResolver(clockSkewInMinutes = 5)
+    .configureDocumentStatusResolver {
+        clockSkew(5)
+    }
 // ... other configurations
 ```
 
-The default clock skew is zero (`Duration.ZERO`).
+The default clock skew is zero (`Duration.ZERO`). The `configureDocumentStatusResolver(clockSkewInMinutes)`
+overload sets only the clock skew; the status list signer is verified only with the block form (see
+[Revocation Status Trust Verification](#revocation-status-trust-verification)).
 
 ###### Custom DocumentStatusResolver Implementation
 
