@@ -713,6 +713,8 @@ val config = EudiWalletConfig()
 // ... other configurations
 ```
 
+The default clock skew is zero (`Duration.ZERO`).
+
 ###### Custom DocumentStatusResolver Implementation
 
 For more advanced customization, you can provide your own custom implementation of
