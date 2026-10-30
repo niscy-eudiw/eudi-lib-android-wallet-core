@@ -943,6 +943,9 @@ for a step-by-step guide covering all trust areas
 #### Issuer Trust Verification
 
 Trust verification runs after the credential is received from the issuer and before it is stored.
+This verification covers the issuer's signature and certificate chain, not the revocation status
+of the credential. The revocation status is checked separately with `resolveStatus` (see
+[Resolving document status](#resolving-document-status)).
 Built-in verifiers handle both MsoMdoc and SD-JWT VC formats, and custom verifiers can be
 registered for additional formats.
 
