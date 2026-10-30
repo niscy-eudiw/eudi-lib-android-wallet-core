@@ -711,10 +711,10 @@ You can also create your own DocumentStatusResolver using the builder:
 // Create a custom DocumentStatusResolver
 val customResolver = DocumentStatusResolver {
     // Configure verification mechanism
-    withVerifySignature(VerifyStatusListTokenSignature.x5c)
+    withVerifyJwtSignature(VerifyStatusListTokenJwtSignature.x5c)
 
     // Configure clock skew tolerance
-    withAllowedClockSkew(Duration.minutes(5))
+    withAllowedClockSkew(5.minutes)
 
     // Custom HTTP client factory
     withKtorHttpClientFactory {
