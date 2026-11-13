@@ -249,8 +249,8 @@ class IssuerMetadataTransformationsTest {
     fun `extractIssuerMetaData keeps the embedded disclosure policy`() {
         // Given
         val policy = buildJsonObject {
-            put("id", "https://issuer.example.com/edp/v1")
-            put("type", "no_policy")
+            put("policy_uri", "https://issuer.example.com/edp/v1")
+            put("policy", "none")
         }
         val credential = SdJwtVcCredential(
             scope = "exampleScope",

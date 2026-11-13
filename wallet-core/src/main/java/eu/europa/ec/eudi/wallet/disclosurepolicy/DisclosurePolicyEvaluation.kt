@@ -21,7 +21,9 @@ import eu.europa.ec.eudi.wallet.disclosurepolicy.DisclosurePolicyResult.CannotEv
 import eu.europa.ec.eudi.wallet.disclosurepolicy.DisclosurePolicyResult.NoPolicy
 import eu.europa.ec.eudi.wallet.disclosurepolicy.DisclosurePolicyResult.NotSatisfied
 import eu.europa.ec.eudi.wallet.disclosurepolicy.DisclosurePolicyResult.Satisfied
+import eu.europa.ec.eudi.wallet.disclosurepolicy.EmbeddedDisclosurePolicy.Policy
 import eu.europa.ec.eudi.wallet.document.Document
+import eu.europa.ec.eudi.wallet.registration.RegistrationCertificate
 import eu.europa.ec.eudi.wallet.registration.RegistrationCertificateResult
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -66,10 +68,10 @@ sealed interface DisclosurePolicyResult {
             /** The policy type is not supported. */
             UNSUPPORTED_POLICY_TYPE,
 
-            /** The relying party has no trusted access certificate with an identifier. */
+            /** The policy lists subjects and the relying party has no trusted access certificate with an identifier. */
             RELYING_PARTY_NOT_IDENTIFIED,
 
-            /** The policy lists entitlements and the relying party has no verified registration certificate. */
+            /** The policy lists registered relying parties and the relying party has no verified registration certificate. */
             REGISTRATION_CERTIFICATE_NOT_VERIFIED,
         }
     }
@@ -85,9 +87,7 @@ fun Document.evaluateDisclosurePolicy(request: ProcessedRequest.Success): Disclo
     evaluateDisclosurePolicy(
         policyJson = issuerMetadata?.embeddedDisclosurePolicy,
         relyingPartyIdentifier = request.trustedRelyingPartyIdentifier(),
-        verifiedEntitlements = (request.wrpRegistration as? RegistrationCertificateResult.Verified)
-            ?.registration
-            ?.entitlements,
+        verifiedRegistration = (request.wrpRegistration as? RegistrationCertificateResult.Verified)?.registration,
     )
 
 /**
@@ -95,39 +95,51 @@ fun Document.evaluateDisclosurePolicy(request: ProcessedRequest.Success): Disclo
  *
  * @param policyJson the policy as stored with the document, or `null` when there is none
  * @param relyingPartyIdentifier the identifier in the trusted access certificate of the relying party
- * @param verifiedEntitlements the entitlements in the verified registration certificate of the
- * relying party, or `null` when there is no verified registration certificate
+ * @param verifiedRegistration the verified registration certificate of the relying party, or `null`
+ * when there is none
  */
 internal fun evaluateDisclosurePolicy(
     policyJson: JsonElement?,
     relyingPartyIdentifier: String?,
-    verifiedEntitlements: List<String>?,
+    verifiedRegistration: RegistrationCertificate?,
 ): DisclosurePolicyResult {
     if (policyJson == null) return NoPolicy
     val policy = (policyJson as? JsonObject)?.let { EmbeddedDisclosurePolicy.fromJson(it) }
         ?: return CannotEvaluate(Reason.MALFORMED_POLICY, null)
-    return when (policy.type) {
-        EmbeddedDisclosurePolicy.NO_POLICY -> NoPolicy
-        EmbeddedDisclosurePolicy.AUTHORISED_RELYING_PARTIES ->
-            evaluateAuthorisedRelyingParties(policy, relyingPartyIdentifier, verifiedEntitlements)
+    return when (val rule = policy.policy) {
+        Policy.None -> NoPolicy
+        is Policy.AuthorizedRelyingParties ->
+            evaluateAuthorizedRelyingParties(policy, rule, relyingPartyIdentifier, verifiedRegistration)
 
-        else -> CannotEvaluate(Reason.UNSUPPORTED_POLICY_TYPE, policy)
+        // TODO: evaluate against the certificate chain of the verified registration certificate.
+        is Policy.AuthorizedCertificateSubjects,
+        is Policy.Unsupported -> CannotEvaluate(Reason.UNSUPPORTED_POLICY_TYPE, policy)
     }
 }
 
-private fun evaluateAuthorisedRelyingParties(
+/**
+ * A registered relying party is matched by the identifier (`sub`) of its verified registration
+ * certificate, which names the relying party itself also when an intermediary presents the request.
+ * A subject is matched by the identifier in the trusted access certificate.
+ */
+private fun evaluateAuthorizedRelyingParties(
     policy: EmbeddedDisclosurePolicy,
+    rule: Policy.AuthorizedRelyingParties,
     relyingPartyIdentifier: String?,
-    verifiedEntitlements: List<String>?,
+    verifiedRegistration: RegistrationCertificate?,
 ): DisclosurePolicyResult {
-    if (relyingPartyIdentifier == null) return CannotEvaluate(Reason.RELYING_PARTY_NOT_IDENTIFIED, policy)
-    val subjects = policy.authorisedRelyingParties.filterIsInstance<AuthorisedRelyingParty.Subject>()
-    val entitlements = policy.authorisedRelyingParties.filterIsInstance<AuthorisedRelyingParty.Entitlement>()
+    val registered = rule.relyingParties.filterIsInstance<AuthorizedRelyingParty.Registered>()
+    val subjects = rule.relyingParties.filterIsInstance<AuthorizedRelyingParty.Subject>()
+    val wrpIdentifiers = verifiedRegistration?.identifiers.orEmpty().map { it.value }
 
-    if (subjects.any { it.identifier == relyingPartyIdentifier }) return Satisfied
-    if (verifiedEntitlements != null && entitlements.any { it.uri in verifiedEntitlements }) return Satisfied
-    if (verifiedEntitlements == null && entitlements.isNotEmpty()) {
+    // TODO: also match the service identifier, once registration certificates carry it (Technical Specification 5).
+    if (registered.any { it.wrpIdentifier in wrpIdentifiers }) return Satisfied
+    if (relyingPartyIdentifier != null && subjects.any { it.identifier == relyingPartyIdentifier }) return Satisfied
+    if (registered.isNotEmpty() && verifiedRegistration == null) {
         return CannotEvaluate(Reason.REGISTRATION_CERTIFICATE_NOT_VERIFIED, policy)
+    }
+    if (subjects.isNotEmpty() && relyingPartyIdentifier == null) {
+        return CannotEvaluate(Reason.RELYING_PARTY_NOT_IDENTIFIED, policy)
     }
     return NotSatisfied(policy)
 }
@@ -140,5 +152,7 @@ private fun ProcessedRequest.Success.trustedRelyingPartyIdentifier(): String? {
     if (trustMetadata == null) return null
     val identity = requester.requesterIdentities.singleOrNull() ?: return null
     val accessCertificate = identity.certChain.javaX509Certificates.firstOrNull() ?: return null
-    return X500Name.getInstance(accessCertificate.subjectX500Principal.encoded).relyingPartyIdentifier()
+    return runCatching { X500Name.getInstance(accessCertificate.subjectX500Principal.encoded) }
+        .getOrNull()
+        ?.relyingPartyIdentifier()
 }

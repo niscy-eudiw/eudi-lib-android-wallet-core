@@ -15,11 +15,10 @@
  */
 package eu.europa.ec.eudi.wallet.disclosurepolicy
 
-import android.annotation.SuppressLint
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import org.bouncycastle.asn1.ASN1ObjectIdentifier
 import org.bouncycastle.asn1.x500.X500Name
 import org.bouncycastle.asn1.x500.style.BCStyle
@@ -29,29 +28,55 @@ import org.bouncycastle.asn1.x500.style.IETFUtils
  * An embedded disclosure policy: the conditions that the attestation provider sets for the
  * relying parties that may receive a document (ETSI TS 119 472-3, clause 4.2.5).
  *
- * @property id the URI that identifies the policy
- * @property type the policy type, for example [AUTHORISED_RELYING_PARTIES]
- * @property authorisedRelyingParties the relying parties that an [AUTHORISED_RELYING_PARTIES]
- * policy allows
- * @property laymanUri the address of a page that explains the policy to the user
+ * The encoding follows the changes to ETSI TS 119 472-3 clause 4.2.5 proposed in the comments of
+ * 2026-08-11, which ETSI has not adopted yet.
+ *
+ * @property policyUri the URI that identifies the policy (`policy_uri`)
+ * @property policy the rule that applies to all attributes of the document (`policy`)
+ * @property laymanUri the address of a page that explains the policy to the user (`layman_uri`,
+ * ISS-MDATA-EBD-4.2.5.2-13)
  */
 data class EmbeddedDisclosurePolicy(
-    val id: String,
-    val type: String,
-    val authorisedRelyingParties: List<AuthorisedRelyingParty> = emptyList(),
+    val policyUri: String,
+    val policy: Policy,
     val laymanUri: String? = null,
 ) {
+
+    /**
+     * The rule of an embedded disclosure policy.
+     */
+    sealed interface Policy {
+
+        /** No restriction applies (`"none"`). */
+        data object None : Policy
+
+        /**
+         * Only the listed relying parties may receive the document (`authorized_rp_ids`).
+         *
+         * @property relyingParties the allowed relying parties
+         */
+        data class AuthorizedRelyingParties(val relyingParties: List<AuthorizedRelyingParty>) : Policy
+
+        /**
+         * Only relying parties whose registration certificate is signed, directly or indirectly, by a
+         * certificate with one of the listed subjects may receive the document
+         * (`authorized_cert_subject_DNs`).
+         *
+         * @property subjectDns the subject distinguished names, as RFC 4514 strings
+         */
+        data class AuthorizedCertificateSubjects(val subjectDns: List<String>) : Policy
+
+        /**
+         * A rule that this wallet does not know.
+         *
+         * @property type the name of the rule
+         */
+        data class Unsupported(val type: String) : Policy
+    }
+
     companion object {
-        /** A policy that sets no restriction. */
-        const val NO_POLICY = "no_policy"
-
-        /** A policy that allows only the listed relying parties. */
-        const val AUTHORISED_RELYING_PARTIES = "authorised_relying_parties"
-
         /** The member of a credential configuration in the issuer metadata that holds the policy. */
         internal const val CREDENTIAL_CONFIGURATION_PARAMETER = "embedded_disclosure_policy"
-
-        private val json = Json { ignoreUnknownKeys = true }
 
         /**
          * Reads a policy from its JSON form.
@@ -59,17 +84,23 @@ data class EmbeddedDisclosurePolicy(
          * @param policy the JSON object of the policy
          * @return the policy, or `null` when the JSON is not a valid policy
          */
-        fun fromJson(policy: JsonObject): EmbeddedDisclosurePolicy? =
-            runCatching { json.decodeFromJsonElement(PolicyDto.serializer(), policy) }
-                .getOrNull()
-                ?.toPolicy()
+        internal fun fromJson(policy: JsonObject): EmbeddedDisclosurePolicy? =
+            runCatching { policy.toPolicy() }.getOrNull()
     }
 }
 
 /**
- * A relying party, or a group of relying parties, that an embedded disclosure policy allows.
+ * A relying party that an embedded disclosure policy allows.
  */
-sealed interface AuthorisedRelyingParty {
+sealed interface AuthorizedRelyingParty {
+
+    /**
+     * A relying party registered in the EUDI Wallet ecosystem.
+     *
+     * @property wrpIdentifier the wallet-relying party identifier
+     * @property serviceIdentifier the identifier of the service of the relying party
+     */
+    data class Registered(val wrpIdentifier: String, val serviceIdentifier: String) : AuthorizedRelyingParty
 
     /**
      * A relying party identified by the subject of its access certificate.
@@ -78,14 +109,7 @@ sealed interface AuthorisedRelyingParty {
      * @property identifier the organization identifier, or for a natural person the serial
      * number, taken from [subjectDn]
      */
-    data class Subject(val subjectDn: String, val identifier: String) : AuthorisedRelyingParty
-
-    /**
-     * The relying parties whose registration certificate holds an entitlement.
-     *
-     * @property uri the entitlement URI
-     */
-    data class Entitlement(val uri: String) : AuthorisedRelyingParty
+    data class Subject(val subjectDn: String, val identifier: String) : AuthorizedRelyingParty
 }
 
 /**
@@ -105,6 +129,72 @@ private fun X500Name.values(type: ASN1ObjectIdentifier): List<String> =
         .filter { it.type == type }
         .map { IETFUtils.valueToString(it.value) }
 
+private const val POLICY_URI = "policy_uri"
+private const val POLICY = "policy"
+private const val LAYMAN_URI = "layman_uri"
+private const val NONE = "none"
+private const val AUTHORIZED_RP_IDS = "authorized_rp_ids"
+private const val AUTHORIZED_CERT_SUBJECT_DNS = "authorized_cert_subject_DNs"
+
+private fun JsonObject.toPolicy(): EmbeddedDisclosurePolicy? {
+    val policyUri = get(POLICY_URI)?.stringOrNull() ?: return null
+    val laymanUri = get(LAYMAN_URI)?.let { it.stringOrNull() ?: return null }
+    val policy = when (val rule = get(POLICY)) {
+        is JsonPrimitive -> EmbeddedDisclosurePolicy.Policy.None.takeIf { rule.stringOrNull() == NONE }
+        is JsonObject -> rule.toRule()
+        else -> null
+    } ?: return null
+    return EmbeddedDisclosurePolicy(policyUri, policy, laymanUri)
+}
+
+/**
+ * Reads a rule object, which has a single member named after the rule. Empty and duplicate entries
+ * are ignored.
+ */
+private fun JsonObject.toRule(): EmbeddedDisclosurePolicy.Policy? {
+    val (type, value) = entries.singleOrNull() ?: return null
+    return when (type) {
+        AUTHORIZED_RP_IDS -> value.nonEmptyStrings()
+            ?.map { it.toAuthorizedRelyingParty() ?: return null }
+            ?.distinct()
+            ?.let { EmbeddedDisclosurePolicy.Policy.AuthorizedRelyingParties(it) }
+
+        AUTHORIZED_CERT_SUBJECT_DNS -> value.nonEmptyStrings()
+            ?.onEach { X500Name(PolicyNameStyle, it) }
+            ?.let { EmbeddedDisclosurePolicy.Policy.AuthorizedCertificateSubjects(it) }
+
+        else -> EmbeddedDisclosurePolicy.Policy.Unsupported(type)
+    }
+}
+
+/**
+ * Reads an entry of `authorized_rp_ids`: an RFC 4514 subject distinguished name, or a wallet-relying
+ * party identifier and a service identifier separated by a comma. Only a distinguished name contains
+ * `=`.
+ */
+private fun String.toAuthorizedRelyingParty(): AuthorizedRelyingParty? =
+    if ('=' in this) {
+        X500Name(PolicyNameStyle, this).relyingPartyIdentifier()
+            ?.let { AuthorizedRelyingParty.Subject(subjectDn = this, identifier = it) }
+    } else {
+        val wrpIdentifier = substringBefore(',').trim()
+        val serviceIdentifier = substringAfter(',', missingDelimiterValue = "").trim()
+        if (wrpIdentifier.isEmpty() || serviceIdentifier.isEmpty()) null
+        else AuthorizedRelyingParty.Registered(wrpIdentifier, serviceIdentifier)
+    }
+
+private fun JsonElement.stringOrNull(): String? = (this as? JsonPrimitive)?.takeIf { it.isString }?.content
+
+/**
+ * The trimmed, distinct and non-empty strings of this array, or `null` when this is not an array
+ * of strings.
+ */
+private fun JsonElement.nonEmptyStrings(): List<String>? =
+    (this as? JsonArray)
+        ?.map { it.stringOrNull()?.trim() ?: return null }
+        ?.filter { it.isNotEmpty() }
+        ?.distinct()
+
 /**
  * The RFC 4514 attribute names used in embedded disclosure policies: `ORGID` is the
  * organizationIdentifier and `SN` is the serialNumber (ETSI TS 119 472-3, clause 4.2.5.2), and
@@ -119,46 +209,3 @@ private object PolicyNameStyle : BCStyle() {
             else -> super.attrNameToOID(attrName)
         }
 }
-
-@SuppressLint("UnsafeOptInUsageError")
-@Serializable
-private data class PolicyDto(
-    val id: String,
-    val type: String,
-    @SerialName("authorised_relying_parties")
-    val authorisedRelyingParties: List<AuthorisedRelyingPartyDto>? = null,
-    @SerialName("layman_uri")
-    val laymanUri: String? = null,
-)
-
-@SuppressLint("UnsafeOptInUsageError")
-@Serializable
-private data class AuthorisedRelyingPartyDto(
-    @SerialName("subject_dn")
-    val subjectDn: String? = null,
-    val entitlement: String? = null,
-)
-
-private fun PolicyDto.toPolicy(): EmbeddedDisclosurePolicy? {
-    val relyingParties = authorisedRelyingParties?.map { it.toAuthorisedRelyingParty() ?: return null }
-    if (type == EmbeddedDisclosurePolicy.AUTHORISED_RELYING_PARTIES && relyingParties == null) return null
-    return EmbeddedDisclosurePolicy(
-        id = id,
-        type = type,
-        authorisedRelyingParties = relyingParties.orEmpty(),
-        laymanUri = laymanUri,
-    )
-}
-
-private fun AuthorisedRelyingPartyDto.toAuthorisedRelyingParty(): AuthorisedRelyingParty? =
-    when {
-        subjectDn != null && entitlement == null -> {
-            val identifier = runCatching { X500Name(PolicyNameStyle, subjectDn) }
-                .getOrNull()
-                ?.relyingPartyIdentifier()
-            identifier?.let { AuthorisedRelyingParty.Subject(subjectDn, it) }
-        }
-
-        entitlement != null && subjectDn == null -> AuthorisedRelyingParty.Entitlement(entitlement)
-        else -> null
-    }
