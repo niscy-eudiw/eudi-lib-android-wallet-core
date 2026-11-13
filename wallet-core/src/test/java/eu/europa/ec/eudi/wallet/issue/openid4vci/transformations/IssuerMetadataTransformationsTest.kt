@@ -258,13 +258,11 @@ class IssuerMetadataTransformationsTest {
             credentialSigningAlgorithmsSupported = listOf(JwsAlgorithm("RS256")),
             proofTypesSupported = ProofTypesSupported.Companion.Empty,
             type = "exampleType",
-            credentialMetadata = CredentialMetadata(
-                display = emptyList(),
-                customParameters = buildJsonObject {
-                    put("embedded_disclosure_policy", policy)
-                    put("other_parameter", "value")
-                },
-            )
+            credentialMetadata = CredentialMetadata(display = emptyList()),
+            customParameters = buildJsonObject {
+                put("embedded_disclosure_policy", policy)
+                put("other_parameter", "value")
+            },
         )
         val offeredDocument = Offer.OfferedDocument(
             offer = dummyOffer,

@@ -48,8 +48,8 @@ data class EmbeddedDisclosurePolicy(
         /** A policy that allows only the listed relying parties. */
         const val AUTHORISED_RELYING_PARTIES = "authorised_relying_parties"
 
-        /** The member of `credential_metadata` in the issuer metadata that holds the policy. */
-        internal const val CREDENTIAL_METADATA_PARAMETER = "embedded_disclosure_policy"
+        /** The member of a credential configuration in the issuer metadata that holds the policy. */
+        internal const val CREDENTIAL_CONFIGURATION_PARAMETER = "embedded_disclosure_policy"
 
         private val json = Json { ignoreUnknownKeys = true }
 

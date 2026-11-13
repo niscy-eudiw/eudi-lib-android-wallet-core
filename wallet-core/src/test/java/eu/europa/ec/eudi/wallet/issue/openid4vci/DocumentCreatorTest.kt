@@ -49,8 +49,8 @@ class DocumentCreatorTest {
             every { credentialMetadata } returns mockk {
                 every { claims } returns emptyList()
                 every { display } returns emptyList()
-                every { customParameters } returns JsonObject(emptyMap())
             }
+            every { customParameters } returns JsonObject(emptyMap())
         }
         val configurationIdentifiers = listOf(
             CredentialConfigurationIdentifier("id")

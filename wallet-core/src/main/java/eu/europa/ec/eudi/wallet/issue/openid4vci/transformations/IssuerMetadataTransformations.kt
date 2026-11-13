@@ -47,8 +47,7 @@ fun OfferedDocument.extractIssuerMetadata(): IssuerMetadata {
                 logo = it.logo?.toDocumentLogo()
             )
         },
-        embeddedDisclosurePolicy = configuration.credentialMetadata?.customParameters
-            ?.get(EmbeddedDisclosurePolicy.CREDENTIAL_METADATA_PARAMETER)
+        embeddedDisclosurePolicy = configuration.customParameters[EmbeddedDisclosurePolicy.CREDENTIAL_CONFIGURATION_PARAMETER]
             ?.takeUnless { it is JsonNull }
     )
 }
