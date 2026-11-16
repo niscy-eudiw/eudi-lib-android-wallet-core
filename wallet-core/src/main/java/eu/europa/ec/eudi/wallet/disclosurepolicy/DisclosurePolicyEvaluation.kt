@@ -21,7 +21,7 @@ import eu.europa.ec.eudi.wallet.disclosurepolicy.DisclosurePolicyResult.CannotEv
 import eu.europa.ec.eudi.wallet.disclosurepolicy.DisclosurePolicyResult.NoPolicy
 import eu.europa.ec.eudi.wallet.disclosurepolicy.DisclosurePolicyResult.NotSatisfied
 import eu.europa.ec.eudi.wallet.disclosurepolicy.DisclosurePolicyResult.Satisfied
-import eu.europa.ec.eudi.wallet.disclosurepolicy.EmbeddedDisclosurePolicy.Policy
+import eu.europa.ec.eudi.wallet.disclosurepolicy.EmbeddedDisclosurePolicy.PolicyType
 import eu.europa.ec.eudi.wallet.document.Document
 import eu.europa.ec.eudi.wallet.registration.RegistrationCertificate
 import eu.europa.ec.eudi.wallet.registration.RegistrationCertificateResult
@@ -68,10 +68,10 @@ sealed interface DisclosurePolicyResult {
             /** The policy type is not supported. */
             UNSUPPORTED_POLICY_TYPE,
 
-            /** The policy lists subjects and the relying party has no trusted access certificate with an identifier. */
+            /** The policy lists access certificate subjects and the relying party has no trusted access certificate with an identifier. */
             RELYING_PARTY_NOT_IDENTIFIED,
 
-            /** The policy lists registered relying parties and the relying party has no verified registration certificate. */
+            /** The policy lists services of registered relying parties and the relying party has no verified registration certificate. */
             REGISTRATION_CERTIFICATE_NOT_VERIFIED,
         }
     }
@@ -106,36 +106,38 @@ internal fun evaluateDisclosurePolicy(
     if (policyJson == null) return NoPolicy
     val policy = (policyJson as? JsonObject)?.let { EmbeddedDisclosurePolicy.fromJson(it) }
         ?: return CannotEvaluate(Reason.MALFORMED_POLICY, null)
-    return when (val rule = policy.policy) {
-        Policy.None -> NoPolicy
-        is Policy.AuthorizedRelyingParties ->
-            evaluateAuthorizedRelyingParties(policy, rule, relyingPartyIdentifier, verifiedRegistration)
+    return when (val type = policy.type) {
+        PolicyType.None -> NoPolicy
+        is PolicyType.AuthorizedRelyingParties ->
+            evaluateAuthorizedRelyingParties(policy, type, relyingPartyIdentifier, verifiedRegistration)
 
         // TODO: evaluate against the certificate chain of the verified registration certificate.
-        is Policy.AuthorizedCertificateSubjects,
-        is Policy.Unsupported -> CannotEvaluate(Reason.UNSUPPORTED_POLICY_TYPE, policy)
+        is PolicyType.AuthorizedCertificateSubjects -> CannotEvaluate(Reason.UNSUPPORTED_POLICY_TYPE, policy)
     }
 }
 
 /**
- * A registered relying party is matched by the identifier (`sub`) of its verified registration
- * certificate, which names the relying party itself also when an intermediary presents the request.
- * A subject is matched by the identifier in the trusted access certificate.
+ * A service of a registered relying party is matched by the identifier (`sub`) of its verified
+ * registration certificate, which names the relying party itself also when an intermediary presents
+ * the request. An access certificate subject is matched by the identifier in the trusted access
+ * certificate; a subject without an identifier matches no relying party.
  */
 private fun evaluateAuthorizedRelyingParties(
     policy: EmbeddedDisclosurePolicy,
-    rule: Policy.AuthorizedRelyingParties,
+    type: PolicyType.AuthorizedRelyingParties,
     relyingPartyIdentifier: String?,
     verifiedRegistration: RegistrationCertificate?,
 ): DisclosurePolicyResult {
-    val registered = rule.relyingParties.filterIsInstance<AuthorizedRelyingParty.Registered>()
-    val subjects = rule.relyingParties.filterIsInstance<AuthorizedRelyingParty.Subject>()
+    val wrpServices = type.relyingParties.filterIsInstance<AuthorizedRelyingParty.WrpService>()
+    val subjects = type.relyingParties.filterIsInstance<AuthorizedRelyingParty.AccessCertificateSubject>()
     val wrpIdentifiers = verifiedRegistration?.identifiers.orEmpty().map { it.value }
 
     // TODO: also match the service identifier, once registration certificates carry it (Technical Specification 5).
-    if (registered.any { it.wrpIdentifier in wrpIdentifiers }) return Satisfied
-    if (relyingPartyIdentifier != null && subjects.any { it.identifier == relyingPartyIdentifier }) return Satisfied
-    if (registered.isNotEmpty() && verifiedRegistration == null) {
+    if (wrpServices.any { it.wrpIdentifier in wrpIdentifiers }) return Satisfied
+    if (relyingPartyIdentifier != null && subjects.any { it.relyingPartyIdentifier() == relyingPartyIdentifier }) {
+        return Satisfied
+    }
+    if (wrpServices.isNotEmpty() && verifiedRegistration == null) {
         return CannotEvaluate(Reason.REGISTRATION_CERTIFICATE_NOT_VERIFIED, policy)
     }
     if (subjects.isNotEmpty() && relyingPartyIdentifier == null) {

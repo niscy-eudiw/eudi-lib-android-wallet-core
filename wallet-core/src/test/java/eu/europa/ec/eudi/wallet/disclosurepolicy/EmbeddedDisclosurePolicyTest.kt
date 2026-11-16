@@ -110,11 +110,10 @@ class EmbeddedDisclosurePolicyTest {
     }
 
     @Test
-    fun `an unknown rule is not supported`() {
+    fun `an unknown rule makes the policy malformed`() {
         val result = evaluate("""{"policy_uri": "$POLICY_URI", "policy": {"authorized_purposes": []}}""")
 
-        assertEquals(Reason.UNSUPPORTED_POLICY_TYPE, (result as CannotEvaluate).reason)
-        assertEquals(EmbeddedDisclosurePolicy.Policy.Unsupported("authorized_purposes"), result.policy?.policy)
+        assertEquals(CannotEvaluate(Reason.MALFORMED_POLICY, null), result)
     }
 
     @Test
@@ -182,9 +181,9 @@ class EmbeddedDisclosurePolicyTest {
         val policy = authorizedRelyingParties(" LEIXG-1 ,  Service 1 ", "", "LEIXG-1, Service 1")
 
         assertEquals(
-            listOf(AuthorizedRelyingParty.Registered("LEIXG-1", "Service 1")),
-            (EmbeddedDisclosurePolicy.fromJson(policyJson(policy))?.policy
-                as EmbeddedDisclosurePolicy.Policy.AuthorizedRelyingParties).relyingParties,
+            listOf(AuthorizedRelyingParty.WrpService("LEIXG-1", "Service 1")),
+            (EmbeddedDisclosurePolicy.fromJson(policyJson(policy))?.type
+                as EmbeddedDisclosurePolicy.PolicyType.AuthorizedRelyingParties).relyingParties,
         )
     }
 
@@ -220,21 +219,21 @@ class EmbeddedDisclosurePolicyTest {
     }
 
     @Test
-    fun `a subject without an identifier makes the policy malformed`() {
+    fun `a subject without an identifier matches no relying party`() {
         val result = evaluate(authorizedRelyingParties("CN=Shop, O=Shop SA, C=GR"))
 
-        assertEquals(CannotEvaluate(Reason.MALFORMED_POLICY, null), result)
+        assertEquals(NotSatisfied::class, result::class)
     }
 
     @Test
-    fun `a subject with two serial numbers makes the policy malformed`() {
+    fun `a subject with two serial numbers matches no relying party`() {
         // OpenSSL prints the surname as SN, which a policy reads as the serial number.
         val result = evaluate(
             authorizedRelyingParties("CN=Jo Doe, SN=Doe, GN=Jo, serialNumber=TINGR-123, C=GR"),
             identifier = "TINGR-123",
         )
 
-        assertEquals(CannotEvaluate(Reason.MALFORMED_POLICY, null), result)
+        assertEquals(NotSatisfied::class, result::class)
     }
 
     @Test
