@@ -128,20 +128,21 @@ private fun evaluateAuthorizedRelyingParties(
     relyingPartyIdentifier: String?,
     verifiedRegistration: RegistrationCertificate?,
 ): DisclosurePolicyResult {
-    val wrpServices = type.relyingParties.filterIsInstance<AuthorizedRelyingParty.WrpService>()
-    val subjects = type.relyingParties.filterIsInstance<AuthorizedRelyingParty.AccessCertificateSubject>()
     val wrpIdentifiers = verifiedRegistration?.identifiers.orEmpty().map { it.value }
-
-    // The service identifier is not compared: Technical Specification 5 registers it with the Registrar,
-    // but no certificate that the relying party presents carries it.
-    if (wrpServices.any { it.wrpIdentifier in wrpIdentifiers }) return Satisfied
-    if (relyingPartyIdentifier != null && subjects.any { it.relyingPartyIdentifier() == relyingPartyIdentifier }) {
-        return Satisfied
+    val matched = type.relyingParties.any { relyingParty ->
+        when (relyingParty) {
+            // The service identifier is not compared: Technical Specification 5 registers it with the Registrar,
+            // but no certificate that the relying party presents carries it.
+            is AuthorizedRelyingParty.WrpService -> relyingParty.wrpIdentifier in wrpIdentifiers
+            is AuthorizedRelyingParty.AccessCertificateSubject ->
+                relyingPartyIdentifier != null && relyingParty.relyingPartyIdentifier() == relyingPartyIdentifier
+        }
     }
-    if (wrpServices.isNotEmpty() && verifiedRegistration == null) {
+    if (matched) return Satisfied
+    if (verifiedRegistration == null && type.relyingParties.any { it is AuthorizedRelyingParty.WrpService }) {
         return CannotEvaluate(Reason.REGISTRATION_CERTIFICATE_NOT_VERIFIED, policy)
     }
-    if (subjects.isNotEmpty() && relyingPartyIdentifier == null) {
+    if (relyingPartyIdentifier == null && type.relyingParties.any { it is AuthorizedRelyingParty.AccessCertificateSubject }) {
         return CannotEvaluate(Reason.RELYING_PARTY_NOT_IDENTIFIED, policy)
     }
     return NotSatisfied(policy)
