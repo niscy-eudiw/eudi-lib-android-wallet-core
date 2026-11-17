@@ -91,7 +91,9 @@ sealed interface AuthorizedRelyingParty {
      * A service of a relying party registered in the EUDI Wallet ecosystem.
      *
      * @property wrpIdentifier the wallet-relying party identifier
-     * @property serviceIdentifier the identifier of the service of the relying party
+     * @property serviceIdentifier the identifier of the service, as registered with the Registrar
+     * (Technical Specification 5, `serviceIdentifier`); it is not compared, since no certificate
+     * that the relying party presents carries it
      */
     data class WrpService(val wrpIdentifier: String, val serviceIdentifier: String) : AuthorizedRelyingParty
 

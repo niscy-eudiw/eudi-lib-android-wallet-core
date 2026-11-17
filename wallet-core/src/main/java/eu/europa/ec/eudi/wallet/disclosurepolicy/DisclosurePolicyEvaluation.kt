@@ -132,7 +132,8 @@ private fun evaluateAuthorizedRelyingParties(
     val subjects = type.relyingParties.filterIsInstance<AuthorizedRelyingParty.AccessCertificateSubject>()
     val wrpIdentifiers = verifiedRegistration?.identifiers.orEmpty().map { it.value }
 
-    // TODO: also match the service identifier, once registration certificates carry it (Technical Specification 5).
+    // The service identifier is not compared: Technical Specification 5 registers it with the Registrar,
+    // but no certificate that the relying party presents carries it.
     if (wrpServices.any { it.wrpIdentifier in wrpIdentifiers }) return Satisfied
     if (relyingPartyIdentifier != null && subjects.any { it.relyingPartyIdentifier() == relyingPartyIdentifier }) {
         return Satisfied

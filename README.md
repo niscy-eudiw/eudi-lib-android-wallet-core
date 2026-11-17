@@ -119,7 +119,7 @@ The library supports the following features:
 |                              | DCQL                                                                    | ✅ support for credential_sets  <br />✅ support for claim_sets <br />✅ per-query `multiple` flag <br />✅ per-query `require_cryptographic_holder_binding` flag |                                                                                                                    |
 |                              | Transaction data                                                        | ✅ SD-JWT VC <br />✅ ISO/IEC 18013-5 mdoc                                                                                                                      |                                                                                                                    |
 |                              | Digital Credential API                                                  | ✅ ISO mdoc (`org-iso-mdoc`) <br /> ✅ OpenID4VP (`openid4vp-v1-signed`, `openid4vp-v1-unsigned`)                                                               | Disabled ([DIGITAL_CREDENTIAL_API.md](DIGITAL_CREDENTIAL_API.md))                                                  |
-| **Disclosure Policies**      | Embedded disclosure policies (ETSI TS 119 472-3)                        | ✅ No policy <br /> ✅ Authorised relying parties                                                                                                               | Evaluated on request (`evaluateDisclosurePolicy`)                                                                  |
+| **Disclosure Policies**      | Embedded disclosure policies (ETSI TS 119 472-3)                        | ✅ No policy <br /> ✅ Authorized relying parties <br /> ❌ Specific roots of trust                                                                               | Evaluated on request (`evaluateDisclosurePolicy`)                                                                  |
 | **Trust Mark**               | EUDI Wallet Trust Mark (EC TS01 v1.2)                                   | ✅ Static (pre-distribution) <br /> ✅ Dynamic (on-demand via provider)                                                                                         |                                                                                                                    |
 |                              | Trust Mark resource fetching                                            | ✅                                                                                                                                                             |                                                                                                                    |
 
@@ -2758,7 +2758,8 @@ evaluates the policy, informs the user of the result, and lets the user decide.
 
 1. **Issuance**: the library reads the policy from the issuer metadata and stores it with the
    document, in `IssuerMetadata.embeddedDisclosurePolicy`. No action is required from the
-   application.
+   application. Documents issued before the issuer published a policy
+   have none; the issuer has to issue them again.
 2. **Presentation**: before the user approves the presentation, the application calls
    `evaluateDisclosurePolicy` for each document it is about to present, with the
    `ProcessedRequest.Success` of the request (Commission Implementing Regulation (EU) 2024/2982,
@@ -2802,54 +2803,72 @@ The `reason` of `CannotEvaluate` is one of:
 | Reason                                  | Meaning                                                                                              |
 |-----------------------------------------|------------------------------------------------------------------------------------------------------|
 | `MALFORMED_POLICY`                      | The stored policy does not follow the format described below                                         |
-| `UNSUPPORTED_POLICY_TYPE`               | The policy type is not supported                                                                     |
-| `RELYING_PARTY_NOT_IDENTIFIED`          | The request does not have a single requester identity with a trusted access certificate that carries an identifier |
-| `REGISTRATION_CERTIFICATE_NOT_VERIFIED` | The policy lists entitlements and the request has no verified registration certificate               |
+| `UNSUPPORTED_POLICY_TYPE`               | The policy type is not supported yet (`authorized_cert_subject_DNs`)                                 |
+| `RELYING_PARTY_NOT_IDENTIFIED`          | The policy lists distinguished names and the request does not have a single requester identity with a trusted access certificate that carries an identifier |
+| `REGISTRATION_CERTIFICATE_NOT_VERIFIED` | The policy lists wallet-relying party identifiers and the request has no verified registration certificate |
 
 ##### How a relying party is matched
 
-The policy is satisfied when one of its entries matches the relying party:
+An `authorized_rp_ids` policy is satisfied when one of its entries matches the relying party:
 
-- A `subject_dn` entry matches when its organization identifier (`ORGID`), or for a natural person
-  its serial number (`SN`), is the same as in the relying party's access certificate. The access
-  certificate is used when the request has a single requester identity and its certificate chain
-  is trusted (`trustMetadata` is not `null`).
-- An `entitlement` entry matches when the relying party's verified registration certificate holds
-  the entitlement. This requires registration certificate validation, see
-  [REGISTRATION_CERTIFICATE.md](REGISTRATION_CERTIFICATE.md#enabling-and-disabling).
+- A wallet-relying party identifier and service identifier entry matches when the identifier is the
+  `sub` of the relying party's verified registration certificate. When an intermediary presents the
+  request, this is the identifier of the intermediated relying party. The service identifier is
+  not compared: Technical Specification 5 registers it with the Registrar, but no certificate that
+  the relying party presents carries it. This requires registration
+  certificate validation, see [REGISTRATION_CERTIFICATE.md](REGISTRATION_CERTIFICATE.md#enabling-and-disabling).
+- A distinguished name entry matches when its organization identifier (`ORGID`), or for a natural
+  person its serial number (`SN`), is the same as in the relying party's access certificate. Other
+  attributes of the name are not compared, and a name without exactly one identifier matches no
+  relying party. The access certificate is used when the request has a single requester identity
+  and its certificate chain is trusted (`trustMetadata` is not `null`).
 
 ##### Policy format
 
-ETSI TS 119 472-3 clause 4.2.5 defines the data model of the policy. The library reads the policy
-from the `embedded_disclosure_policy` member of `credential_metadata`, in each credential
-configuration of the issuer metadata:
+ETSI TS 119 472-3 V1.1.1 clause 4.2.5 defines only the data model of the policy. The library
+follows the encoding proposed in the comments on that clause of 2026-08-11, which ETSI has not
+adopted yet, and may change when it does. The policy is read from the `embedded_disclosure_policy`
+member of each credential configuration of the issuer metadata:
 
 ```json
-"credential_metadata": {
-  "display": [ ... ],
-  "embedded_disclosure_policy": {
-    "id": "https://issuer.example.com/edp/v1",
-    "type": "authorised_relying_parties",
-    "authorised_relying_parties": [
-      { "subject_dn": "CN=Example Shop, O=Example Shop SA, ORGID=LEIXG-529900T8BM49AURSDO55, C=GR" },
-      { "entitlement": "https://uri.etsi.org/19475/Entitlement/Service_Provider" }
-    ],
-    "layman_uri": "https://issuer.example.com/edp/v1/explained"
+"credential_configurations_supported": {
+  "org.iso.18013.5.1.mDL": {
+    "format": "mso_mdoc",
+    "doctype": "org.iso.18013.5.1.mDL",
+    "credential_metadata": { ... },
+    "embedded_disclosure_policy": {
+      "policy_uri": "https://issuer.example.com/edp/mdl/v1",
+      "policy": {
+        "authorized_rp_ids": [
+          "LEIXG-529900T8BM49AURSDO55, Service_1",
+          "ORGID=VATGR-123456789, O=Example Shop SA, C=GR, CN=Example Shop"
+        ]
+      },
+      "layman_uri": "https://issuer.example.com/edp/mdl/v1/explained"
+    }
   }
 }
 ```
 
-| Member                       | Description                                                                                                                       |
-|------------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
-| `id`                         | Required. The URI that identifies the policy                                                                                      |
-| `type`                       | Required. `no_policy` or `authorised_relying_parties`                                                                             |
-| `authorised_relying_parties` | Required for `authorised_relying_parties`. Each entry has either a `subject_dn` (RFC 4514 string with `ORGID` or `SN`) or an `entitlement` (URI) |
-| `layman_uri`                 | Optional. A page that explains the policy to the user                                                                             |
+| Member       | Description                                                                                                         |
+|--------------|---------------------------------------------------------------------------------------------------------------------|
+| `policy_uri` | Required. The URI that identifies the policy                                                                        |
+| `policy`     | Required. `"none"`, or an object with exactly one member: `authorized_rp_ids` or `authorized_cert_subject_DNs`      |
+| `layman_uri` | Optional. A page that explains the policy to the user (ISS-MDATA-EBD-4.2.5.2-13); not part of the proposed encoding |
+| `extensions` | Ignored. The `policy` applies to all attributes of the document                                                     |
 
-Other members are ignored.
+Each entry of `authorized_rp_ids` is one of:
 
-In a `subject_dn`, `ORGID` is the organizationIdentifier, `SN` the serialNumber and `GN` the
-givenName; the surname is written as `surname`. Each `subject_dn` has exactly one identifier.
+- a wallet-relying party identifier and a service identifier, separated by a comma, for relying
+  parties registered in the EUDI Wallet ecosystem;
+- an RFC 4514 distinguished name of the subject of the relying party's access certificate. In a
+  name, `ORGID` is the organizationIdentifier, `SN` the serialNumber and `GN` the givenName; the
+  surname is written as `surname`.
+
+Empty and duplicate entries are ignored. `authorized_cert_subject_DNs` lists the subject
+distinguished names of the certificates that may sign, directly or indirectly, the relying party's
+registration certificate; it is read but not evaluated yet. Any other `policy` makes the policy
+malformed.
 
 #### Rejecting a Presentation
 To reject a remote presentation request and notify the Verifier that the user has declined, call the `wallet.rejectRemotePresentation()` method

@@ -148,7 +148,7 @@ class EmbeddedDisclosurePolicyTest {
     }
 
     @Test
-    fun `the service identifier is not compared yet`() {
+    fun `the service identifier is not compared`() {
         val result = evaluate(authorizedRelyingParties("LEIXG-1, Other service"), registration = registration("LEIXG-1"))
 
         assertEquals(Satisfied, result)
