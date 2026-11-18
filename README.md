@@ -119,7 +119,7 @@ The library supports the following features:
 |                              | DCQL                                                                    | ✅ support for credential_sets  <br />✅ support for claim_sets <br />✅ per-query `multiple` flag <br />✅ per-query `require_cryptographic_holder_binding` flag |                                                                                                                    |
 |                              | Transaction data                                                        | ✅ SD-JWT VC <br />✅ ISO/IEC 18013-5 mdoc                                                                                                                      |                                                                                                                    |
 |                              | Digital Credential API                                                  | ✅ ISO mdoc (`org-iso-mdoc`) <br /> ✅ OpenID4VP (`openid4vp-v1-signed`, `openid4vp-v1-unsigned`)                                                               | Disabled ([DIGITAL_CREDENTIAL_API.md](DIGITAL_CREDENTIAL_API.md))                                                  |
-| **Disclosure Policies**      | Embedded disclosure policies (ETSI TS 119 472-3)                        | ✅ No policy <br /> ✅ Authorized relying parties <br /> ❌ Specific roots of trust                                                                               | Evaluated on request (`evaluateDisclosurePolicy`)                                                                  |
+| **Disclosure Policies**      | Embedded disclosure policies (ETSI TS 119 472-3)                        | ✅ No policy <br /> ✅ Authorized relying parties <br /> ✅ Specific roots of trust                                                                               | Evaluated on request (`evaluateDisclosurePolicy`)                                                                  |
 | **Trust Mark**               | EUDI Wallet Trust Mark (EC TS01 v1.2)                                   | ✅ Static (pre-distribution) <br /> ✅ Dynamic (on-demand via provider)                                                                                         |                                                                                                                    |
 |                              | Trust Mark resource fetching                                            | ✅                                                                                                                                                             |                                                                                                                    |
 
@@ -2795,17 +2795,18 @@ is TransferEvent.RequestReceived -> {
 |----------------------------------|--------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------|
 | `NoPolicy`                       | The document has no policy, or its policy sets no restriction      | Nothing                                                                                                                            |
 | `Satisfied`                      | The relying party meets the policy                                 | Nothing                                                                                                                            |
-| `NotSatisfied(policy)`           | The relying party does not meet the policy                         | A warning, e.g. "The issuer of your *document* does not want you to share it with *relying party*", and `policy.laymanUri` as a link |
-| `CannotEvaluate(reason, policy)` | The policy could not be evaluated                                  | A notice that the issuer's policy could not be checked, and `policy?.laymanUri` as a link                                          |
+| `NotSatisfied(policyUri, laymanUri)`           | The relying party does not meet the policy                         | A warning, e.g. "The issuer of your *document* does not want you to share it with *relying party*", and `laymanUri` as a link |
+| `CannotEvaluate(reason, policyUri, laymanUri)` | The policy could not be evaluated                                  | A notice that the issuer's policy could not be checked, and `laymanUri` as a link                                            |
+
+The results carry only what the application shows to the user, not the rules of the policy.
 
 The `reason` of `CannotEvaluate` is one of:
 
 | Reason                                  | Meaning                                                                                              |
 |-----------------------------------------|------------------------------------------------------------------------------------------------------|
 | `MALFORMED_POLICY`                      | The stored policy does not follow the format described below                                         |
-| `UNSUPPORTED_POLICY_TYPE`               | The policy type is not supported yet (`authorized_cert_subject_DNs`)                                 |
 | `RELYING_PARTY_NOT_IDENTIFIED`          | The policy lists distinguished names and the request does not have a single requester identity with a trusted access certificate that carries an identifier |
-| `REGISTRATION_CERTIFICATE_NOT_VERIFIED` | The policy lists wallet-relying party identifiers and the request has no verified registration certificate |
+| `REGISTRATION_CERTIFICATE_NOT_VERIFIED` | The policy lists wallet-relying party identifiers or certificate subjects, and the request has no verified registration certificate, or its signer chain is not available |
 
 ##### How a relying party is matched
 
@@ -2822,6 +2823,14 @@ An `authorized_rp_ids` policy is satisfied when one of its entries matches the r
   attributes of the name are not compared, and a name without exactly one identifier matches no
   relying party. The access certificate is used when the request has a single requester identity
   and its certificate chain is trusted (`trustMetadata` is not `null`).
+
+An `authorized_cert_subject_DNs` policy is satisfied when one of its distinguished names is the
+subject of a certificate in the chain that signed the relying party's verified registration
+certificate, the root included. The root is often not part of the chain that the relying party
+presents; its subject is then taken as the issuer of the last certificate of the chain, which the
+trust validation of the chain has linked to it. Names are compared as X.500 names: case and
+repeated spaces in values are ignored, and the attributes may be in the same or in reverse order.
+The chain is available in `RegistrationCertificateResult.Verified.signerChain`.
 
 ##### Policy format
 
@@ -2865,10 +2874,9 @@ Each entry of `authorized_rp_ids` is one of:
   name, `ORGID` is the organizationIdentifier, `SN` the serialNumber and `GN` the givenName; the
   surname is written as `surname`.
 
-Empty and duplicate entries are ignored. `authorized_cert_subject_DNs` lists the subject
-distinguished names of the certificates that may sign, directly or indirectly, the relying party's
-registration certificate; it is read but not evaluated yet. Any other `policy` makes the policy
-malformed.
+Empty and duplicate entries are ignored. `authorized_cert_subject_DNs` lists, as RFC 4514 strings,
+the subject distinguished names of the certificates that may sign, directly or indirectly, the
+relying party's registration certificate. Any other `policy` makes the policy malformed.
 
 #### Rejecting a Presentation
 To reject a remote presentation request and notify the Verifier that the user has declined, call the `wallet.rejectRemotePresentation()` method

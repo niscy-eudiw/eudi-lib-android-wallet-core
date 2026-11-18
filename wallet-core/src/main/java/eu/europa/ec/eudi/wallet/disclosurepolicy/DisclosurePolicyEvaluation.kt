@@ -29,6 +29,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import org.bouncycastle.asn1.x500.X500Name
 import org.multipaz.crypto.javaX509Certificates
+import java.security.cert.X509Certificate
 
 /**
  * The result of evaluating the embedded disclosure policy of a document for a presentation
@@ -45,19 +46,27 @@ sealed interface DisclosurePolicyResult {
     /**
      * The relying party does not meet the policy.
      *
-     * @property policy the evaluated policy
+     * @property policyUri the URI that identifies the policy
+     * @property laymanUri the address of a page that explains the policy to the user, if the issuer
+     * published one
      */
-    data class NotSatisfied(val policy: EmbeddedDisclosurePolicy) : DisclosurePolicyResult
+    data class NotSatisfied(
+        val policyUri: String,
+        val laymanUri: String? = null,
+    ) : DisclosurePolicyResult
 
     /**
      * The policy could not be evaluated.
      *
      * @property reason the reason the policy could not be evaluated
-     * @property policy the policy, or `null` when it could not be read
+     * @property policyUri the URI that identifies the policy, or `null` when it could not be read
+     * @property laymanUri the address of a page that explains the policy to the user, or `null` when
+     * the issuer did not publish one or the policy could not be read
      */
     data class CannotEvaluate(
         val reason: Reason,
-        val policy: EmbeddedDisclosurePolicy?,
+        val policyUri: String? = null,
+        val laymanUri: String? = null,
     ) : DisclosurePolicyResult {
 
         /** The reasons a policy cannot be evaluated. */
@@ -65,13 +74,13 @@ sealed interface DisclosurePolicyResult {
             /** The policy does not follow the expected JSON form. */
             MALFORMED_POLICY,
 
-            /** The policy type is not supported. */
-            UNSUPPORTED_POLICY_TYPE,
-
             /** The policy lists access certificate subjects and the relying party has no trusted access certificate with an identifier. */
             RELYING_PARTY_NOT_IDENTIFIED,
 
-            /** The policy lists services of registered relying parties and the relying party has no verified registration certificate. */
+            /**
+             * The policy lists services of registered relying parties or certificate subjects, and the
+             * relying party has no verified registration certificate, or its signer chain is not available.
+             */
             REGISTRATION_CERTIFICATE_NOT_VERIFIED,
         }
     }
@@ -87,7 +96,7 @@ fun Document.evaluateDisclosurePolicy(request: ProcessedRequest.Success): Disclo
     evaluateDisclosurePolicy(
         policyJson = issuerMetadata?.embeddedDisclosurePolicy,
         relyingPartyIdentifier = request.trustedRelyingPartyIdentifier(),
-        verifiedRegistration = (request.wrpRegistration as? RegistrationCertificateResult.Verified)?.registration,
+        verifiedRegistration = request.wrpRegistration as? RegistrationCertificateResult.Verified,
     )
 
 /**
@@ -101,19 +110,41 @@ fun Document.evaluateDisclosurePolicy(request: ProcessedRequest.Success): Disclo
 internal fun evaluateDisclosurePolicy(
     policyJson: JsonElement?,
     relyingPartyIdentifier: String?,
-    verifiedRegistration: RegistrationCertificate?,
+    verifiedRegistration: RegistrationCertificateResult.Verified?,
 ): DisclosurePolicyResult {
     if (policyJson == null) return NoPolicy
     val policy = (policyJson as? JsonObject)?.let { EmbeddedDisclosurePolicy.fromJson(it) }
-        ?: return CannotEvaluate(Reason.MALFORMED_POLICY, null)
+        ?: return CannotEvaluate(Reason.MALFORMED_POLICY)
     return when (val type = policy.type) {
         PolicyType.None -> NoPolicy
         is PolicyType.AuthorizedRelyingParties ->
-            evaluateAuthorizedRelyingParties(policy, type, relyingPartyIdentifier, verifiedRegistration)
+            evaluateAuthorizedRelyingParties(policy, type, relyingPartyIdentifier, verifiedRegistration?.registration)
 
-        // TODO: evaluate against the certificate chain of the verified registration certificate.
-        is PolicyType.AuthorizedCertificateSubjects -> CannotEvaluate(Reason.UNSUPPORTED_POLICY_TYPE, policy)
+        is PolicyType.AuthorizedCertificateSubjects ->
+            evaluateAuthorizedCertificateSubjects(policy, type, verifiedRegistration?.signerChain.orEmpty())
     }
+}
+
+/**
+ * The policy is met when one of its subjects is the subject of a certificate in the chain that
+ * signed the verified registration certificate, the root included. The root is not always part of
+ * the chain that the relying party presents, so its subject is taken as the issuer of the last
+ * certificate of the chain, which the trust validation of the chain has linked to it.
+ */
+private fun evaluateAuthorizedCertificateSubjects(
+    policy: EmbeddedDisclosurePolicy,
+    type: PolicyType.AuthorizedCertificateSubjects,
+    registrationSignerChain: List<X509Certificate>,
+): DisclosurePolicyResult {
+    val chainNames = runCatching {
+        registrationSignerChain.map { X500Name.getInstance(it.subjectX500Principal.encoded) } +
+            X500Name.getInstance(registrationSignerChain.last().issuerX500Principal.encoded)
+    }.getOrNull() ?: return policy.cannotEvaluate(Reason.REGISTRATION_CERTIFICATE_NOT_VERIFIED)
+    val matched = type.subjectDns.any { subjectDn ->
+        val authorized = policyDistinguishedName(subjectDn) ?: return@any false
+        chainNames.any { authorized == it }
+    }
+    return if (matched) Satisfied else policy.notSatisfied()
 }
 
 /**
@@ -140,13 +171,18 @@ private fun evaluateAuthorizedRelyingParties(
     }
     if (matched) return Satisfied
     if (verifiedRegistration == null && type.relyingParties.any { it is AuthorizedRelyingParty.WrpService }) {
-        return CannotEvaluate(Reason.REGISTRATION_CERTIFICATE_NOT_VERIFIED, policy)
+        return policy.cannotEvaluate(Reason.REGISTRATION_CERTIFICATE_NOT_VERIFIED)
     }
     if (relyingPartyIdentifier == null && type.relyingParties.any { it is AuthorizedRelyingParty.AccessCertificateSubject }) {
-        return CannotEvaluate(Reason.RELYING_PARTY_NOT_IDENTIFIED, policy)
+        return policy.cannotEvaluate(Reason.RELYING_PARTY_NOT_IDENTIFIED)
     }
-    return NotSatisfied(policy)
+    return policy.notSatisfied()
 }
+
+private fun EmbeddedDisclosurePolicy.notSatisfied(): NotSatisfied = NotSatisfied(policyUri, laymanUri)
+
+private fun EmbeddedDisclosurePolicy.cannotEvaluate(reason: Reason): CannotEvaluate =
+    CannotEvaluate(reason, policyUri, laymanUri)
 
 /**
  * Returns the identifier in the access certificate of the relying party, when the request has a

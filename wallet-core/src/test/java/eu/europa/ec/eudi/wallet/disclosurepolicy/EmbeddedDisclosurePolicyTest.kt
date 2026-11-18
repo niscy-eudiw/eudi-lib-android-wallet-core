@@ -37,6 +37,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import org.bouncycastle.asn1.ASN1ObjectIdentifier
+import org.bouncycastle.asn1.x500.X500Name
 import org.bouncycastle.asn1.x500.X500NameBuilder
 import org.bouncycastle.asn1.x500.style.BCStyle
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter
@@ -52,6 +53,7 @@ import org.multipaz.request.Requester
 import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.trustmanagement.TrustMetadata
 import java.math.BigInteger
+import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
@@ -75,21 +77,21 @@ class EmbeddedDisclosurePolicyTest {
     fun `a policy that is not a JSON object is malformed`() {
         val result = evaluateDisclosurePolicy(JsonPrimitive(POLICY_URI), "LEIXG-1", null)
 
-        assertEquals(CannotEvaluate(Reason.MALFORMED_POLICY, null), result)
+        assertEquals(CannotEvaluate(Reason.MALFORMED_POLICY), result)
     }
 
     @Test
     fun `a policy without a policy uri is malformed`() {
         val result = evaluate("""{"policy": "none"}""")
 
-        assertEquals(CannotEvaluate(Reason.MALFORMED_POLICY, null), result)
+        assertEquals(CannotEvaluate(Reason.MALFORMED_POLICY), result)
     }
 
     @Test
     fun `a policy string other than none is malformed`() {
         val result = evaluate("""{"policy_uri": "$POLICY_URI", "policy": "all"}""")
 
-        assertEquals(CannotEvaluate(Reason.MALFORMED_POLICY, null), result)
+        assertEquals(CannotEvaluate(Reason.MALFORMED_POLICY), result)
     }
 
     @Test
@@ -106,23 +108,82 @@ class EmbeddedDisclosurePolicyTest {
             """
         )
 
-        assertEquals(CannotEvaluate(Reason.MALFORMED_POLICY, null), result)
+        assertEquals(CannotEvaluate(Reason.MALFORMED_POLICY), result)
     }
 
     @Test
     fun `an unknown rule makes the policy malformed`() {
         val result = evaluate("""{"policy_uri": "$POLICY_URI", "policy": {"authorized_purposes": []}}""")
 
-        assertEquals(CannotEvaluate(Reason.MALFORMED_POLICY, null), result)
+        assertEquals(CannotEvaluate(Reason.MALFORMED_POLICY), result)
     }
 
     @Test
-    fun `authorized certificate subjects are not evaluated yet`() {
-        val result = evaluate(
-            """{"policy_uri": "$POLICY_URI", "policy": {"authorized_cert_subject_DNs": ["CN=Registrar, C=EU"]}}"""
+    fun `a certificate of the registration signer chain satisfies the policy`() {
+        assertEquals(Satisfied, evaluateWithSignerChain(authorizedCertificateSubjects(INTERMEDIATE_CA)))
+    }
+
+    @Test
+    fun `the root of the registration signer chain satisfies the policy also when the chain does not include it`() {
+        assertEquals(Satisfied, evaluateWithSignerChain(authorizedCertificateSubjects(ROOT_CA)))
+    }
+
+    @Test
+    fun `certificate subjects are compared regardless of case, spacing and reversed attribute order`() {
+        val result = evaluateWithSignerChain(authorizedCertificateSubjects("c=nl,  o=ministerie bzk, cn=registrar ca"))
+
+        assertEquals(Satisfied, result)
+    }
+
+    @Test
+    fun `a registration signer chain without an authorized subject does not satisfy the policy`() {
+        val result = evaluateWithSignerChain(authorizedCertificateSubjects("CN=Other Registrar CA, O=Other, C=BE"))
+
+        assertEquals(NotSatisfied::class, result::class)
+    }
+
+    @Test
+    fun `certificate subjects cannot be checked without a verified registration certificate`() {
+        val result = evaluateDisclosurePolicy(policyJson(authorizedCertificateSubjects(ROOT_CA)), "LEIXG-1", null)
+
+        assertEquals(Reason.REGISTRATION_CERTIFICATE_NOT_VERIFIED, (result as CannotEvaluate).reason)
+    }
+
+    @Test
+    fun `certificate subjects cannot be checked without the registration signer chain`() {
+        val result = evaluateDisclosurePolicy(
+            policyJson(authorizedCertificateSubjects(ROOT_CA)),
+            "LEIXG-1",
+            RegistrationCertificateResult.Verified(registration("LEIXG-1")),
         )
 
-        assertEquals(Reason.UNSUPPORTED_POLICY_TYPE, (result as CannotEvaluate).reason)
+        assertEquals(Reason.REGISTRATION_CERTIFICATE_NOT_VERIFIED, (result as CannotEvaluate).reason)
+    }
+
+    @Test
+    fun `a certificate subject without attribute types makes the policy malformed`() {
+        val result = evaluateWithSignerChain(
+            authorizedCertificateSubjects("Autoriteit Uitgifte Registratiecertificaten, Ministerie BZK, NTRNL-12345678, NL")
+        )
+
+        assertEquals(CannotEvaluate(Reason.MALFORMED_POLICY), result)
+    }
+
+    @Test
+    fun `the registration signer chain in the request is used`() {
+        val document = documentWithPolicy(authorizedCertificateSubjects(ROOT_CA))
+
+        val result = document.evaluateDisclosurePolicy(
+            request(
+                listOf(certificate(BCStyle.ORGANIZATION_IDENTIFIER, "LEIXG-1")),
+                registration = RegistrationCertificateResult.Verified(
+                    registration("LEIXG-1"),
+                    signerChain = registrationSignerChain,
+                ),
+            )
+        )
+
+        assertEquals(Satisfied, result)
     }
 
     @Test
@@ -162,7 +223,7 @@ class EmbeddedDisclosurePolicyTest {
             registration = registration("LEIXG-1"),
         )
 
-        assertEquals(LAYMAN_URI, (result as NotSatisfied).policy.laymanUri)
+        assertEquals(NotSatisfied(policyUri = POLICY_URI, laymanUri = LAYMAN_URI), result)
     }
 
     @Test
@@ -191,7 +252,7 @@ class EmbeddedDisclosurePolicyTest {
     fun `an entry without a service identifier makes the policy malformed`() {
         val result = evaluate(authorizedRelyingParties("LEIXG-1"), registration = registration("LEIXG-1"))
 
-        assertEquals(CannotEvaluate(Reason.MALFORMED_POLICY, null), result)
+        assertEquals(CannotEvaluate(Reason.MALFORMED_POLICY), result)
     }
 
     @Test
@@ -312,7 +373,62 @@ private fun evaluate(
     policy: String,
     identifier: String? = "LEIXG-1",
     registration: RegistrationCertificate? = null,
-): DisclosurePolicyResult = evaluateDisclosurePolicy(policyJson(policy), identifier, registration)
+): DisclosurePolicyResult =
+    evaluateDisclosurePolicy(policyJson(policy), identifier, registration?.let { RegistrationCertificateResult.Verified(it) })
+
+private const val ROOT_CA = "CN=Registrar Root CA, O=Ministerie BZK, C=NL"
+private const val INTERMEDIATE_CA = "CN=Registrar CA, O=Ministerie BZK, C=NL"
+
+private fun authorizedCertificateSubjects(vararg subjectDns: String): String =
+    """
+    {
+      "policy_uri": "$POLICY_URI",
+      "policy": {"authorized_cert_subject_DNs": [${subjectDns.joinToString { "\"$it\"" }}]}
+    }
+    """
+
+/**
+ * The chain that signed a registration certificate, signer first: a signer certificate issued by an
+ * intermediate CA, issued by a root CA that the chain does not include.
+ */
+private val registrationSignerChain: List<X509Certificate> by lazy {
+    val root = ecKeyPair()
+    val intermediate = ecKeyPair()
+    val signer = ecKeyPair()
+    listOf(
+        issuedCertificate("CN=Registrar Signer, O=Ministerie BZK, C=NL", signer, INTERMEDIATE_CA, intermediate),
+        issuedCertificate(INTERMEDIATE_CA, intermediate, ROOT_CA, root),
+    )
+}
+
+private fun evaluateWithSignerChain(policy: String): DisclosurePolicyResult =
+    evaluateDisclosurePolicy(
+        policyJson(policy),
+        "LEIXG-1",
+        RegistrationCertificateResult.Verified(registration("LEIXG-1"), signerChain = registrationSignerChain),
+    )
+
+private fun ecKeyPair(): KeyPair =
+    KeyPairGenerator.getInstance("EC").apply { initialize(ECGenParameterSpec("secp256r1")) }.generateKeyPair()
+
+private fun issuedCertificate(
+    subject: String,
+    subjectKeyPair: KeyPair,
+    issuer: String,
+    issuerKeyPair: KeyPair,
+): X509Certificate {
+    val now = Instant.now()
+    val builder = JcaX509v3CertificateBuilder(
+        X500Name(issuer),
+        BigInteger(64, SecureRandom()),
+        Date.from(now.minusSeconds(3600)),
+        Date.from(now.plusSeconds(86400)),
+        X500Name(subject),
+        subjectKeyPair.public,
+    )
+    val signer = JcaContentSignerBuilder("SHA256withECDSA").build(issuerKeyPair.private)
+    return JcaX509CertificateConverter().getCertificate(builder.build(signer))
+}
 
 private fun documentWithPolicy(policy: String): Document = mockk {
     every { issuerMetadata } returns IssuerMetadata(

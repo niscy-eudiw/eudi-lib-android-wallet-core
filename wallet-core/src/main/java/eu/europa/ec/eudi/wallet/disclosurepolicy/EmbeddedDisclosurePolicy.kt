@@ -36,7 +36,7 @@ import org.bouncycastle.asn1.x500.style.IETFUtils
  * @property laymanUri the address of a page that explains the policy to the user (`layman_uri`,
  * ISS-MDATA-EBD-4.2.5.2-13)
  */
-data class EmbeddedDisclosurePolicy(
+internal data class EmbeddedDisclosurePolicy(
     val policyUri: String,
     val type: PolicyType,
     val laymanUri: String? = null,
@@ -85,7 +85,7 @@ data class EmbeddedDisclosurePolicy(
 /**
  * A relying party that an embedded disclosure policy allows.
  */
-sealed interface AuthorizedRelyingParty {
+internal sealed interface AuthorizedRelyingParty {
 
     /**
      * A service of a relying party registered in the EUDI Wallet ecosystem.
@@ -111,7 +111,16 @@ sealed interface AuthorizedRelyingParty {
  * Returns `null` when the subject has no identifier, or more than one value for it.
  */
 internal fun AuthorizedRelyingParty.AccessCertificateSubject.relyingPartyIdentifier(): String? =
-    runCatching { X500Name(PolicyNameStyle, subjectDn).relyingPartyIdentifier() }.getOrNull()
+    policyDistinguishedName(subjectDn)?.let { runCatching { it.relyingPartyIdentifier() }.getOrNull() }
+
+/**
+ * Reads a distinguished name of a policy, with the attribute names used in policies (see
+ * [PolicyNameStyle]). Comparing the result with another name ignores case and repeated spaces in
+ * values, and accepts the attributes in the same or in reverse order.
+ *
+ * @return the name, or `null` when [dn] is not an RFC 4514 distinguished name
+ */
+internal fun policyDistinguishedName(dn: String): X500Name? = runCatching { X500Name(PolicyNameStyle, dn) }.getOrNull()
 
 /**
  * Returns the identifier of a relying party in this name: the organization identifier, or for a
@@ -161,7 +170,7 @@ private fun JsonObject.toPolicyType(): EmbeddedDisclosurePolicy.PolicyType? {
             ?.let { EmbeddedDisclosurePolicy.PolicyType.AuthorizedRelyingParties(it) }
 
         AUTHORIZED_CERT_SUBJECT_DNS -> value.nonEmptyStrings()
-            ?.onEach { X500Name(PolicyNameStyle, it) }
+            ?.onEach { policyDistinguishedName(it) ?: return null }
             ?.let { EmbeddedDisclosurePolicy.PolicyType.AuthorizedCertificateSubjects(it) }
 
         else -> null
@@ -175,8 +184,7 @@ private fun JsonObject.toPolicyType(): EmbeddedDisclosurePolicy.PolicyType? {
  */
 private fun String.toAuthorizedRelyingParty(): AuthorizedRelyingParty? =
     if ('=' in this) {
-        X500Name(PolicyNameStyle, this)
-        AuthorizedRelyingParty.AccessCertificateSubject(subjectDn = this)
+        policyDistinguishedName(this)?.let { AuthorizedRelyingParty.AccessCertificateSubject(subjectDn = this) }
     } else {
         val wrpIdentifier = substringBefore(',').trim()
         val serviceIdentifier = substringAfter(',', missingDelimiterValue = "").trim()
