@@ -60,10 +60,12 @@ internal class DefaultWrpRegistrationValidator(
 
         return when (val authentication = authenticator.authenticate(certificate)) {
             is WrprcAuthentication.Authentic ->
-                evaluator.evaluate(
-                    registration = authentication.registration,
-                    accessCertificate = readerAccessChain.firstOrNull(),
-                    requestedAttestations = requested
+                authentication.attachSignerChain(
+                    evaluator.evaluate(
+                        registration = authentication.registration,
+                        accessCertificate = readerAccessChain.firstOrNull(),
+                        requestedAttestations = requested
+                    )
                 )
 
             is WrprcAuthentication.Invalid ->

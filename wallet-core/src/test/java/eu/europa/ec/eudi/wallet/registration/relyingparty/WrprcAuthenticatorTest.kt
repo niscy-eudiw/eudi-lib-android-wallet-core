@@ -61,6 +61,7 @@ class WrprcAuthenticatorTest {
         val authentic = assertIs<WrprcAuthentication.Authentic>(result)
         assertEquals("Nordic Bank", authentic.registration.name)
         assertEquals("ORG-123", authentic.registration.identifiers.single().value)
+        assertEquals(listOf(providerCertificate), authentic.signerChain)
     }
 
     @Test

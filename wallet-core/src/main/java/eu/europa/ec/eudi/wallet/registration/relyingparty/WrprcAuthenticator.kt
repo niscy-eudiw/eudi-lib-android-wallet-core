@@ -18,20 +18,41 @@ package eu.europa.ec.eudi.wallet.registration.relyingparty
 import eu.europa.ec.eudi.wallet.registration.CertificateTrust
 import eu.europa.ec.eudi.wallet.registration.RegistrationCertificate
 import eu.europa.ec.eudi.wallet.registration.RegistrationCertificateParseResult
+import eu.europa.ec.eudi.wallet.registration.RegistrationCertificateResult
 import eu.europa.ec.eudi.wallet.registration.parseRegistrationCertificate
 import eu.europa.ec.eudi.wallet.registration.RegistrationFailureReason
 
 import eu.europa.ec.eudi.wallet.internal.d
 import eu.europa.ec.eudi.wallet.internal.e
 import eu.europa.ec.eudi.wallet.logging.Logger
+import java.security.cert.X509Certificate
 
 /**
  * The outcome of authenticating a Wallet-Relying Party Registration Certificate (WRPRC).
  */
 internal sealed interface WrprcAuthentication {
 
-    /** The certificate is authentic and describes the given [registration]. */
-    data class Authentic(val registration: RegistrationCertificate) : WrprcAuthentication
+    /**
+     * The certificate is authentic and describes the given [registration].
+     *
+     * @property signerChain the trusted certificate chain that signed the certificate, signer first
+     */
+    data class Authentic(
+        val registration: RegistrationCertificate,
+        val signerChain: List<X509Certificate> = emptyList(),
+    ) : WrprcAuthentication {
+
+        /**
+         * Attaches [signerChain] to a [RegistrationCertificateResult.Verified] result of evaluating
+         * [registration]; any other result is returned unchanged.
+         */
+        fun attachSignerChain(result: RegistrationCertificateResult): RegistrationCertificateResult =
+            if (result is RegistrationCertificateResult.Verified && signerChain.isNotEmpty()) {
+                result.copy(signerChain = signerChain)
+            } else {
+                result
+            }
+    }
 
     /** The certificate could not be authenticated, for the given [reason] and optional [detail]. */
     data class Invalid(
@@ -88,7 +109,7 @@ internal class DefaultWrprcAuthenticator(
         }
 
         logger?.d(TAG, "registration certificate authenticated")
-        return WrprcAuthentication.Authentic(parsed.registration)
+        return WrprcAuthentication.Authentic(parsed.registration, parsed.chain)
     }
 
     private fun invalid(

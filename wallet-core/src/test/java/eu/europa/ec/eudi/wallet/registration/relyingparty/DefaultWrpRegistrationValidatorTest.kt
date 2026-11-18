@@ -25,6 +25,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Test
+import java.security.cert.X509Certificate
 
 class DefaultWrpRegistrationValidatorTest {
 
@@ -64,6 +65,40 @@ class DefaultWrpRegistrationValidatorTest {
 
         assertSame(evaluation, result)
         coVerify { evaluator.evaluate(registration, null, requested) }
+    }
+
+    @Test
+    fun `the signer chain of an authentic certificate is attached to a verified evaluation`() = runTest {
+        val registration = RegistrationCertificate(name = "Nordic Bank")
+        val signerChain = listOf(mockk<X509Certificate>())
+        coEvery { authenticator.authenticate(any()) } returns WrprcAuthentication.Authentic(registration, signerChain)
+        coEvery { evaluator.evaluate(registration, any(), any()) } returns
+            RegistrationCertificateResult.Verified(registration = registration)
+
+        val result = validator.validate(
+            registrationCertificate = byteArrayOf(1, 2, 3),
+            readerAccessChain = emptyList(),
+            requestedDocuments = emptyList()
+        )
+
+        assertEquals(signerChain, (result as RegistrationCertificateResult.Verified).signerChain)
+    }
+
+    @Test
+    fun `a failed evaluation is returned unchanged`() = runTest {
+        val registration = RegistrationCertificate(name = "Nordic Bank")
+        val evaluation = RegistrationCertificateResult.Failed(RegistrationFailureReason.EXPIRED, registration)
+        coEvery { authenticator.authenticate(any()) } returns
+            WrprcAuthentication.Authentic(registration, listOf(mockk<X509Certificate>()))
+        coEvery { evaluator.evaluate(registration, any(), any()) } returns evaluation
+
+        val result = validator.validate(
+            registrationCertificate = byteArrayOf(1, 2, 3),
+            readerAccessChain = emptyList(),
+            requestedDocuments = emptyList()
+        )
+
+        assertSame(evaluation, result)
     }
 
     @Test

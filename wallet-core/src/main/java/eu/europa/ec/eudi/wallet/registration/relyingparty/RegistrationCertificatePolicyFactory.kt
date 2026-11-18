@@ -54,10 +54,12 @@ internal fun wrpRegistrationCertificatePolicy(
         val result = if (serialized == null) {
             RegistrationCertificateResult.Failed(RegistrationFailureReason.MALFORMED)
         } else when (val authentication = authenticator.authenticate(serialized)) {
-            is WrprcAuthentication.Authentic -> evaluator.evaluate(
-                registration = authentication.registration,
-                accessCertificate = accessCertificate,
-                requestedAttestations = requestedAttestations,
+            is WrprcAuthentication.Authentic -> authentication.attachSignerChain(
+                evaluator.evaluate(
+                    registration = authentication.registration,
+                    accessCertificate = accessCertificate,
+                    requestedAttestations = requestedAttestations,
+                )
             )
 
             is WrprcAuthentication.Invalid ->

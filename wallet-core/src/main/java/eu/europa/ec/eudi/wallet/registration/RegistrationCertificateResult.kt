@@ -16,6 +16,7 @@
 package eu.europa.ec.eudi.wallet.registration
 
 import eu.europa.ec.eudi.iso18013.transfer.response.WrpRegistrationInfo
+import java.security.cert.X509Certificate
 
 /**
  * The outcome of validating a registration certificate: the relying party's on the presentation path
@@ -36,11 +37,14 @@ sealed interface RegistrationCertificateResult : WrpRegistrationInfo {
      * @property overProvidedAttestations the offered attestation types outside the issuer's
      *   registered scope, on the issuance path; the user is to be warned about these, and the issuance
      *   stops (ARF RPRC_23). Attestation-level, since `provides_attestations` has no claims (ETSI TS 119 472-3)
+     * @property signerChain the trusted certificate chain that signed the registration certificate,
+     *   signer first, on the presentation (relying-party) path; empty when not available
      */
     data class Verified(
         val registration: RegistrationCertificate,
         val overAskedClaims: List<OverAskedClaim> = emptyList(),
         val overProvidedAttestations: List<OverProvidedAttestation> = emptyList(),
+        val signerChain: List<X509Certificate> = emptyList(),
     ) : RegistrationCertificateResult
 
     /**
