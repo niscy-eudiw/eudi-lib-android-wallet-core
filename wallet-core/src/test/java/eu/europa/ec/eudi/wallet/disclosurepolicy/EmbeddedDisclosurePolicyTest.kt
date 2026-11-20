@@ -16,6 +16,12 @@
 package eu.europa.ec.eudi.wallet.disclosurepolicy
 
 import eu.europa.ec.eudi.iso18013.transfer.response.RequestProcessor.ProcessedRequest
+import eu.europa.ec.eudi.openid4vci.CredentialConfigurationIdentifier
+import eu.europa.ec.eudi.openid4vci.CredentialIssuerId
+import eu.europa.ec.eudi.openid4vci.CredentialIssuerMetadata
+import eu.europa.ec.eudi.openid4vci.CredentialMetadata
+import eu.europa.ec.eudi.openid4vci.CredentialOffer
+import eu.europa.ec.eudi.openid4vci.SdJwtVcCredential
 import eu.europa.ec.eudi.iso18013.transfer.response.ResponseResult
 import eu.europa.ec.eudi.iso18013.transfer.response.WrpRegistrationInfo
 import eu.europa.ec.eudi.wallet.disclosurepolicy.DisclosurePolicyResult.CannotEvaluate
@@ -28,6 +34,8 @@ import eu.europa.ec.eudi.wallet.document.format.DocumentFormat
 import eu.europa.ec.eudi.wallet.document.format.MsoMdocFormat
 import eu.europa.ec.eudi.wallet.document.format.SdJwtVcFormat
 import eu.europa.ec.eudi.wallet.document.metadata.IssuerMetadata
+import eu.europa.ec.eudi.wallet.issue.openid4vci.Offer
+import eu.europa.ec.eudi.wallet.issue.openid4vci.transformations.extractIssuerMetadata
 import eu.europa.ec.eudi.wallet.registration.Intermediary
 import eu.europa.ec.eudi.wallet.registration.RegistrationCertificate
 import eu.europa.ec.eudi.wallet.registration.RegistrationCertificateResult
@@ -326,6 +334,54 @@ class EmbeddedDisclosurePolicyTest {
     }
 
     @Test
+    fun `a policy published by the issuer is stored with the document and evaluated for a request`() {
+        // The credential configuration as openid4vci-kt hands it over, with the policy among the
+        // members it does not interpret.
+        val configuration = SdJwtVcCredential(
+            credentialMetadata = CredentialMetadata(display = emptyList()),
+            type = PID_VCT,
+            customParameters = Json.parseToJsonElement(
+                """
+                {
+                  "embedded_disclosure_policy": {
+                    "policy_uri": "$POLICY_URI",
+                    "policy": { "authorized_rp_ids": ["LEIXG-2, Service 1"] },
+                    "layman_uri": "$LAYMAN_URI",
+                    "extensions": { "specific_attribute_policies": { "$PID_VCT, address": "none" } }
+                  }
+                }
+                """
+            ).jsonObject,
+        )
+
+        // Issuance: the policy is extracted into the issuer metadata of the document, which is
+        // stored as JSON and read back when the document is loaded.
+        val issued = Offer.OfferedDocument(
+            offer = offer(),
+            configurationIdentifier = CredentialConfigurationIdentifier("pid"),
+            configuration = configuration,
+        ).extractIssuerMetadata()
+        val reloaded = IssuerMetadata.fromJson(issued.toJson()).getOrThrow()
+
+        // Presentation: a verified relying party that the policy of the document does not list.
+        val document = mockk<Document> {
+            every { issuerMetadata } returns reloaded
+            every { format } returns SdJwtVcFormat(PID_VCT)
+        }
+        val evaluation = document.evaluateDisclosurePolicy(
+            request(
+                listOf(certificate(BCStyle.ORGANIZATION_IDENTIFIER, "LEIXG-1")),
+                registration = RegistrationCertificateResult.Verified(registration("LEIXG-1")),
+            ),
+            claims = listOf(GIVEN_NAME, STREET_ADDRESS),
+        )
+
+        assertEquals(NotSatisfied(POLICY_URI, LAYMAN_URI), evaluation.documentResult)
+        assertEquals(NotSatisfied(POLICY_URI, LAYMAN_URI), evaluation.claimResults[GIVEN_NAME])
+        assertEquals(NoPolicy, evaluation.claimResults[STREET_ADDRESS])
+    }
+
+    @Test
     fun `a registered relying party in the verified registration certificate satisfies the policy`() {
         val result = evaluate(authorizedRelyingParties("LEIXG-1, Service 1"), registration = registration("LEIXG-1"))
 
@@ -596,6 +652,19 @@ private fun evaluateClaims(policy: String, vararg claims: RequestedClaim, vct: S
         claims.toList(),
         vct,
     )
+
+/** An offer from an issuer without display properties, as [Offer.OfferedDocument] needs one. */
+private fun offer(): Offer {
+    val credentialOffer = mockk<CredentialOffer>(relaxed = true) {
+        every { credentialIssuerIdentifier } returns CredentialIssuerId("https://issuer.example.com").getOrThrow()
+    }
+    return mockk {
+        every { this@mockk.credentialOffer } returns credentialOffer
+        every { issuerMetadata } returns mockk<CredentialIssuerMetadata>(relaxed = true) {
+            every { display } returns emptyList()
+        }
+    }
+}
 
 private fun documentWithPolicy(policy: String, format: DocumentFormat = MsoMdocFormat(PID_NAMESPACE)): Document = mockk {
     every { this@mockk.format } returns format
