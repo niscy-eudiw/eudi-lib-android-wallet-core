@@ -24,6 +24,9 @@ import eu.europa.ec.eudi.wallet.disclosurepolicy.DisclosurePolicyResult.NoPolicy
 import eu.europa.ec.eudi.wallet.disclosurepolicy.DisclosurePolicyResult.NotSatisfied
 import eu.europa.ec.eudi.wallet.disclosurepolicy.DisclosurePolicyResult.Satisfied
 import eu.europa.ec.eudi.wallet.document.Document
+import eu.europa.ec.eudi.wallet.document.format.DocumentFormat
+import eu.europa.ec.eudi.wallet.document.format.MsoMdocFormat
+import eu.europa.ec.eudi.wallet.document.format.SdJwtVcFormat
 import eu.europa.ec.eudi.wallet.document.metadata.IssuerMetadata
 import eu.europa.ec.eudi.wallet.registration.Intermediary
 import eu.europa.ec.eudi.wallet.registration.RegistrationCertificate
@@ -33,6 +36,7 @@ import eu.europa.ec.eudi.wallet.registration.RegistrationIdentifier
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
@@ -48,7 +52,10 @@ import org.junit.Test
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.crypto.fromJavaX509Certificates
 import org.multipaz.presentment.CredentialSelection
+import org.multipaz.request.JsonRequestedClaim
+import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.OpenID4VPRequesterIdentity
+import org.multipaz.request.RequestedClaim
 import org.multipaz.request.Requester
 import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.trustmanagement.TrustMetadata
@@ -65,7 +72,7 @@ class EmbeddedDisclosurePolicyTest {
 
     @Test
     fun `a document without a policy has no restriction`() {
-        assertEquals(NoPolicy, evaluateDisclosurePolicy(null, "LEIXG-1", null))
+        assertEquals(NoPolicy, evaluateDisclosurePolicy(null, "LEIXG-1", null).documentResult)
     }
 
     @Test
@@ -75,7 +82,7 @@ class EmbeddedDisclosurePolicyTest {
 
     @Test
     fun `a policy that is not a JSON object is malformed`() {
-        val result = evaluateDisclosurePolicy(JsonPrimitive(POLICY_URI), "LEIXG-1", null)
+        val result = evaluateDisclosurePolicy(JsonPrimitive(POLICY_URI), "LEIXG-1", null).documentResult
 
         assertEquals(CannotEvaluate(Reason.MALFORMED_POLICY), result)
     }
@@ -144,7 +151,7 @@ class EmbeddedDisclosurePolicyTest {
 
     @Test
     fun `certificate subjects cannot be checked without a verified registration certificate`() {
-        val result = evaluateDisclosurePolicy(policyJson(authorizedCertificateSubjects(ROOT_CA)), "LEIXG-1", null)
+        val result = evaluateDisclosurePolicy(policyJson(authorizedCertificateSubjects(ROOT_CA)), "LEIXG-1", null).documentResult
 
         assertEquals(Reason.REGISTRATION_CERTIFICATE_NOT_VERIFIED, (result as CannotEvaluate).reason)
     }
@@ -155,7 +162,7 @@ class EmbeddedDisclosurePolicyTest {
             policyJson(authorizedCertificateSubjects(ROOT_CA)),
             "LEIXG-1",
             RegistrationCertificateResult.Verified(registration("LEIXG-1")),
-        )
+        ).documentResult
 
         assertEquals(Reason.REGISTRATION_CERTIFICATE_NOT_VERIFIED, (result as CannotEvaluate).reason)
     }
@@ -181,24 +188,141 @@ class EmbeddedDisclosurePolicyTest {
                     signerChain = registrationSignerChain,
                 ),
             )
-        )
+        ).documentResult
 
         assertEquals(Satisfied, result)
     }
 
     @Test
-    fun `extensions are ignored`() {
+    fun `other extensions are ignored`() {
         val result = evaluate(
-            """
-            {
-              "policy_uri": "$POLICY_URI",
-              "policy": "none",
-              "extensions": {"specific_attribute_policies": {"org.iso.18013.5.1, portrait": {"authorized_rp_ids": []}}}
-            }
-            """
+            """{"policy_uri": "$POLICY_URI", "policy": "none", "extensions": {"other_extension": {"any": 1}}}"""
         )
 
         assertEquals(NoPolicy, result)
+    }
+
+    @Test
+    fun `a claim policy can allow a claim that the policy of the document does not allow`() {
+        val evaluation = evaluateClaims(
+            withClaimPolicies(DOCUMENT_RESTRICTED, """"$PID_NAMESPACE, family_name": "none""""),
+            FAMILY_NAME, PORTRAIT,
+        )
+
+        assertEquals(NotSatisfied::class, evaluation.documentResult::class)
+        assertEquals(NoPolicy, evaluation.claimResults[FAMILY_NAME])
+        assertEquals(evaluation.documentResult, evaluation.claimResults[PORTRAIT])
+    }
+
+    @Test
+    fun `a claim policy can restrict a claim that the policy of the document allows`() {
+        val evaluation = evaluateClaims(
+            withClaimPolicies("\"none\"", """"$PID_NAMESPACE, portrait": {"authorized_rp_ids": ["LEIXG-2, Service 1"]}"""),
+            FAMILY_NAME, PORTRAIT,
+        )
+
+        assertEquals(NoPolicy, evaluation.documentResult)
+        assertEquals(NoPolicy, evaluation.claimResults[FAMILY_NAME])
+        assertEquals(NotSatisfied(POLICY_URI), evaluation.claimResults[PORTRAIT])
+    }
+
+    @Test
+    fun `a claim policy of another namespace does not apply`() {
+        val evaluation = evaluateClaims(
+            withClaimPolicies(DOCUMENT_RESTRICTED, """"org.iso.18013.5.1, family_name": "none""""),
+            FAMILY_NAME,
+        )
+
+        assertEquals(evaluation.documentResult, evaluation.claimResults[FAMILY_NAME])
+    }
+
+    @Test
+    fun `a claim policy of a claim applies to the claims nested in it`() {
+        val evaluation = evaluateClaims(
+            withClaimPolicies("\"none\"", """"$PID_VCT, address": {"authorized_rp_ids": ["LEIXG-2, Service 1"]}"""),
+            STREET_ADDRESS, GIVEN_NAME,
+            vct = PID_VCT,
+        )
+
+        assertEquals(NotSatisfied(POLICY_URI), evaluation.claimResults[STREET_ADDRESS])
+        assertEquals(NoPolicy, evaluation.claimResults[GIVEN_NAME])
+    }
+
+    @Test
+    fun `the claim policy with the longest matching attribute identifier applies`() {
+        val evaluation = evaluateClaims(
+            withClaimPolicies(
+                DOCUMENT_RESTRICTED,
+                """"$PID_VCT, address": "none"""",
+                """"$PID_VCT, address.street_address": {"authorized_rp_ids": ["LEIXG-2, Service 1"]}""",
+            ),
+            STREET_ADDRESS, LOCALITY,
+            vct = PID_VCT,
+        )
+
+        assertEquals(NotSatisfied(POLICY_URI), evaluation.claimResults[STREET_ADDRESS])
+        assertEquals(NoPolicy, evaluation.claimResults[LOCALITY])
+    }
+
+    @Test
+    fun `a claim policy applies only to the exact vct of the document`() {
+        val evaluation = evaluateClaims(
+            withClaimPolicies(DOCUMENT_RESTRICTED, """"$PID_VCT, address": "none""""),
+            STREET_ADDRESS,
+            vct = "urn:eudi:pid:de:1",
+        )
+
+        assertEquals(evaluation.documentResult, evaluation.claimResults[STREET_ADDRESS])
+    }
+
+    @Test
+    fun `a claim policy without a scope makes the policy malformed`() {
+        val evaluation = evaluateClaims(withClaimPolicies("\"none\"", """"portrait": "none""""), PORTRAIT)
+
+        assertEquals(CannotEvaluate(Reason.MALFORMED_POLICY), evaluation.documentResult)
+        assertEquals(CannotEvaluate(Reason.MALFORMED_POLICY), evaluation.claimResults[PORTRAIT])
+    }
+
+    @Test
+    fun `a claim policy that is not a policy makes the policy malformed`() {
+        val evaluation = evaluateClaims(
+            withClaimPolicies("\"none\"", """"$PID_NAMESPACE, portrait": {"$PID_NAMESPACE, authorized_rp_ids": []}"""),
+            PORTRAIT,
+        )
+
+        assertEquals(CannotEvaluate(Reason.MALFORMED_POLICY), evaluation.documentResult)
+    }
+
+    @Test
+    fun `two claim policies for the same claim make the policy malformed`() {
+        val evaluation = evaluateClaims(
+            withClaimPolicies("\"none\"", """"$PID_NAMESPACE, portrait": "none"""", """"$PID_NAMESPACE,portrait": "none""""),
+            PORTRAIT,
+        )
+
+        assertEquals(CannotEvaluate(Reason.MALFORMED_POLICY), evaluation.documentResult)
+    }
+
+    @Test
+    fun `every claim of a document without a policy has no restriction`() {
+        val evaluation = evaluateDisclosurePolicy(null, "LEIXG-1", null, listOf(FAMILY_NAME))
+
+        assertEquals(mapOf<RequestedClaim, DisclosurePolicyResult>(FAMILY_NAME to NoPolicy), evaluation.claimResults)
+    }
+
+    @Test
+    fun `the vct of an SD-JWT VC document is used for its claims`() {
+        val document = documentWithPolicy(
+            withClaimPolicies(DOCUMENT_RESTRICTED, """"$PID_VCT, address": "none""""),
+            format = SdJwtVcFormat(PID_VCT),
+        )
+
+        val evaluation = document.evaluateDisclosurePolicy(
+            request(listOf(certificate(BCStyle.ORGANIZATION_IDENTIFIER, "LEIXG-1"))),
+            claims = listOf(STREET_ADDRESS),
+        )
+
+        assertEquals(NoPolicy, evaluation.claimResults[STREET_ADDRESS])
     }
 
     @Test
@@ -267,7 +391,7 @@ class EmbeddedDisclosurePolicyTest {
                     registration = registration("LEIXG-1"),
                 ),
             )
-        )
+        ).documentResult
 
         assertEquals(Reason.REGISTRATION_CERTIFICATE_NOT_VERIFIED, (result as CannotEvaluate).reason)
     }
@@ -305,7 +429,7 @@ class EmbeddedDisclosurePolicyTest {
 
         val result = document.evaluateDisclosurePolicy(
             request(listOf(certificate(BCStyle.SERIALNUMBER, "TINGR-123")))
-        )
+        ).documentResult
 
         assertEquals(Satisfied, result)
     }
@@ -316,7 +440,7 @@ class EmbeddedDisclosurePolicyTest {
 
         val result = document.evaluateDisclosurePolicy(
             request(listOf(certificate(BCStyle.ORGANIZATION_IDENTIFIER, "LEIXG-1")), trusted = false)
-        )
+        ).documentResult
 
         assertEquals(Reason.RELYING_PARTY_NOT_IDENTIFIED, (result as CannotEvaluate).reason)
     }
@@ -332,7 +456,7 @@ class EmbeddedDisclosurePolicyTest {
                     certificate(BCStyle.ORGANIZATION_IDENTIFIER, "LEIXG-2"),
                 )
             )
-        )
+        ).documentResult
 
         assertEquals(Reason.RELYING_PARTY_NOT_IDENTIFIED, (result as CannotEvaluate).reason)
     }
@@ -346,7 +470,7 @@ class EmbeddedDisclosurePolicyTest {
                 listOf(certificate(BCStyle.ORGANIZATION_IDENTIFIER, "LEIXG-1")),
                 registration = RegistrationCertificateResult.Verified(registration("LEIXG-1")),
             )
-        )
+        ).documentResult
 
         assertEquals(Satisfied, result)
     }
@@ -374,7 +498,7 @@ private fun evaluate(
     identifier: String? = "LEIXG-1",
     registration: RegistrationCertificate? = null,
 ): DisclosurePolicyResult =
-    evaluateDisclosurePolicy(policyJson(policy), identifier, registration?.let { RegistrationCertificateResult.Verified(it) })
+    evaluateDisclosurePolicy(policyJson(policy), identifier, registration?.let { RegistrationCertificateResult.Verified(it) }).documentResult
 
 private const val ROOT_CA = "CN=Registrar Root CA, O=Ministerie BZK, C=NL"
 private const val INTERMEDIATE_CA = "CN=Registrar CA, O=Ministerie BZK, C=NL"
@@ -406,7 +530,7 @@ private fun evaluateWithSignerChain(policy: String): DisclosurePolicyResult =
         policyJson(policy),
         "LEIXG-1",
         RegistrationCertificateResult.Verified(registration("LEIXG-1"), signerChain = registrationSignerChain),
-    )
+    ).documentResult
 
 private fun ecKeyPair(): KeyPair =
     KeyPairGenerator.getInstance("EC").apply { initialize(ECGenParameterSpec("secp256r1")) }.generateKeyPair()
@@ -430,7 +554,51 @@ private fun issuedCertificate(
     return JcaX509CertificateConverter().getCertificate(builder.build(signer))
 }
 
-private fun documentWithPolicy(policy: String): Document = mockk {
+private const val PID_NAMESPACE = "eu.europa.ec.eudi.pid.1"
+private const val PID_VCT = "urn:eudi:pid:1"
+
+/** A policy of the document that the relying party in the tests does not meet. */
+private const val DOCUMENT_RESTRICTED = """{"authorized_rp_ids": ["LEIXG-2, Service 1"]}"""
+
+private val FAMILY_NAME = mdocClaim("family_name")
+private val PORTRAIT = mdocClaim("portrait")
+private val STREET_ADDRESS = jsonClaim("address", "street_address")
+private val LOCALITY = jsonClaim("address", "locality")
+private val GIVEN_NAME = jsonClaim("given_name")
+
+private fun mdocClaim(dataElement: String) = MdocRequestedClaim(
+    docType = PID_NAMESPACE,
+    namespaceName = PID_NAMESPACE,
+    dataElementName = dataElement,
+    intentToRetain = false,
+)
+
+private fun jsonClaim(vararg path: String) = JsonRequestedClaim(
+    vctValues = listOf(PID_VCT),
+    claimPath = JsonArray(path.map { JsonPrimitive(it) }),
+)
+
+private fun withClaimPolicies(policy: String, vararg claimPolicies: String): String =
+    """
+    {
+      "policy_uri": "$POLICY_URI",
+      "policy": $policy,
+      "extensions": {"specific_attribute_policies": {${claimPolicies.joinToString()}}}
+    }
+    """
+
+/** Evaluates [policy] for a relying party with the verified registration identifier `LEIXG-1`. */
+private fun evaluateClaims(policy: String, vararg claims: RequestedClaim, vct: String? = null): DisclosurePolicyEvaluation =
+    evaluateDisclosurePolicy(
+        policyJson(policy),
+        "LEIXG-1",
+        RegistrationCertificateResult.Verified(registration("LEIXG-1")),
+        claims.toList(),
+        vct,
+    )
+
+private fun documentWithPolicy(policy: String, format: DocumentFormat = MsoMdocFormat(PID_NAMESPACE)): Document = mockk {
+    every { this@mockk.format } returns format
     every { issuerMetadata } returns IssuerMetadata(
         documentConfigurationIdentifier = "employee_card",
         display = emptyList(),

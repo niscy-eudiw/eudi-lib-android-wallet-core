@@ -119,7 +119,7 @@ The library supports the following features:
 |                              | DCQL                                                                    | ✅ support for credential_sets  <br />✅ support for claim_sets <br />✅ per-query `multiple` flag <br />✅ per-query `require_cryptographic_holder_binding` flag |                                                                                                                    |
 |                              | Transaction data                                                        | ✅ SD-JWT VC <br />✅ ISO/IEC 18013-5 mdoc                                                                                                                      |                                                                                                                    |
 |                              | Digital Credential API                                                  | ✅ ISO mdoc (`org-iso-mdoc`) <br /> ✅ OpenID4VP (`openid4vp-v1-signed`, `openid4vp-v1-unsigned`)                                                               | Disabled ([DIGITAL_CREDENTIAL_API.md](DIGITAL_CREDENTIAL_API.md))                                                  |
-| **Disclosure Policies**      | Embedded disclosure policies (ETSI TS 119 472-3)                        | ✅ No policy <br /> ✅ Authorized relying parties <br /> ✅ Specific roots of trust                                                                               | Evaluated on request (`evaluateDisclosurePolicy`)                                                                  |
+| **Disclosure Policies**      | Embedded disclosure policies (ETSI TS 119 472-3)                        | ✅ No policy <br /> ✅ Authorized relying parties <br /> ✅ Specific roots of trust <br /> ✅ Claim policies                                                       | Evaluated on request (`evaluateDisclosurePolicy`)                                                                  |
 | **Trust Mark**               | EUDI Wallet Trust Mark (EC TS01 v1.2)                                   | ✅ Static (pre-distribution) <br /> ✅ Dynamic (on-demand via provider)                                                                                         |                                                                                                                    |
 |                              | Trust Mark resource fetching                                            | ✅                                                                                                                                                             |                                                                                                                    |
 
@@ -2777,17 +2777,32 @@ is TransferEvent.RequestReceived -> {
         as RequestProcessor.ProcessedRequest.Success
     val selection = success.presentmentSelections[userSelectedIndex]
 
-    // One result per document that the selection would present.
-    val policyResults: Map<String, DisclosurePolicyResult?> = selection.matches
-        .map { it.credential.document.identifier }
-        .distinct()
-        .associateWith { documentId ->
-            wallet.getDocumentById(documentId)?.evaluateDisclosurePolicy(success)
+    // One evaluation per document that the selection would present: a result for the document,
+    // and one for each of its claims about to be presented. A document may or may not have an
+    // embedded disclosure policy, and a policy may or may not set policies for single claims.
+    val evaluations: Map<String, DisclosurePolicyEvaluation?> = selection.matches
+        .groupBy { it.credential.document.identifier }
+        .mapValues { (documentId, matches) ->
+            wallet.getDocumentById(documentId)?.evaluateDisclosurePolicy(
+                request = success,
+                claims = matches.flatMap { it.claims.keys },
+            )
         }
 
     // Show the results in the consent UI, then generate the response as usual.
 }
 ```
+
+A document may have no embedded disclosure policy, and a policy may set policies for single claims
+in addition to the policy of the document; both are optional.
+
+- `DisclosurePolicyEvaluation.documentResult` is the result of the policy of the document.
+- `DisclosurePolicyEvaluation.claimResults` has one entry for each claim passed in, and is empty when
+  no claims are passed. When the policy sets a policy for that claim, the entry is the result of that
+  policy, which may differ from `documentResult` in either direction. Otherwise the entry is the same
+  as `documentResult`, because the policy of the document applies to the claim.
+
+Show a warning only for a document or a claim whose result is `NotSatisfied` or `CannotEvaluate`.
 
 ##### Results
 
@@ -2804,79 +2819,9 @@ The `reason` of `CannotEvaluate` is one of:
 
 | Reason                                  | Meaning                                                                                              |
 |-----------------------------------------|------------------------------------------------------------------------------------------------------|
-| `MALFORMED_POLICY`                      | The stored policy does not follow the format described below                                         |
+| `MALFORMED_POLICY`                      | The stored policy does not follow the expected format                                                |
 | `RELYING_PARTY_NOT_IDENTIFIED`          | The policy lists distinguished names and the request does not have a single requester identity with a trusted access certificate that carries an identifier |
 | `REGISTRATION_CERTIFICATE_NOT_VERIFIED` | The policy lists wallet-relying party identifiers or certificate subjects, and the request has no verified registration certificate, or its signer chain is not available |
-
-##### How a relying party is matched
-
-An `authorized_rp_ids` policy is satisfied when one of its entries matches the relying party:
-
-- A wallet-relying party identifier and service identifier entry matches when the identifier is the
-  `sub` of the relying party's verified registration certificate. When an intermediary presents the
-  request, this is the identifier of the intermediated relying party. The service identifier is
-  not compared: Technical Specification 5 registers it with the Registrar, but no certificate that
-  the relying party presents carries it. This requires registration
-  certificate validation, see [REGISTRATION_CERTIFICATE.md](REGISTRATION_CERTIFICATE.md#enabling-and-disabling).
-- A distinguished name entry matches when its organization identifier (`ORGID`), or for a natural
-  person its serial number (`SN`), is the same as in the relying party's access certificate. Other
-  attributes of the name are not compared, and a name without exactly one identifier matches no
-  relying party. The access certificate is used when the request has a single requester identity
-  and its certificate chain is trusted (`trustMetadata` is not `null`).
-
-An `authorized_cert_subject_DNs` policy is satisfied when one of its distinguished names is the
-subject of a certificate in the chain that signed the relying party's verified registration
-certificate, the root included. The root is often not part of the chain that the relying party
-presents; its subject is then taken as the issuer of the last certificate of the chain, which the
-trust validation of the chain has linked to it. Names are compared as X.500 names: case and
-repeated spaces in values are ignored, and the attributes may be in the same or in reverse order.
-The chain is available in `RegistrationCertificateResult.Verified.signerChain`.
-
-##### Policy format
-
-ETSI TS 119 472-3 V1.1.1 clause 4.2.5 defines only the data model of the policy. The library
-follows the encoding proposed in the comments on that clause of 2026-08-11, which ETSI has not
-adopted yet, and may change when it does. The policy is read from the `embedded_disclosure_policy`
-member of each credential configuration of the issuer metadata:
-
-```json
-"credential_configurations_supported": {
-  "org.iso.18013.5.1.mDL": {
-    "format": "mso_mdoc",
-    "doctype": "org.iso.18013.5.1.mDL",
-    "credential_metadata": { ... },
-    "embedded_disclosure_policy": {
-      "policy_uri": "https://issuer.example.com/edp/mdl/v1",
-      "policy": {
-        "authorized_rp_ids": [
-          "LEIXG-529900T8BM49AURSDO55, Service_1",
-          "ORGID=VATGR-123456789, O=Example Shop SA, C=GR, CN=Example Shop"
-        ]
-      },
-      "layman_uri": "https://issuer.example.com/edp/mdl/v1/explained"
-    }
-  }
-}
-```
-
-| Member       | Description                                                                                                         |
-|--------------|---------------------------------------------------------------------------------------------------------------------|
-| `policy_uri` | Required. The URI that identifies the policy                                                                        |
-| `policy`     | Required. `"none"`, or an object with exactly one member: `authorized_rp_ids` or `authorized_cert_subject_DNs`      |
-| `layman_uri` | Optional. A page that explains the policy to the user (ISS-MDATA-EBD-4.2.5.2-13); not part of the proposed encoding |
-| `extensions` | Ignored. The `policy` applies to all attributes of the document                                                     |
-
-Each entry of `authorized_rp_ids` is one of:
-
-- a wallet-relying party identifier and a service identifier, separated by a comma, for relying
-  parties registered in the EUDI Wallet ecosystem;
-- an RFC 4514 distinguished name of the subject of the relying party's access certificate. In a
-  name, `ORGID` is the organizationIdentifier, `SN` the serialNumber and `GN` the givenName; the
-  surname is written as `surname`.
-
-Empty and duplicate entries are ignored. `authorized_cert_subject_DNs` lists, as RFC 4514 strings,
-the subject distinguished names of the certificates that may sign, directly or indirectly, the
-relying party's registration certificate. Any other `policy` makes the policy malformed.
 
 #### Rejecting a Presentation
 To reject a remote presentation request and notify the Verifier that the user has declined, call the `wallet.rejectRemotePresentation()` method

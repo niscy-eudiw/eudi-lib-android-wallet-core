@@ -35,12 +35,26 @@ import org.bouncycastle.asn1.x500.style.IETFUtils
  * @property type the type of the policy, which applies to all attributes of the document (`policy`)
  * @property laymanUri the address of a page that explains the policy to the user (`layman_uri`,
  * ISS-MDATA-EBD-4.2.5.2-13)
+ * @property claimPolicies the policies of single claims, which replace [type] for those claims
+ * (`extensions.specific_attribute_policies`)
  */
 internal data class EmbeddedDisclosurePolicy(
     val policyUri: String,
     val type: PolicyType,
     val laymanUri: String? = null,
+    val claimPolicies: List<ClaimPolicy> = emptyList(),
 ) {
+
+    /**
+     * The policy of a single claim of the document.
+     *
+     * @property namespaceOrVct the namespace of the claim (ISO/IEC 18013-5), or the vct of the
+     * document (SD-JWT VC)
+     * @property attributeIdentifier the attribute identifier of the claim, as in the attestation
+     * rulebook; for SD-JWT VC, the identifiers of nested claims are separated by `.`
+     * @property type the type of the policy that applies to the claim
+     */
+    data class ClaimPolicy(val namespaceOrVct: String, val attributeIdentifier: String, val type: PolicyType)
 
     /**
      * The type of an embedded disclosure policy.
@@ -145,24 +159,43 @@ private const val LAYMAN_URI = "layman_uri"
 private const val NONE = "none"
 private const val AUTHORIZED_RP_IDS = "authorized_rp_ids"
 private const val AUTHORIZED_CERT_SUBJECT_DNS = "authorized_cert_subject_DNs"
+private const val EXTENSIONS = "extensions"
+private const val SPECIFIC_ATTRIBUTE_POLICIES = "specific_attribute_policies"
 
 private fun JsonObject.toPolicy(): EmbeddedDisclosurePolicy? {
     val policyUri = get(POLICY_URI)?.stringOrNull() ?: return null
     val laymanUri = get(LAYMAN_URI)?.let { it.stringOrNull() ?: return null }
-    val type = when (val policy = get(POLICY)) {
-        is JsonPrimitive -> EmbeddedDisclosurePolicy.PolicyType.None.takeIf { policy.stringOrNull() == NONE }
-        is JsonObject -> policy.toPolicyType()
-        else -> null
-    } ?: return null
-    return EmbeddedDisclosurePolicy(policyUri, type, laymanUri)
+    val type = get(POLICY)?.toPolicyType() ?: return null
+    val claimPolicies = get(EXTENSIONS)?.let { (it as? JsonObject)?.toClaimPolicies() ?: return null }
+    return EmbeddedDisclosurePolicy(policyUri, type, laymanUri, claimPolicies.orEmpty())
 }
 
 /**
- * Reads a policy object, which has a single member named after the policy type. Empty and duplicate
- * entries are ignored; any other policy type is not valid.
+ * Reads the `specific_attribute_policies` of the extensions; other extensions are ignored. Each key
+ * is the namespace or vct and the attribute identifier of a claim separated by a comma, and each
+ * value is a policy in the same form as `policy`. Two keys for the same claim are not valid.
  */
-private fun JsonObject.toPolicyType(): EmbeddedDisclosurePolicy.PolicyType? {
-    val (name, value) = entries.singleOrNull() ?: return null
+private fun JsonObject.toClaimPolicies(): List<EmbeddedDisclosurePolicy.ClaimPolicy>? {
+    val policies = get(SPECIFIC_ATTRIBUTE_POLICIES) ?: return emptyList()
+    return (policies as? JsonObject)
+        ?.map { (key, value) ->
+            val namespaceOrVct = key.substringBefore(',', missingDelimiterValue = "").trim()
+            val attributeIdentifier = key.substringAfter(',', missingDelimiterValue = "").trim()
+            if (namespaceOrVct.isEmpty() || attributeIdentifier.isEmpty()) return null
+            EmbeddedDisclosurePolicy.ClaimPolicy(namespaceOrVct, attributeIdentifier, value.toPolicyType() ?: return null)
+        }
+        ?.takeIf { claimPolicies ->
+            claimPolicies.distinctBy { it.namespaceOrVct to it.attributeIdentifier }.size == claimPolicies.size
+        }
+}
+
+/**
+ * Reads a policy: `"none"`, or an object with a single member named after the policy type. Empty
+ * and duplicate entries are ignored; any other policy type is not valid.
+ */
+private fun JsonElement.toPolicyType(): EmbeddedDisclosurePolicy.PolicyType? {
+    if (this is JsonPrimitive) return EmbeddedDisclosurePolicy.PolicyType.None.takeIf { stringOrNull() == NONE }
+    val (name, value) = (this as? JsonObject)?.entries?.singleOrNull() ?: return null
     return when (name) {
         AUTHORIZED_RP_IDS -> value.nonEmptyStrings()
             ?.map { it.toAuthorizedRelyingParty() ?: return null }

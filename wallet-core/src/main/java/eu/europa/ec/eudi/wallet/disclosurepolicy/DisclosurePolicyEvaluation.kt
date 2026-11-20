@@ -23,12 +23,18 @@ import eu.europa.ec.eudi.wallet.disclosurepolicy.DisclosurePolicyResult.NotSatis
 import eu.europa.ec.eudi.wallet.disclosurepolicy.DisclosurePolicyResult.Satisfied
 import eu.europa.ec.eudi.wallet.disclosurepolicy.EmbeddedDisclosurePolicy.PolicyType
 import eu.europa.ec.eudi.wallet.document.Document
+import eu.europa.ec.eudi.wallet.document.format.SdJwtVcFormat
 import eu.europa.ec.eudi.wallet.registration.RegistrationCertificate
 import eu.europa.ec.eudi.wallet.registration.RegistrationCertificateResult
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonPrimitive
 import org.bouncycastle.asn1.x500.X500Name
 import org.multipaz.crypto.javaX509Certificates
+import org.multipaz.request.JsonRequestedClaim
+import org.multipaz.request.MdocRequestedClaim
+import org.multipaz.request.RequestedClaim
 import java.security.cert.X509Certificate
 
 /**
@@ -87,16 +93,36 @@ sealed interface DisclosurePolicyResult {
 }
 
 /**
+ * The result of evaluating the embedded disclosure policy of a document, for the document and for
+ * each claim about to be presented.
+ *
+ * @property documentResult the result of the policy of the document
+ * @property claimResults for each claim passed to [evaluateDisclosurePolicy], the result that applies
+ * to it: the result of its own policy, when the policy of the document sets one for it, or else
+ * [documentResult]
+ */
+data class DisclosurePolicyEvaluation(
+    val documentResult: DisclosurePolicyResult,
+    val claimResults: Map<RequestedClaim, DisclosurePolicyResult> = emptyMap(),
+)
+
+/**
  * Evaluates the embedded disclosure policy of this document for a presentation request.
  *
  * @param request the processed presentation request
- * @return the result to show to the user before the user approves the presentation
+ * @param claims the claims of this document about to be presented, as in the presentment selection
+ * @return the results to show to the user before the user approves the presentation
  */
-fun Document.evaluateDisclosurePolicy(request: ProcessedRequest.Success): DisclosurePolicyResult =
+fun Document.evaluateDisclosurePolicy(
+    request: ProcessedRequest.Success,
+    claims: Collection<RequestedClaim> = emptyList(),
+): DisclosurePolicyEvaluation =
     evaluateDisclosurePolicy(
         policyJson = issuerMetadata?.embeddedDisclosurePolicy,
         relyingPartyIdentifier = request.trustedRelyingPartyIdentifier(),
         verifiedRegistration = request.wrpRegistration as? RegistrationCertificateResult.Verified,
+        claims = claims,
+        vct = (format as? SdJwtVcFormat)?.vct,
     )
 
 /**
@@ -106,22 +132,71 @@ fun Document.evaluateDisclosurePolicy(request: ProcessedRequest.Success): Disclo
  * @param relyingPartyIdentifier the identifier in the trusted access certificate of the relying party
  * @param verifiedRegistration the verified registration certificate of the relying party, or `null`
  * when there is none
+ * @param claims the claims about to be presented
+ * @param vct the vct of the document, for an SD-JWT VC
  */
 internal fun evaluateDisclosurePolicy(
     policyJson: JsonElement?,
     relyingPartyIdentifier: String?,
     verifiedRegistration: RegistrationCertificateResult.Verified?,
-): DisclosurePolicyResult {
-    if (policyJson == null) return NoPolicy
+    claims: Collection<RequestedClaim> = emptyList(),
+    vct: String? = null,
+): DisclosurePolicyEvaluation {
+    if (policyJson == null) return DisclosurePolicyEvaluation(NoPolicy, claims.associateWith { NoPolicy })
     val policy = (policyJson as? JsonObject)?.let { EmbeddedDisclosurePolicy.fromJson(it) }
-        ?: return CannotEvaluate(Reason.MALFORMED_POLICY)
-    return when (val type = policy.type) {
-        PolicyType.None -> NoPolicy
-        is PolicyType.AuthorizedRelyingParties ->
-            evaluateAuthorizedRelyingParties(policy, type, relyingPartyIdentifier, verifiedRegistration?.registration)
+        ?: return CannotEvaluate(Reason.MALFORMED_POLICY).let { DisclosurePolicyEvaluation(it, claims.associateWith { _ -> it }) }
+    val evaluate = { type: PolicyType -> policy.evaluate(type, relyingPartyIdentifier, verifiedRegistration) }
+    val documentResult = evaluate(policy.type)
+    return DisclosurePolicyEvaluation(
+        documentResult = documentResult,
+        claimResults = claims.associateWith { claim ->
+            policy.claimPolicyOf(claim, vct)?.let { evaluate(it.type) } ?: documentResult
+        },
+    )
+}
 
-        is PolicyType.AuthorizedCertificateSubjects ->
-            evaluateAuthorizedCertificateSubjects(policy, type, verifiedRegistration?.signerChain.orEmpty())
+private fun EmbeddedDisclosurePolicy.evaluate(
+    type: PolicyType,
+    relyingPartyIdentifier: String?,
+    verifiedRegistration: RegistrationCertificateResult.Verified?,
+): DisclosurePolicyResult = when (type) {
+    PolicyType.None -> NoPolicy
+    is PolicyType.AuthorizedRelyingParties ->
+        evaluateAuthorizedRelyingParties(this, type, relyingPartyIdentifier, verifiedRegistration?.registration)
+
+    is PolicyType.AuthorizedCertificateSubjects ->
+        evaluateAuthorizedCertificateSubjects(this, type, verifiedRegistration?.signerChain.orEmpty())
+}
+
+/**
+ * Finds the claim policy that applies to [claim], or `null` when there is none, so that the policy
+ * of the document applies.
+ *
+ * - ISO/IEC 18013-5: the claim policy whose namespace and attribute identifier are those of [claim].
+ * - SD-JWT VC: among the claim policies for [vct], those whose attribute identifier, split at `.`,
+ *   is the claim path of [claim] or its beginning; the one with the most segments wins. For
+ *   example, a policy for `address` applies to `address.street_address`, unless there is also one
+ *   for `address.street_address`.
+ */
+private fun EmbeddedDisclosurePolicy.claimPolicyOf(
+    claim: RequestedClaim,
+    vct: String?,
+): EmbeddedDisclosurePolicy.ClaimPolicy? = when (claim) {
+    is MdocRequestedClaim ->
+        claimPolicies.firstOrNull {
+            it.namespaceOrVct == claim.namespaceName && it.attributeIdentifier == claim.dataElementName
+        }
+
+    is JsonRequestedClaim -> {
+        val claimPath = claim.claimPath
+            .takeWhile { (it as? JsonPrimitive)?.isString == true }
+            .map { it.jsonPrimitive.content }
+        claimPolicies
+            .filter { it.namespaceOrVct == vct }
+            .map { it to it.attributeIdentifier.split('.') }
+            .filter { (_, policyPath) -> claimPath.take(policyPath.size) == policyPath }
+            .maxByOrNull { (_, policyPath) -> policyPath.size }
+            ?.first
     }
 }
 
