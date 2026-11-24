@@ -36,7 +36,7 @@ import kotlin.coroutines.resume
  * This handler:
  * 1. Opens the authorization URL in the system browser
  * 2. Waits for the app to receive the authorization callback via deep link
- * 3. Extracts the authorization code and state from the callback URI
+ * 3. Extracts the authorization code, state and, if present, issuer (`iss`) from the callback URI
  *
  * @property context Android context used to start the browser activity
  * @property logger Optional logger for debugging
@@ -86,11 +86,12 @@ class BrowserAuthorizationHandler(
         val response = runCatching {
             val authorizationCode = uri.getQueryParameter("code")
             val serverState = uri.getQueryParameter("state")
+            val issuer = uri.getQueryParameter("iss")
 
             requireNotNull(authorizationCode) { "No authorization code found" }
             requireNotNull(serverState) { "No server state found" }
 
-            AuthorizationResponse(authorizationCode, serverState)
+            AuthorizationResponse(authorizationCode, serverState, issuer)
         }
         cont.resume(response.onFailure {
             logger?.e(TAG, "resumeWithUri: ${it.message}", it)

@@ -48,9 +48,14 @@ fun interface AuthorizationHandler {
  *
  * @property authorizationCode The authorization code received from the authorization server
  * @property serverState The state parameter from the authorization server used for CSRF protection
+ * @property issuer The `iss` parameter from the authorization server (RFC 9207), or null if absent.
+ *           Custom handlers should return it: depending on
+ *           [OpenId4VciManager.Config.authResponseIssChecking], issuance fails when the authorization
+ *           server advertises the `iss` parameter and it is missing.
  */
-data class AuthorizationResponse(
+data class AuthorizationResponse @JvmOverloads constructor(
     val authorizationCode: String,
     val serverState: String,
+    val issuer: String? = null,
 )
 

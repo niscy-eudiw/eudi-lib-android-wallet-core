@@ -31,10 +31,12 @@ import eu.europa.ec.eudi.openid4vci.IssuerMetadataPolicy
 import eu.europa.ec.eudi.openid4vci.OpenId4VCIConfig
 import eu.europa.ec.eudi.openid4vci.DPoPUsage
 import eu.europa.ec.eudi.openid4vci.HttpsUrl
+import eu.europa.ec.eudi.openid4vci.JWKThumbprint
 import eu.europa.ec.eudi.openid4vci.JwsAlgorithm
 import eu.europa.ec.eudi.openid4vci.ParUsage
 import eu.europa.ec.eudi.openid4vci.ProofsConfig
 import eu.europa.ec.eudi.openid4vci.Signer
+import eu.europa.ec.eudi.openid4vci.SupportedGrants
 import eu.europa.ec.eudi.openid4vci.clientAttestationPOPJWSAlgs
 import eu.europa.ec.eudi.wallet.document.format.DocumentFormat
 import eu.europa.ec.eudi.wallet.document.format.MsoMdocFormat
@@ -338,24 +340,26 @@ internal class IssuerCreator(
                     // Re-issuance: reuse existing DPoP key bound to the access token
                     object : VciProvisionDPoPSigner {
                         override val popAlgorithm = JwsAlgorithm(signingAlg.joseAlgorithmIdentifier!!)
-                        override suspend fun invoke(authorizationServer: HttpsUrl): Signer<JWK> {
-                            return SecureAreaDpopSigner.fromExistingKey(
+                        override suspend fun invoke(authorizationServer: HttpsUrl): Pair<Signer<JWK>, JWKThumbprint?> {
+                            val signer = SecureAreaDpopSigner.fromExistingKey(
                                 resolvedConfig, existingDpopKeyAlias, logger
                             ).also {
                                 dpopKeyAlias = it.keyInfo.alias
                             }
+                            return signer to signer.jwkThumbprint()
                         }
                     }
                 } else {
                     // Normal issuance: create new DPoP key
                     object : VciProvisionDPoPSigner {
                         override val popAlgorithm = JwsAlgorithm(signingAlg.joseAlgorithmIdentifier!!)
-                        override suspend fun invoke(authorizationServer: HttpsUrl): Signer<JWK> {
-                            return SecureAreaDpopSigner(
+                        override suspend fun invoke(authorizationServer: HttpsUrl): Pair<Signer<JWK>, JWKThumbprint?> {
+                            val signer = SecureAreaDpopSigner(
                                 resolvedConfig, listOf(signingAlg), logger
                             ).also {
                                 dpopKeyAlias = it.keyInfo.alias
                             }
+                            return signer to signer.jwkThumbprint()
                         }
                     }
                 }
@@ -396,22 +400,36 @@ internal class IssuerCreator(
 
         return OpenId4VCIConfig(
             clientAuthentication = auth,
-            authFlowRedirectionURI = URI.create(authFlowRedirectionURI),
             encryptionSupportConfig = responseEncryptionConfig,
             supportedCredentialReusePolicies = supportedCredentialReusePolicies,
             dPoPUsage = dPoPUsage,
-            parUsage = when (parUsage) {
-                OpenId4VciManager.Config.ParUsage.IF_SUPPORTED -> ParUsage.IfSupported()
-                OpenId4VciManager.Config.ParUsage.REQUIRED -> ParUsage.Required()
-                OpenId4VciManager.Config.ParUsage.NEVER -> ParUsage.Never
-                else -> ParUsage.IfSupported()
-            },
             proofs = issuanceProofProfile.toProofsConfig(),
             issuerMetadataPolicy = issuerMetadataPolicy,
             registrationCertificatePolicy = registrationCertificatePolicy,
+            grants = toSupportedGrants(),
         )
     }
 }
+
+/**
+ * The grant types the wallet supports, together with the Authorization Code grant options.
+ *
+ * The wallet supports both the Authorization Code and the Pre-authorized Code grants.
+ */
+internal fun OpenId4VciManager.Config.toSupportedGrants(): SupportedGrants.Both =
+    SupportedGrants.Both(
+        SupportedGrants.AuthorizationCode(
+            authFlowRedirectionURI = URI.create(authFlowRedirectionURI),
+            parUsage = when (parUsage) {
+                OpenId4VciManager.Config.ParUsage.IF_SUPPORTED -> ParUsage.IfSupported
+                OpenId4VciManager.Config.ParUsage.REQUIRED -> ParUsage.Required
+                OpenId4VciManager.Config.ParUsage.NEVER -> ParUsage.Never
+                else -> ParUsage.IfSupported
+            },
+            authResponseIssChecking = authResponseIssChecking,
+            authorizationCodeDPoPBindingMethod = authorizationCodeDPoPBinding,
+        ),
+    )
 
 /**
  * Unwraps the credential issuer and authorization server metadata resolution errors that

@@ -29,6 +29,7 @@ import eu.europa.ec.eudi.openid4vci.EncryptionSpec
 import eu.europa.ec.eudi.openid4vci.Grant
 import eu.europa.ec.eudi.openid4vci.HttpsUrl
 import eu.europa.ec.eudi.openid4vci.Issuer
+import eu.europa.ec.eudi.openid4vci.JWKThumbprint
 import eu.europa.ec.eudi.openid4vci.JwsAlgorithm
 import eu.europa.ec.eudi.openid4vci.RefreshToken
 import eu.europa.ec.eudi.openid4vci.SignOperation
@@ -207,8 +208,9 @@ internal fun DeferredContext.Companion.fromBytes(
                         return JwsAlgorithm(signer.keyInfo.algorithm.joseAlgorithmIdentifier!!)
                     }
 
-                override suspend fun invoke(authorizationServer: HttpsUrl): Signer<JWK> {
-                    return SecureAreaDpopSigner.fromExistingKey(storedDpopConfig, storedDPoPKeyAlias, logger)
+                override suspend fun invoke(authorizationServer: HttpsUrl): Pair<Signer<JWK>, JWKThumbprint?> {
+                    val signer = SecureAreaDpopSigner.fromExistingKey(storedDpopConfig, storedDPoPKeyAlias, logger)
+                    return signer to signer.jwkThumbprint()
                 }
             }
         )

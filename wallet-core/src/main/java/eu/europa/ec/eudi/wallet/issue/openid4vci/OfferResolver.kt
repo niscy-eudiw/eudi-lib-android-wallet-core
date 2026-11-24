@@ -21,13 +21,13 @@ import eu.europa.ec.eudi.openid4vci.CredentialOffer
 import eu.europa.ec.eudi.openid4vci.DPoPUsage
 import eu.europa.ec.eudi.openid4vci.HttpsUrl
 import eu.europa.ec.eudi.openid4vci.IssuerMetadataPolicy
+import eu.europa.ec.eudi.openid4vci.JWKThumbprint
 import eu.europa.ec.eudi.openid4vci.JwsAlgorithm
 import eu.europa.ec.eudi.openid4vci.OpenId4VCIConfig
 import eu.europa.ec.eudi.openid4vci.Signer
 import eu.europa.ec.eudi.wallet.issue.openid4vci.dpop.DPopConfig
 import io.ktor.client.HttpClient
 import org.jetbrains.annotations.VisibleForTesting
-import java.net.URI
 import eu.europa.ec.eudi.openid4vci.DPoPConfig as VciDPoPConfig
 import eu.europa.ec.eudi.openid4vci.ProvisionDPoPSigner as VciProvisionDPoPSigner
 
@@ -57,7 +57,7 @@ internal class OfferResolver(
                     VciDPoPConfig(
                         object : VciProvisionDPoPSigner {
                             override val popAlgorithm = JwsAlgorithm(algorithm)
-                            override suspend fun invoke(authorizationServer: HttpsUrl): Signer<JWK> {
+                            override suspend fun invoke(authorizationServer: HttpsUrl): Pair<Signer<JWK>, JWKThumbprint?> {
                                 error("DPoP signer should not be invoked during offer resolution")
                             }
                         }
@@ -67,10 +67,10 @@ internal class OfferResolver(
         }
         OpenId4VCIConfig(
             clientId = clientId,
-            authFlowRedirectionURI = URI.create(config.authFlowRedirectionURI),
             encryptionSupportConfig = config.responseEncryptionConfig,
             issuerMetadataPolicy = issuerMetadataPolicy,
             dPoPUsage = dPoPUsage,
+            grants = config.toSupportedGrants(),
         )
     }
 

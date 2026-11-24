@@ -95,6 +95,17 @@ class SecureAreaDpopSigner private constructor(
 
     private val secureArea = config.secureArea
 
+    private suspend fun publicJwk(): JWK = JWK.parse(keyInfo.publicKey.toJwk().toString())
+
+    /**
+     * The RFC 7638 SHA-256 thumbprint of the DPoP public key, base64url-encoded.
+     *
+     * Used as the `dpop_jkt` parameter that binds the Authorization Code to the DPoP key
+     * (RFC 9449 §10). Computing it needs only the public key, so no signature or key unlock
+     * is required.
+     */
+    suspend fun jwkThumbprint(): String = publicJwk().computeThumbprint().toString()
+
     /**
      * Creates a new DPoP signer with a fresh key in the specified secure area.
      *
@@ -181,9 +192,6 @@ class SecureAreaDpopSigner private constructor(
      * @return A [SignOperation] containing the public JWK and signing function
      */
     override suspend fun acquire(): SignOperation<JWK> {
-        val jwk = JWK.parse(
-            keyInfo.publicKey.toJwk().toString()
-        )
         return SignOperation(
             function = { input ->
                 val keyUnlockData = config.keyUnlockDataProvider(keyInfo.alias, secureArea)
@@ -192,7 +200,7 @@ class SecureAreaDpopSigner private constructor(
                     secureArea.sign(keyInfo.alias, input, Reason.Unspecified).toDerEncoded()
                 }
             },
-            publicMaterial = jwk
+            publicMaterial = publicJwk()
         )
     }
 

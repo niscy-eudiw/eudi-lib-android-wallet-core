@@ -20,6 +20,8 @@ import android.content.Context
 import android.net.Uri
 import androidx.annotation.IntDef
 import com.nimbusds.jose.jwk.Curve
+import eu.europa.ec.eudi.openid4vci.AuthorizationCodeDPoPBindingMethod
+import eu.europa.ec.eudi.openid4vci.AuthorizationResponseIssChecking
 import eu.europa.ec.eudi.openid4vci.CredentialConfigurationIdentifier
 import eu.europa.ec.eudi.openid4vci.CredentialIssuerMetadata
 import eu.europa.ec.eudi.openid4vci.CredentialResponseEncryptionPolicy
@@ -682,6 +684,23 @@ interface OpenId4VciManager {
      *
      *           @see EncryptionSupportConfig
      *           @see CredentialResponseEncryptionPolicy
+     * @property authResponseIssChecking the policy for validating the `iss` parameter of the
+     *           authorization response (RFC 9207), which protects against mix-up attacks.
+     *           With [AuthorizationResponseIssChecking.IfSupported] the `iss` parameter is validated
+     *           when the authorization server advertises `authorization_response_iss_parameter_supported`.
+     *           A custom [AuthorizationHandler] must then return it in [AuthorizationResponse.issuer].
+     *
+     *           **Default:** [AuthorizationResponseIssChecking.IfSupported]
+     * @property authorizationCodeDPoPBinding how the authorization code is bound to the DPoP key
+     *           (RFC 9449 §10), when DPoP is used:
+     *           - [AuthorizationCodeDPoPBindingMethod.DPoPHeader]: a DPoP proof in the `DPoP` header of
+     *             the pushed authorization request. Without PAR, the `dpop_jkt` parameter is sent instead.
+     *           - [AuthorizationCodeDPoPBindingMethod.DPoPJkt]: the `dpop_jkt` parameter, the thumbprint of
+     *             the DPoP public key. No signature is made before the token request, so a DPoP key that
+     *             requires user authentication is not unlocked during the authorization request.
+     *           - [AuthorizationCodeDPoPBindingMethod.None]: the authorization code is not bound.
+     *
+     *           **Default:** [AuthorizationCodeDPoPBindingMethod.DPoPHeader]
      */
     data class Config @JvmOverloads constructor(
         val clientAuthenticationType: ClientAuthenticationType,
@@ -697,6 +716,8 @@ interface OpenId4VciManager {
         ),
         val supportedCredentialReusePolicies: CredentialReusePolicies? = null,
         val issuanceProofProfile: IssuanceProofProfile = IssuanceProofProfile.Etsi,
+        val authResponseIssChecking: AuthorizationResponseIssChecking = AuthorizationResponseIssChecking.IfSupported,
+        val authorizationCodeDPoPBinding: AuthorizationCodeDPoPBindingMethod = AuthorizationCodeDPoPBindingMethod.DPoPHeader,
     ) {
         /**
          * PAR usage for the OpenId4Vci issuer
@@ -818,6 +839,11 @@ interface OpenId4VciManager {
             var proofTypes: SupportedProofTypes? = null
 
             var issuanceProofProfile: IssuanceProofProfile? = null
+
+            var authResponseIssChecking: AuthorizationResponseIssChecking = AuthorizationResponseIssChecking.IfSupported
+
+            var authorizationCodeDPoPBinding: AuthorizationCodeDPoPBindingMethod =
+                AuthorizationCodeDPoPBindingMethod.DPoPHeader
 
             /**
              * Set the client authentication type
@@ -1025,6 +1051,35 @@ interface OpenId4VciManager {
             }
 
             /**
+             * Sets the policy for validating the `iss` parameter of the authorization response
+             * (RFC 9207).
+             *
+             * When the `iss` parameter is validated, a custom [AuthorizationHandler] must return it in
+             * [AuthorizationResponse.issuer]. [BrowserAuthorizationHandler] reads it from the redirect.
+             *
+             * **Default:** [AuthorizationResponseIssChecking.IfSupported]
+             *
+             * @param authResponseIssChecking the `iss` validation policy
+             * @return This builder instance for method chaining
+             */
+            fun withAuthorizationResponseIssChecking(authResponseIssChecking: AuthorizationResponseIssChecking) =
+                apply { this.authResponseIssChecking = authResponseIssChecking }
+
+            /**
+             * Sets how the authorization code is bound to the DPoP key (RFC 9449 §10), when DPoP is used.
+             *
+             * Use [AuthorizationCodeDPoPBindingMethod.DPoPJkt] when the DPoP key requires user
+             * authentication, so the key is not unlocked during the authorization request.
+             *
+             * **Default:** [AuthorizationCodeDPoPBindingMethod.DPoPHeader]
+             *
+             * @param bindingMethod the binding method
+             * @return This builder instance for method chaining
+             */
+            fun withAuthorizationCodeDPoPBinding(bindingMethod: AuthorizationCodeDPoPBindingMethod) =
+                apply { this.authorizationCodeDPoPBinding = bindingMethod }
+
+            /**
              * Build the [Config]
              * @return the [Config]
              */
@@ -1049,6 +1104,8 @@ interface OpenId4VciManager {
                     responseEncryptionConfig = responseEncryptionConfig,
                     supportedCredentialReusePolicies = supportedCredentialReusePolicies,
                     issuanceProofProfile = resolvedProfile,
+                    authResponseIssChecking = authResponseIssChecking,
+                    authorizationCodeDPoPBinding = authorizationCodeDPoPBinding,
                 )
             }
         }

@@ -287,6 +287,10 @@ val config = EudiWalletConfig()
         // withDPopConfig(DPopConfig.Default) // This is the default
         // withDPopConfig(DPopConfig.Disabled) // To disable DPoP
         // withDPopConfig(customDPopConfig) // To use custom configuration
+        // How the authorization code is bound to the DPoP key (RFC 9449 §10)
+        // withAuthorizationCodeDPoPBinding(AuthorizationCodeDPoPBindingMethod.DPoPHeader) // This is the default
+        // Validation of the iss parameter of the authorization response (RFC 9207)
+        // withAuthorizationResponseIssChecking(AuthorizationResponseIssChecking.IfSupported) // This is the default
 
         // Configure credential response encryption
         // By default, encryption is REQUIRED with EC P-256 and RSA 2048
@@ -1821,13 +1825,14 @@ class CustomAuthorizationHandler : AuthorizationHandler {
         
         // 2. Monitor for the redirect callback containing the authorization response
         
-        // 3. Extract the authorization code and state from the callback URI
+        // 3. Extract the authorization code, state and issuer (iss) from the callback URI
         val authorizationCode = extractAuthorizationCode()
         val serverState = extractServerState()
+        val issuer = extractIssuer() // may be null if the authorization server does not send it
         
         // 4. Return the result
         return if (authorizationCode != null && serverState != null) {
-            Result.success(AuthorizationResponse(authorizationCode, serverState))
+            Result.success(AuthorizationResponse(authorizationCode, serverState, issuer))
         } else {
             Result.failure(IllegalStateException("Authorization failed or was cancelled"))
         }
@@ -1841,6 +1846,11 @@ class CustomAuthorizationHandler : AuthorizationHandler {
     private suspend fun extractServerState(): String? {
         // Implementation depends on your authorization mechanism
         TODO("Extract state parameter from your authorization flow")
+    }
+    
+    private suspend fun extractIssuer(): String? {
+        // Implementation depends on your authorization mechanism
+        TODO("Extract iss parameter from your authorization flow")
     }
 }
 ```
@@ -1877,11 +1887,37 @@ val openId4VciManager = wallet.createOpenId4VciManager(customConfig)
 - When using a custom `AuthorizationHandler`, you are responsible for:
   - Presenting the authorization URL to the user
   - Monitoring for the redirect URI callback
-  - Extracting the authorization code and state parameters from the callback
+  - Extracting the authorization code, state and `iss` parameters from the callback
   - Returning the `AuthorizationResponse` with the extracted values
 - Do **not** call `resumeWithAuthorization` when using a custom handler - your handler manages the complete flow
 - The `authorize` method is a suspending function that should only return when authorization is complete or has failed
 - Custom handlers enable use cases like in-app WebViews, Chrome Custom Tabs, or other custom authorization UIs
+- If your handler does not return the `iss` parameter, issuance fails against authorization servers that
+  advertise it, unless `iss` validation is disabled (see below)
+
+##### Authorization Response Issuer Validation
+
+To protect against mix-up attacks, the library validates the `iss` parameter of the authorization
+response, as defined in [RFC 9207](https://www.rfc-editor.org/rfc/rfc9207). The policy is set with
+`withAuthorizationResponseIssChecking`:
+
+- `AuthorizationResponseIssChecking.IfSupported` (default) -- `iss` is validated when the authorization
+  server advertises `authorization_response_iss_parameter_supported`. It must then be present and match
+  the authorization server's issuer.
+- `AuthorizationResponseIssChecking.Required` -- the authorization server must advertise and send `iss`;
+  issuance fails otherwise.
+- `AuthorizationResponseIssChecking.Never` -- `iss` is not validated.
+
+`BrowserAuthorizationHandler` reads `iss` from the redirect. A custom `AuthorizationHandler` must return
+it in `AuthorizationResponse.issuer`.
+
+```kotlin
+val config = EudiWalletConfig()
+    .configureOpenId4Vci {
+        // ..............................
+        withAuthorizationResponseIssChecking(AuthorizationResponseIssChecking.Required)
+    }
+```
 
 #### Pre-Authorization code flow
 
@@ -2118,6 +2154,32 @@ val walletConfig = EudiWalletConfig()
                 }
             )
         )
+    }
+```
+
+##### Binding the Authorization Code to the DPoP Key
+
+When DPoP is used in the authorization code flow, the library also binds the authorization code to the
+DPoP key, as defined in [RFC 9449 §10](https://www.rfc-editor.org/rfc/rfc9449.html#section-10). The
+method is set with `withAuthorizationCodeDPoPBinding`:
+
+- `AuthorizationCodeDPoPBindingMethod.DPoPHeader` (default) -- a DPoP proof is sent in the `DPoP` header
+  of the pushed authorization request (PAR). When PAR is not used, the `dpop_jkt` parameter is sent in the
+  authorization request instead.
+- `AuthorizationCodeDPoPBindingMethod.DPoPJkt` -- the `dpop_jkt` parameter, the JWK thumbprint of the DPoP
+  public key, is sent in the pushed authorization request, or in the authorization request when PAR is
+  not used.
+- `AuthorizationCodeDPoPBindingMethod.None` -- the authorization code is not bound to the DPoP key.
+
+`DPoPJkt` needs no signature before the token request. Use it when the DPoP key requires user
+authentication, so the user is not asked to unlock the key during the authorization request:
+
+```kotlin
+val walletConfig = EudiWalletConfig()
+    .configureOpenId4Vci {
+        // ..............................
+        withDPopConfig(DPopConfig.Custom(/* key that requires user authentication */))
+        withAuthorizationCodeDPoPBinding(AuthorizationCodeDPoPBindingMethod.DPoPJkt)
     }
 ```
 
