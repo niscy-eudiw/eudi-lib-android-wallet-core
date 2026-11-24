@@ -45,6 +45,8 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
@@ -80,7 +82,7 @@ class EmbeddedDisclosurePolicyTest {
 
     @Test
     fun `a document without a policy has no restriction`() {
-        assertEquals(NoPolicy, evaluateDisclosurePolicy(null, "LEIXG-1", null).documentResult)
+        assertEquals(NoPolicy, evaluateDisclosurePolicy(null, RELYING_PARTY, null).documentResult)
     }
 
     @Test
@@ -90,7 +92,7 @@ class EmbeddedDisclosurePolicyTest {
 
     @Test
     fun `a policy that is not a JSON object is malformed`() {
-        val result = evaluateDisclosurePolicy(JsonPrimitive(POLICY_URI), "LEIXG-1", null).documentResult
+        val result = evaluateDisclosurePolicy(JsonPrimitive(POLICY_URI), RELYING_PARTY, null).documentResult
 
         assertEquals(CannotEvaluate(Reason.MALFORMED_POLICY), result)
     }
@@ -159,7 +161,7 @@ class EmbeddedDisclosurePolicyTest {
 
     @Test
     fun `certificate subjects cannot be checked without a verified registration certificate`() {
-        val result = evaluateDisclosurePolicy(policyJson(authorizedCertificateSubjects(ROOT_CA)), "LEIXG-1", null).documentResult
+        val result = evaluateDisclosurePolicy(policyJson(authorizedCertificateSubjects(ROOT_CA)), RELYING_PARTY, null).documentResult
 
         assertEquals(Reason.REGISTRATION_CERTIFICATE_NOT_VERIFIED, (result as CannotEvaluate).reason)
     }
@@ -168,7 +170,7 @@ class EmbeddedDisclosurePolicyTest {
     fun `certificate subjects cannot be checked without the registration signer chain`() {
         val result = evaluateDisclosurePolicy(
             policyJson(authorizedCertificateSubjects(ROOT_CA)),
-            "LEIXG-1",
+            RELYING_PARTY,
             RegistrationCertificateResult.Verified(registration("LEIXG-1")),
         ).documentResult
 
@@ -229,9 +231,135 @@ class EmbeddedDisclosurePolicyTest {
             FAMILY_NAME, PORTRAIT,
         )
 
-        assertEquals(NoPolicy, evaluation.documentResult)
+        assertEquals(NotSatisfied(POLICY_URI), evaluation.documentResult)
         assertEquals(NoPolicy, evaluation.claimResults[FAMILY_NAME])
         assertEquals(NotSatisfied(POLICY_URI), evaluation.claimResults[PORTRAIT])
+    }
+
+    @Test
+    fun `the result of the document is the least favourable result of its claims`() {
+        val evaluation = evaluateClaims(
+            withClaimPolicies(DOCUMENT_RESTRICTED, """"$PID_NAMESPACE, family_name": "none""""),
+            FAMILY_NAME,
+        )
+
+        assertEquals(NoPolicy, evaluation.documentResult)
+    }
+
+    @Test
+    fun `a claim policy of a claim inside a requested claim applies to it`() {
+        val address = jsonClaim("address")
+        val evaluation = evaluateClaims(
+            withClaimPolicies("\"none\"", """"$PID_VCT, address.street_address": {"authorized_rp_ids": ["LEIXG-2, Service 1"]}"""),
+            address, GIVEN_NAME,
+            vct = PID_VCT,
+        )
+
+        assertEquals(NotSatisfied(POLICY_URI), evaluation.claimResults[address])
+        assertEquals(NoPolicy, evaluation.claimResults[GIVEN_NAME])
+        assertEquals(NotSatisfied(POLICY_URI), evaluation.documentResult)
+    }
+
+    @Test
+    fun `array elements of a claim path are skipped`() {
+        val anyAddress = jsonClaim(JsonPrimitive("addresses"), JsonNull, JsonPrimitive("street"))
+        val firstAddress = jsonClaim(JsonPrimitive("addresses"), JsonPrimitive(0), JsonPrimitive("street"))
+        val evaluation = evaluateClaims(
+            withClaimPolicies("\"none\"", """"$PID_VCT, addresses.street": {"authorized_rp_ids": ["LEIXG-2, Service 1"]}"""),
+            anyAddress, firstAddress,
+            vct = PID_VCT,
+        )
+
+        assertEquals(NotSatisfied(POLICY_URI), evaluation.claimResults[anyAddress])
+        assertEquals(NotSatisfied(POLICY_URI), evaluation.claimResults[firstAddress])
+    }
+
+    @Test
+    fun `a certificate after the signed part of the registration signer chain is not used`() {
+        // A self-signed certificate named like the authorized CA, appended after the genuine chain.
+        val impostorKey = ecKeyPair()
+        val impostor = issuedCertificate(HEALTH_REGISTRAR_CA, impostorKey, HEALTH_REGISTRAR_CA, impostorKey)
+        val result = evaluateDisclosurePolicy(
+            policyJson(authorizedCertificateSubjects(HEALTH_REGISTRAR_CA)),
+            RELYING_PARTY,
+            RegistrationCertificateResult.Verified(registration("LEIXG-1"), signerChain = registrationSignerChain + impostor),
+        ).documentResult
+
+        assertEquals(NotSatisfied::class, result::class)
+    }
+
+    @Test
+    fun `the registration certificate of a relying party that is not authenticated is not used`() {
+        val registration = RegistrationCertificateResult.Verified(registration("LEIXG-1"), signerChain = registrationSignerChain)
+
+        listOf(authorizedRelyingParties("LEIXG-1, Service 1"), authorizedCertificateSubjects(ROOT_CA)).forEach { policy ->
+            val result = evaluateDisclosurePolicy(
+                policyJson(policy),
+                relyingPartyIdentifier = null,
+                verifiedRegistration = registration,
+                relyingPartyAuthenticated = false,
+            ).documentResult
+
+            assertEquals(Reason.RELYING_PARTY_NOT_IDENTIFIED, (result as CannotEvaluate).reason)
+        }
+    }
+
+    @Test
+    fun `the registration certificate in a request from an untrusted relying party is not used`() {
+        val document = documentWithPolicy(authorizedRelyingParties("LEIXG-1, Service 1"))
+
+        val result = document.evaluateDisclosurePolicy(
+            request(
+                listOf(certificate(BCStyle.ORGANIZATION_IDENTIFIER, "LEIXG-1")),
+                trusted = false,
+                registration = RegistrationCertificateResult.Verified(registration("LEIXG-1")),
+            )
+        ).documentResult
+
+        assertEquals(Reason.RELYING_PARTY_NOT_IDENTIFIED, (result as CannotEvaluate).reason)
+    }
+
+    @Test
+    fun `the type of the identifier is compared`() {
+        val result = evaluateDisclosurePolicy(
+            policyJson(authorizedRelyingParties("ORGID=VATGR-1, O=Shop SA, C=GR")),
+            SubjectIdentifier(BCStyle.SERIALNUMBER, "VATGR-1"),
+            null,
+        ).documentResult
+
+        assertEquals(NotSatisfied::class, result::class)
+    }
+
+    @Test
+    fun `an access certificate subject does not match when an intermediary presents the request`() {
+        val result = evaluateDisclosurePolicy(
+            policyJson(authorizedRelyingParties("ORGID=LEIXG-9, O=Example Platform SA, C=GR")),
+            SubjectIdentifier(BCStyle.ORGANIZATION_IDENTIFIER, "LEIXG-9"),
+            RegistrationCertificateResult.Verified(registration("LEIXG-1").copy(intermediary = Intermediary(identifier = "LEIXG-9"))),
+        ).documentResult
+
+        assertEquals(NotSatisfied::class, result::class)
+    }
+
+    @Test
+    fun `a service identifier may contain an equals sign`() {
+        assertEquals(Satisfied, evaluate(authorizedRelyingParties("LEIXG-1, Payments=EU"), registration = registration("LEIXG-1")))
+    }
+
+    @Test
+    fun `a layman uri that is not an absolute https uri is left out`() {
+        val result = evaluate(
+            """
+            {
+              "policy_uri": "$POLICY_URI",
+              "policy": $DOCUMENT_RESTRICTED,
+              "layman_uri": "javascript:alert(1)"
+            }
+            """,
+            registration = registration("LEIXG-1"),
+        )
+
+        assertEquals(NotSatisfied(POLICY_URI, laymanUri = null), result)
     }
 
     @Test
@@ -313,7 +441,7 @@ class EmbeddedDisclosurePolicyTest {
 
     @Test
     fun `every claim of a document without a policy has no restriction`() {
-        val evaluation = evaluateDisclosurePolicy(null, "LEIXG-1", null, listOf(FAMILY_NAME))
+        val evaluation = evaluateDisclosurePolicy(null, RELYING_PARTY, null, listOf(FAMILY_NAME))
 
         assertEquals(mapOf<RequestedClaim, DisclosurePolicyResult>(FAMILY_NAME to NoPolicy), evaluation.claimResults)
     }
@@ -549,14 +677,23 @@ private fun registration(wrpIdentifier: String): RegistrationCertificate =
 
 private fun policyJson(policy: String): JsonObject = Json.parseToJsonElement(policy).jsonObject
 
+/** The identifier in the trusted access certificate of the relying party in the tests. */
+private val RELYING_PARTY = SubjectIdentifier(BCStyle.ORGANIZATION_IDENTIFIER, "LEIXG-1")
+
+/** Evaluates [policy] for a relying party whose access certificate has the organization identifier [identifier]. */
 private fun evaluate(
     policy: String,
     identifier: String? = "LEIXG-1",
     registration: RegistrationCertificate? = null,
 ): DisclosurePolicyResult =
-    evaluateDisclosurePolicy(policyJson(policy), identifier, registration?.let { RegistrationCertificateResult.Verified(it) }).documentResult
+    evaluateDisclosurePolicy(
+        policyJson(policy),
+        identifier?.let { SubjectIdentifier(BCStyle.ORGANIZATION_IDENTIFIER, it) },
+        registration?.let { RegistrationCertificateResult.Verified(it) },
+    ).documentResult
 
 private const val ROOT_CA = "CN=Registrar Root CA, O=Ministerie BZK, C=NL"
+private const val HEALTH_REGISTRAR_CA = "CN=Health Registrar CA, O=Ministry of Health, C=NL"
 private const val INTERMEDIATE_CA = "CN=Registrar CA, O=Ministerie BZK, C=NL"
 
 private fun authorizedCertificateSubjects(vararg subjectDns: String): String =
@@ -584,7 +721,7 @@ private val registrationSignerChain: List<X509Certificate> by lazy {
 private fun evaluateWithSignerChain(policy: String): DisclosurePolicyResult =
     evaluateDisclosurePolicy(
         policyJson(policy),
-        "LEIXG-1",
+        RELYING_PARTY,
         RegistrationCertificateResult.Verified(registration("LEIXG-1"), signerChain = registrationSignerChain),
     ).documentResult
 
@@ -629,9 +766,11 @@ private fun mdocClaim(dataElement: String) = MdocRequestedClaim(
     intentToRetain = false,
 )
 
-private fun jsonClaim(vararg path: String) = JsonRequestedClaim(
+private fun jsonClaim(vararg path: String) = jsonClaim(*path.map { JsonPrimitive(it) }.toTypedArray())
+
+private fun jsonClaim(vararg path: JsonElement) = JsonRequestedClaim(
     vctValues = listOf(PID_VCT),
-    claimPath = JsonArray(path.map { JsonPrimitive(it) }),
+    claimPath = JsonArray(path.toList()),
 )
 
 private fun withClaimPolicies(policy: String, vararg claimPolicies: String): String =
@@ -647,7 +786,7 @@ private fun withClaimPolicies(policy: String, vararg claimPolicies: String): Str
 private fun evaluateClaims(policy: String, vararg claims: RequestedClaim, vct: String? = null): DisclosurePolicyEvaluation =
     evaluateDisclosurePolicy(
         policyJson(policy),
-        "LEIXG-1",
+        RELYING_PARTY,
         RegistrationCertificateResult.Verified(registration("LEIXG-1")),
         claims.toList(),
         vct,

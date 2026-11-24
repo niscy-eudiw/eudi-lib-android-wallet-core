@@ -23,18 +23,19 @@ import org.bouncycastle.asn1.ASN1ObjectIdentifier
 import org.bouncycastle.asn1.x500.X500Name
 import org.bouncycastle.asn1.x500.style.BCStyle
 import org.bouncycastle.asn1.x500.style.IETFUtils
+import java.net.URI
 
 /**
  * An embedded disclosure policy: the conditions that the attestation provider sets for the
  * relying parties that may receive a document (ETSI TS 119 472-3, clause 4.2.5).
  *
- * The encoding follows the changes to ETSI TS 119 472-3 clause 4.2.5 proposed in the comments of
- * 2026-08-11, which ETSI has not adopted yet.
+ * ETSI TS 119 472-3 V1.1.1 defines the data model of the policy but not its encoding; the encoding
+ * read here is provisional.
  *
  * @property policyUri the URI that identifies the policy (`policy_uri`)
  * @property type the type of the policy, which applies to all attributes of the document (`policy`)
  * @property laymanUri the address of a page that explains the policy to the user (`layman_uri`,
- * ISS-MDATA-EBD-4.2.5.2-13)
+ * ISS-MDATA-EBD-4.2.5.2-13); only an absolute `https` URI is kept
  * @property claimPolicies the policies of single claims, which replace [type] for those claims
  * (`extensions.specific_attribute_policies`)
  */
@@ -120,11 +121,20 @@ internal sealed interface AuthorizedRelyingParty {
 }
 
 /**
- * The identifier of the relying party in this subject: the organization identifier, or for a
- * natural person the serial number. Only the identifier is compared with the access certificate.
- * Returns `null` when the subject has no identifier, or more than one value for it.
+ * The identifier of a relying party in a distinguished name.
+ *
+ * @property type the attribute type of the identifier: the organization identifier, or for a natural
+ * person the serial number
+ * @property value the identifier
  */
-internal fun AuthorizedRelyingParty.AccessCertificateSubject.relyingPartyIdentifier(): String? =
+internal data class SubjectIdentifier(val type: ASN1ObjectIdentifier, val value: String)
+
+/**
+ * The identifier of the relying party in this subject. Only the identifier is compared with the
+ * access certificate. Returns `null` when the subject has no identifier, or more than one value for
+ * it.
+ */
+internal fun AuthorizedRelyingParty.AccessCertificateSubject.relyingPartyIdentifier(): SubjectIdentifier? =
     policyDistinguishedName(subjectDn)?.let { runCatching { it.relyingPartyIdentifier() }.getOrNull() }
 
 /**
@@ -141,10 +151,12 @@ internal fun policyDistinguishedName(dn: String): X500Name? = runCatching { X500
  * natural person the serial number. Returns `null` when the name has more than one value for the
  * identifier.
  */
-internal fun X500Name.relyingPartyIdentifier(): String? {
+internal fun X500Name.relyingPartyIdentifier(): SubjectIdentifier? {
     val organizationIdentifiers = values(BCStyle.ORGANIZATION_IDENTIFIER)
-    if (organizationIdentifiers.isNotEmpty()) return organizationIdentifiers.singleOrNull()
-    return values(BCStyle.SERIALNUMBER).singleOrNull()
+    if (organizationIdentifiers.isNotEmpty()) {
+        return organizationIdentifiers.singleOrNull()?.let { SubjectIdentifier(BCStyle.ORGANIZATION_IDENTIFIER, it) }
+    }
+    return values(BCStyle.SERIALNUMBER).singleOrNull()?.let { SubjectIdentifier(BCStyle.SERIALNUMBER, it) }
 }
 
 private fun X500Name.values(type: ASN1ObjectIdentifier): List<String> =
@@ -164,7 +176,7 @@ private const val SPECIFIC_ATTRIBUTE_POLICIES = "specific_attribute_policies"
 
 private fun JsonObject.toPolicy(): EmbeddedDisclosurePolicy? {
     val policyUri = get(POLICY_URI)?.stringOrNull() ?: return null
-    val laymanUri = get(LAYMAN_URI)?.let { it.stringOrNull() ?: return null }
+    val laymanUri = get(LAYMAN_URI)?.let { it.stringOrNull() ?: return null }?.takeIf { it.isHttpsUri() }
     val type = get(POLICY)?.toPolicyType() ?: return null
     val claimPolicies = get(EXTENSIONS)?.let { (it as? JsonObject)?.toClaimPolicies() ?: return null }
     return EmbeddedDisclosurePolicy(policyUri, type, laymanUri, claimPolicies.orEmpty())
@@ -212,18 +224,23 @@ private fun JsonElement.toPolicyType(): EmbeddedDisclosurePolicy.PolicyType? {
 
 /**
  * Reads an entry of `authorized_rp_ids`: an RFC 4514 subject distinguished name, or a wallet-relying
- * party identifier and a service identifier separated by a comma. Only a distinguished name contains
- * `=`.
+ * party identifier and a service identifier separated by a comma. An entry that is not a
+ * distinguished name is read as an identifier and a service identifier, since a service identifier
+ * may contain `=`.
  */
-private fun String.toAuthorizedRelyingParty(): AuthorizedRelyingParty? =
-    if ('=' in this) {
-        policyDistinguishedName(this)?.let { AuthorizedRelyingParty.AccessCertificateSubject(subjectDn = this) }
-    } else {
-        val wrpIdentifier = substringBefore(',').trim()
-        val serviceIdentifier = substringAfter(',', missingDelimiterValue = "").trim()
-        if (wrpIdentifier.isEmpty() || serviceIdentifier.isEmpty()) null
-        else AuthorizedRelyingParty.WrpService(wrpIdentifier, serviceIdentifier)
+private fun String.toAuthorizedRelyingParty(): AuthorizedRelyingParty? {
+    if ('=' in this && policyDistinguishedName(this) != null) {
+        return AuthorizedRelyingParty.AccessCertificateSubject(subjectDn = this)
     }
+    val wrpIdentifier = substringBefore(',').trim()
+    val serviceIdentifier = substringAfter(',', missingDelimiterValue = "").trim()
+    return if (wrpIdentifier.isEmpty() || serviceIdentifier.isEmpty()) null
+    else AuthorizedRelyingParty.WrpService(wrpIdentifier, serviceIdentifier)
+}
+
+/** Whether this is an absolute `https` URI, the only kind of link shown to the user. */
+private fun String.isHttpsUri(): Boolean =
+    runCatching { URI(this) }.getOrNull()?.let { it.isAbsolute && it.scheme.equals("https", ignoreCase = true) } == true
 
 private fun JsonElement.stringOrNull(): String? = (this as? JsonPrimitive)?.takeIf { it.isString }?.content
 

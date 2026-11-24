@@ -2796,13 +2796,20 @@ is TransferEvent.RequestReceived -> {
 A document may have no embedded disclosure policy, and a policy may set policies for single claims
 in addition to the policy of the document; both are optional.
 
-- `DisclosurePolicyEvaluation.documentResult` is the result of the policy of the document.
 - `DisclosurePolicyEvaluation.claimResults` has one entry for each claim passed in, and is empty when
-  no claims are passed. When the policy sets a policy for that claim, the entry is the result of that
-  policy, which may differ from `documentResult` in either direction. Otherwise the entry is the same
-  as `documentResult`, because the policy of the document applies to the claim.
+  no claims are passed. A claim policy applies to the claim it is set for, to the claims inside it
+  that have no claim policy of their own, and to the claims that contain it, since presenting a claim
+  presents the claims inside it: a policy for `address.street_address` also applies to a request for
+  `address`. When no claim policy applies to a claim, the policy of the document applies to it. Each
+  entry is the least favourable result of the policies that apply to the claim.
+- `DisclosurePolicyEvaluation.documentResult` is the result for presenting the document: the least
+  favourable of `claimResults`, or the result of the policy of the document when no claims are
+  passed.
 
-Show a warning only for a document or a claim whose result is `NotSatisfied` or `CannotEvaluate`.
+From the least to the most favourable, the results are `NotSatisfied`, `CannotEvaluate`,
+`Satisfied` and `NoPolicy`. Show a warning for a document or a claim whose result is `NotSatisfied`
+or `CannotEvaluate`, with the same weight for both: a relying party that leaves out its registration
+certificate gets `CannotEvaluate` rather than `NotSatisfied`.
 
 ##### Results
 
@@ -2811,7 +2818,7 @@ Show a warning only for a document or a claim whose result is `NotSatisfied` or 
 | `NoPolicy`                       | The document has no policy, or its policy sets no restriction      | Nothing                                                                                                                            |
 | `Satisfied`                      | The relying party meets the policy                                 | Nothing                                                                                                                            |
 | `NotSatisfied(policyUri, laymanUri)`           | The relying party does not meet the policy                         | A warning, e.g. "The issuer of your *document* does not want you to share it with *relying party*", and `laymanUri` as a link |
-| `CannotEvaluate(reason, policyUri, laymanUri)` | The policy could not be evaluated                                  | A notice that the issuer's policy could not be checked, and `laymanUri` as a link                                            |
+| `CannotEvaluate(reason, policyUri, laymanUri)` | The policy could not be evaluated                                  | A warning that the issuer's policy could not be checked, and `laymanUri` as a link                                           |
 
 The results carry only what the application shows to the user, not the rules of the policy.
 
@@ -2820,8 +2827,23 @@ The `reason` of `CannotEvaluate` is one of:
 | Reason                                  | Meaning                                                                                              |
 |-----------------------------------------|------------------------------------------------------------------------------------------------------|
 | `MALFORMED_POLICY`                      | The stored policy does not follow the expected format                                                |
-| `RELYING_PARTY_NOT_IDENTIFIED`          | The policy lists distinguished names and the request does not have a single requester identity with a trusted access certificate that carries an identifier |
+| `RELYING_PARTY_NOT_IDENTIFIED`          | The policy needs the relying party to be authenticated, and the request does not have a single requester identity with a trusted access certificate that carries an identifier |
 | `REGISTRATION_CERTIFICATE_NOT_VERIFIED` | The policy lists wallet-relying party identifiers or certificate subjects, and the request has no verified registration certificate, or its signer chain is not available |
+
+##### Requirements and limitations
+
+- Policies that list wallet-relying party identifiers or certificate subjects need relying party
+  registration certificates to be validated, with trust configured for them; see
+  [REGISTRATION_CERTIFICATE.md](REGISTRATION_CERTIFICATE.md). Without them, these policies give
+  `CannotEvaluate`.
+- A policy that cannot be read, including one with a single unreadable claim policy, gives
+  `CannotEvaluate(MALFORMED_POLICY)` for the document and every claim, rather than being ignored.
+- A relying party listed by its wallet-relying party identifier and service identifier is matched by
+  the identifier only: the service identifier is registered with the Registrar, but no certificate
+  that the relying party presents carries it, so every service of that relying party matches.
+- A relying party listed by distinguished name is matched by the organization identifier, or for a
+  natural person the serial number, of its access certificate; the other attributes of the name are
+  not compared.
 
 #### Rejecting a Presentation
 To reject a remote presentation request and notify the Verifier that the user has declined, call the `wallet.rejectRemotePresentation()` method
