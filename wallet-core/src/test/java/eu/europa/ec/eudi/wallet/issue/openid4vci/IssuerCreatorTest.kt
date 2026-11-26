@@ -16,18 +16,29 @@
 package eu.europa.ec.eudi.wallet.issue.openid4vci
 
 import com.nimbusds.jose.jwk.Curve
+import com.nimbusds.jose.jwk.JWK
 import com.nimbusds.oauth2.sdk.`as`.AuthorizationServerMetadata
 import com.nimbusds.oauth2.sdk.id.Issuer
+import eu.europa.ec.eudi.openid4vci.AuthorizationCodeDPoPBindingMethod
+import eu.europa.ec.eudi.openid4vci.AuthorizationResponseIssChecking
 import eu.europa.ec.eudi.openid4vci.CertificateChainTrust
 import eu.europa.ec.eudi.openid4vci.ClientAuthentication
 import eu.europa.ec.eudi.openid4vci.CredentialConfigurationIdentifier
+import eu.europa.ec.eudi.openid4vci.CredentialIssuanceError
 import eu.europa.ec.eudi.openid4vci.CredentialIssuerMetadataError
 import eu.europa.ec.eudi.openid4vci.CredentialResponseEncryptionPolicy
+import eu.europa.ec.eudi.openid4vci.DPoPUsage
 import eu.europa.ec.eudi.openid4vci.EcConfig
 import eu.europa.ec.eudi.openid4vci.EncryptionSupportConfig
+import eu.europa.ec.eudi.openid4vci.HttpsUrl
 import eu.europa.ec.eudi.openid4vci.IssuerMetadataPolicy
+import eu.europa.ec.eudi.openid4vci.JWKThumbprint
+import eu.europa.ec.eudi.openid4vci.ParUsage
+import eu.europa.ec.eudi.openid4vci.Signer
+import eu.europa.ec.eudi.openid4vci.SupportedGrants
 import eu.europa.ec.eudi.wallet.document.format.MsoMdocFormat
 import eu.europa.ec.eudi.wallet.issue.openid4vci.dpop.DPopConfig
+import eu.europa.ec.eudi.wallet.issue.openid4vci.dpop.SecureAreaDpopSigner
 import eu.europa.ec.eudi.wallet.provider.WalletAttestationKey
 import eu.europa.ec.eudi.wallet.provider.WalletKeyManager
 import io.ktor.client.HttpClient
@@ -48,13 +59,21 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.test.runTest
 import org.multipaz.crypto.Algorithm
 import org.multipaz.securearea.KeyInfo
+import org.multipaz.securearea.software.SoftwareCreateKeySettings
+import org.multipaz.securearea.software.SoftwareSecureArea
+import org.multipaz.storage.ephemeral.EphemeralStorage
+import java.net.URI
+import java.net.URLDecoder
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFails
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import eu.europa.ec.eudi.openid4vci.DPoPConfig as VciDPoPConfig
 
 class IssuerCreatorTest {
 
@@ -247,6 +266,250 @@ class IssuerCreatorTest {
         assertFalse(createdClients.single().isActive)
     }
 
+    @Test
+    fun `the authorization code grant options are passed to the library with both grants`() = runTest {
+        val grants = config.toSupportedGrants()
+
+        assertIs<SupportedGrants.Both>(grants)
+        with(grants.authorizationCode) {
+            assertEquals(URI.create("app://redirect"), authFlowRedirectionURI)
+            assertEquals(ParUsage.IfSupported, parUsage)
+            assertEquals(AuthorizationResponseIssChecking.IfSupported, authResponseIssChecking)
+            assertEquals(AuthorizationCodeDPoPBindingMethod.DPoPHeader, authorizationCodeDPoPBindingMethod)
+        }
+    }
+
+    @Test
+    fun `the configured iss checking policy and binding method are passed to the library`() = runTest {
+        val grants = config.copy(
+            authResponseIssChecking = AuthorizationResponseIssChecking.Never,
+            authorizationCodeDPoPBinding = AuthorizationCodeDPoPBindingMethod.DPoPJkt,
+        ).toSupportedGrants()
+
+        assertEquals(AuthorizationResponseIssChecking.Never, grants.authorizationCode.authResponseIssChecking)
+        assertEquals(
+            AuthorizationCodeDPoPBindingMethod.DPoPJkt,
+            grants.authorizationCode.authorizationCodeDPoPBindingMethod,
+        )
+    }
+
+    @Test
+    fun `the PAR usage is mapped to the library PAR usage`() = runTest {
+        mapOf(
+            OpenId4VciManager.Config.ParUsage.IF_SUPPORTED to ParUsage.IfSupported,
+            OpenId4VciManager.Config.ParUsage.REQUIRED to ParUsage.Required,
+            OpenId4VciManager.Config.ParUsage.NEVER to ParUsage.Never,
+            // Not one of the defined values
+            99 to ParUsage.IfSupported,
+        ).forEach { (parUsage, expected) ->
+            assertEquals(
+                expected,
+                config.copy(parUsage = parUsage).toSupportedGrants().authorizationCode.parUsage,
+                "parUsage $parUsage",
+            )
+        }
+    }
+
+    @Test
+    fun `the library config supports both grants`() = runTest {
+        val creator = IssuerCreator(
+            context = mockk(relaxed = true),
+            config = config,
+            ktorHttpClientFactory = { mockk() },
+            walletInstanceAttestationProvider = null,
+            walletAttestationKeyManager = mockk(),
+            logger = null,
+        )
+
+        val libraryConfig = with(creator) { config.toOpenId4VCIConfig(authorizationServerMetadata = null) }
+
+        assertEquals(config.toSupportedGrants(), libraryConfig.grants)
+    }
+
+    @Test
+    fun `the DPoP signer is provisioned with the thumbprint of a new DPoP key`() = runTest {
+        val dpopConfig = softwareDPopConfig()
+        val creator = IssuerCreator(
+            context = mockk(relaxed = true),
+            config = config.copy(dpopConfig = dpopConfig),
+            ktorHttpClientFactory = { mockk() },
+            walletInstanceAttestationProvider = null,
+            walletAttestationKeyManager = mockk(),
+            logger = null,
+        )
+
+        val libraryConfig = with(creator) {
+            config.copy(dpopConfig = dpopConfig).toOpenId4VCIConfig(authorizationServerMetadata = null)
+        }
+        val (signer, thumbprint) = provisionDPoPSigner(libraryConfig.dPoPUsage)
+
+        assertEquals(signer.acquire().publicMaterial.computeThumbprint().toString(), thumbprint)
+        val keyAlias = assertNotNull(creator.dpopKeyAlias)
+        assertEquals(SecureAreaDpopSigner.fromExistingKey(dpopConfig, keyAlias).jwkThumbprint(), thumbprint)
+    }
+
+    @Test
+    fun `the DPoP signer is provisioned with the thumbprint of an existing DPoP key`() = runTest {
+        val dpopConfig = softwareDPopConfig()
+        val existingKey = SecureAreaDpopSigner(dpopConfig, listOf(Algorithm.ESP256))
+        val creator = IssuerCreator(
+            context = mockk(relaxed = true),
+            config = config.copy(dpopConfig = dpopConfig),
+            ktorHttpClientFactory = { mockk() },
+            walletInstanceAttestationProvider = null,
+            walletAttestationKeyManager = mockk(),
+            logger = null,
+        )
+
+        val libraryConfig = with(creator) {
+            config.copy(dpopConfig = dpopConfig).toOpenId4VCIConfig(
+                authorizationServerMetadata = null,
+                existingDpopKeyAlias = existingKey.keyInfo.alias,
+            )
+        }
+        val (_, thumbprint) = provisionDPoPSigner(libraryConfig.dPoPUsage)
+
+        assertEquals(existingKey.jwkThumbprint(), thumbprint)
+    }
+
+    /**
+     * Without PAR the DPoP header cannot be sent, so the library binds the authorization code with the
+     * `dpop_jkt` parameter of the authorization request, which needs the thumbprint of the DPoP key.
+     */
+    @Test
+    fun `without PAR the authorization request binds the authorization code to the DPoP key with dpop_jkt`() = runTest {
+        val dpopConfig = softwareDPopConfig()
+        val creator = issuerCreator(
+            authorizationServerMetadata = authorizationServerMetadata(
+                advertisesClientAttestation = false,
+                additionalMembers = DPOP_SUPPORTED,
+            ),
+        ) { copy(dpopConfig = dpopConfig) }
+        val issuer = creator.createIssuer(CREDENTIAL_ISSUER, listOf(CredentialConfigurationIdentifier(MDL_CONFIGURATION_ID)))
+            .issuer
+
+        val authorizationUrl = issuer.prepareAuthorizationRequest().getOrThrow().authorizationCodeURL.value.toURI()
+
+        val keyAlias = assertNotNull(creator.dpopKeyAlias)
+        assertEquals(
+            SecureAreaDpopSigner.fromExistingKey(dpopConfig, keyAlias).jwkThumbprint(),
+            queryParameters(authorizationUrl)["dpop_jkt"],
+        )
+    }
+
+    @Test
+    fun `without binding the authorization request has no dpop_jkt`() = runTest {
+        val dpopConfig = softwareDPopConfig()
+        val creator = issuerCreator(
+            authorizationServerMetadata = authorizationServerMetadata(
+                advertisesClientAttestation = false,
+                additionalMembers = DPOP_SUPPORTED,
+            ),
+        ) {
+            copy(
+                dpopConfig = dpopConfig,
+                authorizationCodeDPoPBinding = AuthorizationCodeDPoPBindingMethod.None,
+            )
+        }
+        val issuer = creator.createIssuer(CREDENTIAL_ISSUER, listOf(CredentialConfigurationIdentifier(MDL_CONFIGURATION_ID)))
+            .issuer
+
+        val authorizationUrl = issuer.prepareAuthorizationRequest().getOrThrow().authorizationCodeURL.value.toURI()
+
+        assertNull(queryParameters(authorizationUrl)["dpop_jkt"])
+    }
+
+    @Test
+    fun `authorization fails when the authorization server advertises iss and the response has none`() = runTest {
+        val issuer = issuerAdvertisingIss()
+
+        val error = assertFails {
+            IssuerAuthorization(authorizationHandler(issuer = null)).authorize(issuer, txCode = null)
+        }
+
+        assertIs<CredentialIssuanceError.MissingAuthorizationResponseIssuer>(error)
+        assertFalse(requestedPaths.contains(TOKEN_PATH), "token requested: $requestedPaths")
+    }
+
+    @Test
+    fun `authorization fails when the iss of the response is not the authorization server`() = runTest {
+        val issuer = issuerAdvertisingIss()
+
+        val error = assertFails {
+            IssuerAuthorization(authorizationHandler(issuer = "https://other.example.com"))
+                .authorize(issuer, txCode = null)
+        }
+
+        assertIs<CredentialIssuanceError.InvalidAuthorizationIssuer>(error)
+        assertFalse(requestedPaths.contains(TOKEN_PATH), "token requested: $requestedPaths")
+    }
+
+    @Test
+    fun `the access token is requested when the iss of the response is the authorization server`() = runTest {
+        val issuer = issuerAdvertisingIss()
+
+        // The mock engine has no token endpoint, so the token request itself fails
+        assertFails {
+            IssuerAuthorization(authorizationHandler(issuer = AUTHORIZATION_SERVER)).authorize(issuer, txCode = null)
+        }
+
+        assertTrue(requestedPaths.contains(TOKEN_PATH), "token not requested: $requestedPaths")
+    }
+
+    @Test
+    fun `the access token is requested without iss when iss checking is disabled`() = runTest {
+        val issuer = issuerAdvertisingIss(AuthorizationResponseIssChecking.Never)
+
+        // The mock engine has no token endpoint, so the token request itself fails
+        assertFails {
+            IssuerAuthorization(authorizationHandler(issuer = null)).authorize(issuer, txCode = null)
+        }
+
+        assertTrue(requestedPaths.contains(TOKEN_PATH), "token not requested: $requestedPaths")
+    }
+
+    /** An issuer whose authorization server advertises the `iss` parameter of the authorization response. */
+    private suspend fun issuerAdvertisingIss(
+        authResponseIssChecking: AuthorizationResponseIssChecking = AuthorizationResponseIssChecking.IfSupported,
+    ): eu.europa.ec.eudi.openid4vci.Issuer =
+        issuerCreator(
+            authorizationServerMetadata = authorizationServerMetadata(
+                advertisesClientAttestation = false,
+                additionalMembers = ISS_SUPPORTED,
+            ),
+        ) { copy(authResponseIssChecking = authResponseIssChecking) }
+            .createIssuer(CREDENTIAL_ISSUER, listOf(CredentialConfigurationIdentifier(MDL_CONFIGURATION_ID)))
+            .issuer
+
+    /**
+     * An [AuthorizationHandler] that authorizes at once, returning the state of the authorization
+     * request and the given [issuer].
+     */
+    private fun authorizationHandler(issuer: String?) = AuthorizationHandler { authorizationUrl ->
+        val state = queryParameters(URI(authorizationUrl)).getValue("state")
+        Result.success(AuthorizationResponse("code", state, issuer))
+    }
+
+    private fun queryParameters(uri: URI): Map<String, String> =
+        uri.rawQuery.split("&").associate { parameter ->
+            val (name, value) = parameter.split("=", limit = 2)
+            URLDecoder.decode(name, "UTF-8") to URLDecoder.decode(value, "UTF-8")
+        }
+
+    private suspend fun softwareDPopConfig() = DPopConfig.Custom(
+        secureArea = SoftwareSecureArea.create(EphemeralStorage()),
+        createKeySettingsBuilder = { algorithms ->
+            SoftwareCreateKeySettings.Builder()
+                .setAlgorithm(algorithms.first())
+                .build()
+        },
+    )
+
+    private suspend fun provisionDPoPSigner(dPoPUsage: DPoPUsage<VciDPoPConfig>): Pair<Signer<JWK>, JWKThumbprint?> {
+        val dPoPConfig = assertIs<DPoPUsage.IfSupported<*>>(dPoPUsage).value as VciDPoPConfig
+        return dPoPConfig.provisionDPoPSigner(HttpsUrl(AUTHORIZATION_SERVER).getOrThrow())
+    }
+
     /**
      * A [WalletKeyManager] that returns an ES256 attestation key, capturing the alias input and the
      * algorithms it is asked for.
@@ -302,6 +565,7 @@ class IssuerCreatorTest {
         walletAttestationKeyManager: WalletKeyManager = mockk(),
         authorizationServerMetadata: String = authorizationServerMetadata(advertisesClientAttestation = true),
         issuerMetadataAvailable: Boolean = true,
+        configure: OpenId4VciManager.Config.() -> OpenId4VciManager.Config = { this },
     ): IssuerCreator {
         val jsonHeaders = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
         val engine = MockEngine { request ->
@@ -328,7 +592,7 @@ class IssuerCreatorTest {
                     ecConfig = EcConfig(ecKeyCurve = Curve.P_256),
                     rsaConfig = null,
                 ),
-            ),
+            ).configure(),
             ktorHttpClientFactory = { HttpClient(engine).also { createdClients += it } },
             walletInstanceAttestationProvider = mockk(relaxed = true),
             walletAttestationKeyManager = walletAttestationKeyManager,
@@ -347,6 +611,9 @@ class IssuerCreatorTest {
         // The alias that earlier versions gave to the key of AUTHORIZATION_SERVER: 16 hexadecimal digits of its SHA-256
         const val STORED_KEY_ALIAS = "client-attestation-0bd1f0af3110b498"
         const val OTHER_KEY_ALIAS = "client-attestation-other"
+        const val TOKEN_PATH = "/realms/test/token"
+        const val DPOP_SUPPORTED = """"dpop_signing_alg_values_supported": ["ES256"],"""
+        const val ISS_SUPPORTED = """"authorization_response_iss_parameter_supported": true,"""
 
         val ISSUER_METADATA = """
             {
@@ -365,11 +632,13 @@ class IssuerCreatorTest {
 
         /**
          * Authorization server metadata, optionally advertising attestation-based client
-         * authentication with ES256 proofs of possession and the given client attestation algorithm.
+         * authentication with ES256 proofs of possession and the given client attestation algorithm,
+         * followed by [additionalMembers], each ending with a comma.
          */
         fun authorizationServerMetadata(
             advertisesClientAttestation: Boolean,
             clientAttestationSigningAlgorithm: String = "ES256",
+            additionalMembers: String = "",
         ): String {
             val clientAttestation = if (advertisesClientAttestation) {
                 """
@@ -381,6 +650,7 @@ class IssuerCreatorTest {
             return """
                 {
                   $clientAttestation
+                  $additionalMembers
                   "issuer": "$AUTHORIZATION_SERVER",
                   "authorization_endpoint": "$AUTHORIZATION_SERVER/authorize",
                   "token_endpoint": "$AUTHORIZATION_SERVER/token",

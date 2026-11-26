@@ -43,6 +43,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -92,7 +93,7 @@ class IssuerAuthorizationTest {
 
         coEvery {
             with(issuer) {
-                preparedAuthorizationRequest.authorizeWithAuthorizationCode(any(), any())
+                preparedAuthorizationRequest.authorizeWithAuthorizationCode(any(), any(), any(), any())
             }
         } returns Result.success(authorizedRequest)
 
@@ -119,6 +120,55 @@ class IssuerAuthorizationTest {
         coVerify(exactly = 1) {
             issuer.prepareAuthorizationRequest()
             mockHandler.authorize(any())
+        }
+    }
+
+    @Test
+    fun `authorize method passes the issuer of the authorization response to the library`() {
+        every { issuer.credentialOffer } returns mockk(relaxed = true) {
+            every { grants } returns mockk(relaxed = true) {
+                every { preAuthorizedCode() } returns null
+            }
+        }
+        val mockHandler = mockk<AuthorizationHandler>()
+        coEvery { mockHandler.authorize(any()) } returns Result.success(
+            AuthorizationResponse("test_code", "test_state", "https://auth.example.com")
+        )
+        val issuerAuthorization = IssuerAuthorization(mockHandler, logger)
+        runTest {
+            issuerAuthorization.authorize(issuer, null)
+        }
+        coVerify(exactly = 1) {
+            with(issuer) {
+                preparedAuthorizationRequest.authorizeWithAuthorizationCode(
+                    any(),
+                    "test_state",
+                    any(),
+                    "https://auth.example.com",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `authorize method passes no issuer when the authorization response has none`() {
+        every { issuer.credentialOffer } returns mockk(relaxed = true) {
+            every { grants } returns mockk(relaxed = true) {
+                every { preAuthorizedCode() } returns null
+            }
+        }
+        val mockHandler = mockk<AuthorizationHandler>()
+        coEvery { mockHandler.authorize(any()) } returns Result.success(
+            AuthorizationResponse("test_code", "test_state")
+        )
+        val issuerAuthorization = IssuerAuthorization(mockHandler, logger)
+        runTest {
+            issuerAuthorization.authorize(issuer, null)
+        }
+        coVerify(exactly = 1) {
+            with(issuer) {
+                preparedAuthorizationRequest.authorizeWithAuthorizationCode(any(), "test_state", any(), null)
+            }
         }
     }
 
@@ -174,6 +224,53 @@ class IssuerAuthorizationTest {
             uri.getQueryParameter("code")
             uri.getQueryParameter("state")
         }
+    }
+
+    @Test
+    fun `resumeFromUri returns the issuer when the iss parameter is present`() {
+        val browserHandler = BrowserAuthorizationHandler(context, logger)
+        val issuerAuthorization = IssuerAuthorization(browserHandler, logger)
+        val uri = mockk<Uri>(relaxed = true) {
+            every { getQueryParameter("code") } returns "testCode"
+            every { getQueryParameter("state") } returns "testState"
+            every { getQueryParameter("iss") } returns "https://auth.example.com"
+        }
+        var result: Result<AuthorizationResponse>? = null
+        runTest {
+            launch {
+                result = browserHandler.authorize("https://test.com")
+            }
+
+            advanceUntilIdle()
+            issuerAuthorization.resumeFromUri(uri)
+            advanceUntilIdle()
+        }
+        assertNotNull(result)
+        assertEquals("https://auth.example.com", result!!.getOrThrow().issuer)
+    }
+
+    @Test
+    fun `resumeFromUri resumes with success and no issuer when the iss parameter is missing`() {
+        val browserHandler = BrowserAuthorizationHandler(context, logger)
+        val issuerAuthorization = IssuerAuthorization(browserHandler, logger)
+        val uri = mockk<Uri>(relaxed = true) {
+            every { getQueryParameter("code") } returns "testCode"
+            every { getQueryParameter("state") } returns "testState"
+            every { getQueryParameter("iss") } returns null
+        }
+        var result: Result<AuthorizationResponse>? = null
+        runTest {
+            launch {
+                result = browserHandler.authorize("https://test.com")
+            }
+
+            advanceUntilIdle()
+            issuerAuthorization.resumeFromUri(uri)
+            advanceUntilIdle()
+        }
+        assertNotNull(result)
+        assertTrue(result!!.isSuccess)
+        assertNull(result.getOrThrow().issuer)
     }
 
     @Test

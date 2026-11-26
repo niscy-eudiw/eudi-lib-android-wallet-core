@@ -524,6 +524,101 @@ class SecureAreaDpopSignerTest {
         val publicKey = signer.keyInfo.publicKey
         assertNotNull(publicKey)
     }
+
+    @Test
+    fun `jwkThumbprint is the thumbprint of the public key used in DPoP proofs`() = runTest {
+        val storage = EphemeralStorage()
+        val secureArea = SoftwareSecureArea.create(storage)
+        val algorithms = listOf(Algorithm.ESP256)
+
+        val config = DPopConfig.Custom(
+            secureArea = secureArea,
+            createKeySettingsBuilder = { algorithms ->
+                SoftwareCreateKeySettings.Builder()
+                    .setAlgorithm(algorithms.first())
+                    .build()
+            }
+        )
+
+        val signer = SecureAreaDpopSigner(config, algorithms)
+
+        assertEquals(
+            signer.acquire().publicMaterial.computeThumbprint().toString(),
+            signer.jwkThumbprint(),
+        )
+    }
+
+    @Test
+    fun `jwkThumbprint of an existing key matches the thumbprint of the signer that created it`() = runTest {
+        val storage = EphemeralStorage()
+        val secureArea = SoftwareSecureArea.create(storage)
+        val algorithms = listOf(Algorithm.ESP256)
+
+        val config = DPopConfig.Custom(
+            secureArea = secureArea,
+            createKeySettingsBuilder = { algorithms ->
+                SoftwareCreateKeySettings.Builder()
+                    .setAlgorithm(algorithms.first())
+                    .build()
+            }
+        )
+
+        val signer = SecureAreaDpopSigner(config, algorithms)
+        val existing = SecureAreaDpopSigner.fromExistingKey(config, signer.keyInfo.alias)
+
+        assertEquals(signer.jwkThumbprint(), existing.jwkThumbprint())
+        assertEquals(
+            existing.acquire().publicMaterial.computeThumbprint().toString(),
+            existing.jwkThumbprint(),
+        )
+    }
+
+    @Test
+    fun `jwkThumbprint does not unlock the key`() = runTest {
+        val storage = EphemeralStorage()
+        val secureArea = SoftwareSecureArea.create(storage)
+        val algorithms = listOf(Algorithm.ESP256)
+
+        var providerCalled = false
+        val config = DPopConfig.Custom(
+            secureArea = secureArea,
+            createKeySettingsBuilder = { algorithms ->
+                SoftwareCreateKeySettings.Builder()
+                    .setAlgorithm(algorithms.first())
+                    .build()
+            },
+            keyUnlockDataProvider = { _, _ ->
+                providerCalled = true
+                null
+            }
+        )
+
+        val signer = SecureAreaDpopSigner(config, algorithms)
+        signer.jwkThumbprint()
+
+        assertFalse(providerCalled)
+    }
+
+    @Test
+    fun `different keys have different thumbprints`() = runTest {
+        val storage = EphemeralStorage()
+        val secureArea = SoftwareSecureArea.create(storage)
+        val algorithms = listOf(Algorithm.ESP256)
+
+        val config = DPopConfig.Custom(
+            secureArea = secureArea,
+            createKeySettingsBuilder = { algorithms ->
+                SoftwareCreateKeySettings.Builder()
+                    .setAlgorithm(algorithms.first())
+                    .build()
+            }
+        )
+
+        val signer1 = SecureAreaDpopSigner(config, algorithms)
+        val signer2 = SecureAreaDpopSigner(config, algorithms)
+
+        assertNotEquals(signer1.jwkThumbprint(), signer2.jwkThumbprint())
+    }
 }
         
 

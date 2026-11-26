@@ -65,7 +65,7 @@ class AuthorizationHandlerTest {
 
         coEvery {
             with(issuer) {
-                preparedAuthorizationRequest.authorizeWithAuthorizationCode(any(), any())
+                preparedAuthorizationRequest.authorizeWithAuthorizationCode(any(), any(), any(), any())
             }
         } returns Result.success(authorizedRequest)
 

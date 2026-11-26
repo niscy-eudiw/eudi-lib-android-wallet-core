@@ -109,6 +109,7 @@ class BrowserAuthorizationHandlerTest {
         val callbackUri = mockk<Uri> {
             every { getQueryParameter("code") } returns null
             every { getQueryParameter("state") } returns "xyz"
+            every { getQueryParameter("iss") } returns null
         }
 
         var result: Result<AuthorizationResponse>? = null
@@ -135,6 +136,7 @@ class BrowserAuthorizationHandlerTest {
         val callbackUri = mockk<Uri> {
             every { getQueryParameter("code") } returns "auth_code_123"
             every { getQueryParameter("state") } returns null
+            every { getQueryParameter("iss") } returns null
         }
 
         var result: Result<AuthorizationResponse>? = null

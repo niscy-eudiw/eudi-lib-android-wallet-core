@@ -16,18 +16,26 @@
 
 package eu.europa.ec.eudi.wallet.issue.openid4vci
 
+import eu.europa.ec.eudi.openid4vci.AuthorizationCodeDPoPBindingMethod
+import eu.europa.ec.eudi.openid4vci.AuthorizationResponseIssChecking
 import eu.europa.ec.eudi.openid4vci.CredentialOffer
+import eu.europa.ec.eudi.openid4vci.OpenId4VCIConfig
+import eu.europa.ec.eudi.openid4vci.ParUsage
+import eu.europa.ec.eudi.openid4vci.SupportedGrants
 import io.ktor.client.HttpClient
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
+import io.mockk.slot
 import kotlinx.coroutines.test.runTest
+import java.net.URI
 import java.net.URLEncoder
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -55,12 +63,44 @@ class OfferResolverTest {
         config = mockk(relaxed = true) {
             every { clientAuthenticationType } returns OpenId4VciManager.ClientAuthenticationType.None("test-client-id")
             every { authFlowRedirectionURI } returns "https://redirect.uri"
+            every { parUsage } returns OpenId4VciManager.Config.ParUsage.IF_SUPPORTED
+            every { authResponseIssChecking } returns AuthorizationResponseIssChecking.Required
+            every { authorizationCodeDPoPBinding } returns AuthorizationCodeDPoPBindingMethod.DPoPJkt
         }
         mockkObject(CredentialOffer.Companion)
 
         offerResolver = OfferResolver(config, ktorHttpClientFactory)
     }
 
+
+    /**
+     * Pre-authorized offers are rejected unless the wallet supports both grants, and a required
+     * check of the `iss` parameter is enforced when the offer is resolved.
+     */
+    @Test
+    fun `resolve passes both grants with the authorization code grant options to the library`() {
+        runTest {
+            val resolveConfig = slot<OpenId4VCIConfig>()
+            coEvery {
+                CredentialOffer.resolve(
+                    httpClient = any(),
+                    config = capture(resolveConfig),
+                    uri = offerUri,
+                )
+            } returns Result.success(credentialOffer)
+
+            offerResolver.resolve(offerUri, false)
+
+            val grants = assertIs<SupportedGrants.Both>(resolveConfig.captured.grants)
+            assertEquals(URI.create("https://redirect.uri"), grants.authorizationCode.authFlowRedirectionURI)
+            assertEquals(ParUsage.IfSupported, grants.authorizationCode.parUsage)
+            assertEquals(AuthorizationResponseIssChecking.Required, grants.authorizationCode.authResponseIssChecking)
+            assertEquals(
+                AuthorizationCodeDPoPBindingMethod.DPoPJkt,
+                grants.authorizationCode.authorizationCodeDPoPBindingMethod,
+            )
+        }
+    }
 
     @Test
     fun `resolve method when useCache is true should return offer if contained in cache`() {
